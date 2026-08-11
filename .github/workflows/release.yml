@@ -4,13 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: Version bump to release
+        description: Version bump to release (ignored when existing_tag is set)
         type: choice
         required: true
         options:
           - patch
           - minor
           - major
+      existing_tag:
+        description: >-
+          Build and publish artifacts for a tag that already exists, skipping
+          the version bump and the crates.io publish. Recovery path for a run
+          that tagged but did not produce its bundles.
+        type: string
+        required: false
+        default: ''
 
 concurrency:
   group: release-${{ github.ref_name }}
@@ -22,7 +30,9 @@ permissions:
 jobs:
   publish:
     name: Publish crate
-    if: ${{ github.ref == 'refs/heads/main' }}
+    # Skipped entirely when re-cutting artifacts for an existing tag: the crate
+    # at that version is already published, or deliberately is not.
+    if: ${{ github.ref == 'refs/heads/main' && inputs.existing_tag == '' }}
     runs-on: ubuntu-latest
     environment: Production
     outputs:
@@ -156,9 +166,54 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
+  # What the bundles actually need is a tag and a version — not a successful
+  # crates.io upload. Those were the same job, so a missing registry token took
+  # the module artifacts down with it even though nothing about them touches
+  # crates.io. This job is the seam.
+  release-target:
+    name: Resolve release target
+    needs: publish
+    # `always()` so a skipped or failed publish still yields a target: the two
+    # are genuinely independent releases that happened to share a job.
+    if: ${{ always() && (inputs.existing_tag != '' || needs.publish.result == 'success') }}
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      next_version: ${{ steps.resolve.outputs.next_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve the tag and version to build
+        id: resolve
+        shell: bash
+        env:
+          EXISTING_TAG: ${{ inputs.existing_tag }}
+          PUBLISHED_TAG: ${{ needs.publish.outputs.tag }}
+          PUBLISHED_VERSION: ${{ needs.publish.outputs.next_version }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$EXISTING_TAG" ]]; then
+            git fetch --tags origin
+            git rev-parse --verify --quiet "refs/tags/${EXISTING_TAG}" >/dev/null \
+              || { echo "tag ${EXISTING_TAG} does not exist" >&2; exit 1; }
+            tag="$EXISTING_TAG"
+            version="${EXISTING_TAG#v}"
+          else
+            tag="$PUBLISHED_TAG"
+            version="$PUBLISHED_VERSION"
+          fi
+          [[ -n "$tag" && -n "$version" ]] || { echo "could not resolve a release target" >&2; exit 1; }
+          {
+            echo "tag=${tag}"
+            echo "next_version=${version}"
+          } >> "$GITHUB_OUTPUT"
+
   native-bundles:
     name: Module bundle (${{ matrix.id }})
-    needs: publish
+    needs: release-target
     strategy:
       fail-fast: false
       matrix:
@@ -200,7 +255,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.publish.outputs.tag }}
+          ref: ${{ needs.release-target.outputs.tag }}
           persist-credentials: false
           submodules: true
 
@@ -226,7 +281,7 @@ jobs:
         shell: bash
         env:
           BUNDLE_ID: ${{ matrix.id }}
-          VERSION: ${{ needs.publish.outputs.next_version }}
+          VERSION: ${{ needs.release-target.outputs.next_version }}
         run: |
           set -euo pipefail
 
@@ -254,7 +309,7 @@ jobs:
         shell: pwsh
         env:
           BUNDLE_ID: ${{ matrix.id }}
-          VERSION: ${{ needs.publish.outputs.next_version }}
+          VERSION: ${{ needs.release-target.outputs.next_version }}
         run: |
           $ErrorActionPreference = 'Stop'
           $libraryName = 'tinywallet_module'
@@ -289,13 +344,13 @@ jobs:
   github-release:
     name: Create GitHub release
     needs:
-      - publish
+      - release-target
       - native-bundles
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.publish.outputs.tag }}
+          ref: ${{ needs.release-target.outputs.tag }}
           persist-credentials: false
           submodules: true
 
@@ -331,7 +386,7 @@ jobs:
       - name: Create release and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          RELEASE_TAG: ${{ needs.release-target.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -345,9 +400,9 @@ jobs:
       - name: Verify the published module through TinyBus
         shell: bash
         env:
-          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          RELEASE_TAG: ${{ needs.release-target.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
-          VERSION: ${{ needs.publish.outputs.next_version }}
+          VERSION: ${{ needs.release-target.outputs.next_version }}
         run: |
           set -euo pipefail
           archive="tinywallet-module-${VERSION}-ubuntu-24.04-x86_64.tar.gz"
