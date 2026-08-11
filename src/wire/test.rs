@@ -14,7 +14,6 @@ use super::{
     AttachRequest, PublicKey, Scheme, Signature, SignedTransaction, SigningPayload, SigningRequest,
     TransactionSpec, UnsignedTransaction, Utxo,
 };
-use crate::chain::Chain;
 
 #[test]
 fn a_signing_request_round_trips_through_json() {

@@ -259,6 +259,10 @@ impl TransactionSpec {
             Self::Evm { .. } => Ok(Chain::Evm),
             Self::Solana { .. } => Ok(Chain::Solana),
             Self::Tron { .. } => Ok(Chain::Tron),
+            // Unreachable inside this crate — `#[non_exhaustive]` binds only
+            // downstream — but it is what a consumer built against an older
+            // revision falls into, which is exactly who needs the refusal.
+            #[allow(unreachable_patterns)]
             _ => Err(UnknownChain),
         }
     }

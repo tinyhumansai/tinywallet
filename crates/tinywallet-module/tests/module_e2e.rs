@@ -52,7 +52,7 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
     signs_an_evm_transfer_identically_to_the_library(&proxy).await;
     signs_a_multi_input_bitcoin_spend(&proxy).await;
     signs_a_solana_transfer(&proxy).await;
-    refuses_a_chain_tag_that_contradicts_its_transaction(&proxy).await;
+    refuses_a_request_the_module_cannot_build(&proxy).await;
 
     assert!(matches!(modules.list()[0].state, ModuleState::Ready));
     broker_task.abort();
@@ -256,16 +256,21 @@ async fn signs_a_solana_transfer(proxy: &tinybus::Proxy) {
 }
 
 /// A malformed request must come back as a named error, not a signature.
-async fn refuses_a_chain_tag_that_contradicts_its_transaction(proxy: &tinybus::Proxy) {
+///
+/// This used to send a request whose `chain` tag contradicted its transaction.
+/// That is no longer expressible — the requests carry no `chain` and the spec
+/// names its own — so the case is now a transaction the module can parse but
+/// cannot build: a Tron payload whose recomputed `txID` disagrees with the one
+/// claimed, which is the defence against a compromised node.
+async fn refuses_a_request_the_module_cannot_build(proxy: &tinybus::Proxy) {
     let result: tinybus::Result<UnsignedTransaction> = proxy
         .call(
             "BuildUnsigned",
             (SigningRequest {
-                transaction: TransactionSpec::Solana {
-                    from: "11111111111111111111111111111112".to_string(),
-                    to: "11111111111111111111111111111113".to_string(),
-                    lamports: 1,
-                    recent_blockhash: "11111111111111111111111111111114".to_string(),
+                transaction: TransactionSpec::Tron {
+                    raw_data_hex: "0a02b1f12208".to_string() + &"ab".repeat(64),
+                    expected_to: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t".to_string(),
+                    expected_txid: "00".repeat(32),
                 },
                 public_key: PublicKey {
                     key_hex: "02".repeat(33),
@@ -274,7 +279,7 @@ async fn refuses_a_chain_tag_that_contradicts_its_transaction(proxy: &tinybus::P
         )
         .await;
 
-    let error = result.expect_err("a contradictory request must not produce a signature");
+    let error = result.expect_err("a tampered transaction must not produce a signature");
     assert_eq!(
         error.wire_name(),
         "ai.tinyhumans.tinywallet.Error.InvalidInput",
