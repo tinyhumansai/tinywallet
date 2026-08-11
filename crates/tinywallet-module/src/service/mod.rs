@@ -114,12 +114,12 @@ fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failu
     chain_of(&request.transaction)?;
     let payloads = match &request.transaction {
         TransactionSpec::Btc {
-                from,
-                to,
-                amount_sat,
-                fee_sat,
-                utxos,
-            } => {
+            from,
+            to,
+            amount_sat,
+            fee_sat,
+            utxos,
+        } => {
             let transfer = btc_transfer(from, to, *amount_sat, *fee_sat);
             let public = compressed_public_key(&request.public_key.key_hex)?;
             let (_, digests) = transfer
@@ -145,10 +145,10 @@ fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failu
             }]
         }
         TransactionSpec::Tron {
-                raw_data_hex,
-                expected_to,
-                expected_txid,
-            } => {
+            raw_data_hex,
+            expected_to,
+            expected_txid,
+        } => {
             // Tron's node builds the transaction, so the only defence against a
             // compromised endpoint is checking that what came back is what was
             // asked for — before signing it, which is here.
@@ -170,12 +170,12 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
     chain_of(&request.transaction)?;
     match &request.transaction {
         TransactionSpec::Btc {
-                from,
-                to,
-                amount_sat,
-                fee_sat,
-                utxos,
-            } => {
+            from,
+            to,
+            amount_sat,
+            fee_sat,
+            utxos,
+        } => {
             let transfer = btc_transfer(from, to, *amount_sat, *fee_sat);
             let public = compressed_public_key(&request.public_key.key_hex)?;
             let signatures = request
@@ -219,10 +219,10 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
             })
         }
         TransactionSpec::Tron {
-                raw_data_hex,
-                expected_to,
-                expected_txid,
-            } => {
+            raw_data_hex,
+            expected_to,
+            expected_txid,
+        } => {
             // Verified again rather than trusted from the first call: the two
             // requests are independent, and a host could reach this one with
             // different bytes than the digest was computed over.
