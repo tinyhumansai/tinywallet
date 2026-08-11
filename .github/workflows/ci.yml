@@ -61,14 +61,17 @@ jobs:
           report="target/coverage.json"
           cargo llvm-cov --all-features --all-targets --json --output-path "$report"
 
-          below_threshold="$(jq -r '
+          # Anchored at the workspace root: this repo is vendored inside other
+          # checkouts, so an unanchored "/vendor/" match would exclude the
+          # crate's own sources when it is built from one of those paths.
+          below_threshold="$(jq -r --arg root "$PWD" '
             .data[0].files[]
             | select(.filename | contains("/src/"))
             # Vendored submodules carry code from another repository, whose
             # coverage is not this one to enforce. They only entered the report
             # when the module crate made tinybus part of the build graph.
             # (No apostrophes here: the whole jq program is single-quoted.)
-            | select(.filename | contains("/vendor/") | not)
+            | select(.filename | startswith($root + "/vendor/") | not)
             | select(.summary.lines.percent < 90)
             | "\(.filename): \(.summary.lines.percent)%"
           ' "$report")"

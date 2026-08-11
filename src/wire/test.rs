@@ -14,12 +14,10 @@ use super::{
     AttachRequest, PublicKey, Scheme, Signature, SignedTransaction, SigningPayload, SigningRequest,
     TransactionSpec, UnsignedTransaction, Utxo,
 };
-use crate::chain::Chain;
 
 #[test]
 fn a_signing_request_round_trips_through_json() {
     let request = SigningRequest {
-        chain: Chain::Evm,
         transaction: TransactionSpec::Evm {
             to: "0x1111111111111111111111111111111111111111".to_string(),
             value_wei: "1000".to_string(),
@@ -136,12 +134,11 @@ fn an_attach_request_carries_one_signature_per_payload() {
         ],
     };
     let attach = AttachRequest {
-        chain: Chain::Btc,
         transaction: TransactionSpec::Btc {
             from: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
             to: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
             amount_sat: 1_000,
-            fee_rate_sat_vb: 5,
+            fee_sat: 5,
             utxos: vec![],
         },
         public_key: PublicKey {
@@ -178,4 +175,58 @@ fn a_signed_transaction_may_omit_a_locally_unknowable_txid() {
         serde_json::from_str::<SignedTransaction>(&encoded).unwrap(),
         signed
     );
+}
+
+#[test]
+fn every_transaction_names_its_own_chain() {
+    // `chain()` is the single source of truth now that the requests carry no
+    // `chain` field, so a wrong arm here would route a transaction to the
+    // wrong chain's builder — with a real key already loaded.
+    use crate::chain::Chain;
+
+    let cases = [
+        (
+            TransactionSpec::Btc {
+                from: String::new(),
+                to: String::new(),
+                amount_sat: 0,
+                fee_sat: 0,
+                utxos: Vec::new(),
+            },
+            Chain::Btc,
+        ),
+        (
+            TransactionSpec::Evm {
+                to: String::new(),
+                value_wei: "0".to_string(),
+                data_hex: String::new(),
+                nonce: 0,
+                gas_limit: 0,
+                gas_price_wei: "0".to_string(),
+                chain_id: 1,
+            },
+            Chain::Evm,
+        ),
+        (
+            TransactionSpec::Solana {
+                from: String::new(),
+                to: String::new(),
+                lamports: 0,
+                recent_blockhash: String::new(),
+            },
+            Chain::Solana,
+        ),
+        (
+            TransactionSpec::Tron {
+                raw_data_hex: String::new(),
+                expected_to: String::new(),
+                expected_txid: String::new(),
+            },
+            Chain::Tron,
+        ),
+    ];
+
+    for (spec, expected) in cases {
+        assert_eq!(spec.chain(), expected);
+    }
 }

@@ -118,9 +118,12 @@ pub struct PublicKey {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SigningRequest {
-    /// Which chain's rules apply.
-    pub chain: Chain,
-    /// The transaction fields, in the shape that chain's builder expects.
+    /// The transaction to build, which names its own chain.
+    ///
+    /// There is deliberately no separate `chain` field. Carrying one alongside
+    /// this would let a request say `btc` while holding an EVM transaction —
+    /// a state the backend would have to detect and reject at runtime. Reading
+    /// the chain off the variant instead makes that disagreement unrepresentable.
     pub transaction: TransactionSpec,
     /// The public key that will sign.
     pub public_key: PublicKey,
@@ -133,9 +136,9 @@ pub struct SigningRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AttachRequest {
-    /// Which chain's rules apply.
-    pub chain: Chain,
     /// The same fields passed to the matching [`SigningRequest`].
+    ///
+    /// As there, the chain comes from the variant rather than a parallel field.
     pub transaction: TransactionSpec,
     /// The public key that signed.
     pub public_key: PublicKey,
@@ -183,8 +186,12 @@ pub enum TransactionSpec {
         to: String,
         /// Amount in satoshis.
         amount_sat: u64,
-        /// Fee rate in satoshis per virtual byte.
-        fee_rate_sat_vb: u64,
+        /// Absolute fee in satoshis.
+        ///
+        /// Bitcoin's fee is implicit — `sum(inputs) - sum(outputs)` — so it is
+        /// stated here rather than derived from a rate. A caller that thinks
+        /// in sat/vB converts before sending.
+        fee_sat: u64,
         /// Every spendable output held by `from`.
         utxos: Vec<Utxo>,
     },
@@ -232,6 +239,28 @@ pub enum TransactionSpec {
         /// The txid the node reported, to be recomputed and compared.
         expected_txid: String,
     },
+}
+
+impl TransactionSpec {
+    /// Which chain this transaction belongs to.
+    ///
+    /// The single source of truth for the chain, which is why neither request
+    /// type carries it separately.
+    ///
+    /// Infallible, and deliberately so despite `#[non_exhaustive]`. That
+    /// attribute binds only *downstream* crates, and a downstream crate calls
+    /// this method rather than matching the enum itself — so there is no
+    /// wildcard arm to write here, and adding a variant is a compile error in
+    /// this file, which is where it should be caught.
+    #[must_use]
+    pub fn chain(&self) -> Chain {
+        match self {
+            Self::Btc { .. } => Chain::Btc,
+            Self::Evm { .. } => Chain::Evm,
+            Self::Solana { .. } => Chain::Solana,
+            Self::Tron { .. } => Chain::Tron,
+        }
+    }
 }
 
 /// One spendable Bitcoin output.

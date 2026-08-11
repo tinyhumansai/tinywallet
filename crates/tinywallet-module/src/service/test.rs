@@ -75,7 +75,6 @@ fn the_split_path_reproduces_a_one_shot_signature() {
     let spec = evm_spec();
 
     let unsigned = build_unsigned(&SigningRequest {
-        chain: Chain::Evm,
         transaction: spec.clone(),
         public_key: PublicKey {
             key_hex: compressed_public(&key),
@@ -87,7 +86,6 @@ fn the_split_path_reproduces_a_one_shot_signature() {
 
     let signature = host_sign(&unsigned.payloads[0].bytes_hex, &key);
     let signed = attach_signature(&AttachRequest {
-        chain: Chain::Evm,
         transaction: spec,
         public_key: PublicKey {
             key_hex: compressed_public(&key),
@@ -124,7 +122,7 @@ fn a_bitcoin_request_returns_one_payload_per_selected_input() {
         from: key.address().to_string(),
         to: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
         amount_sat: 150_000,
-        fee_rate_sat_vb: 2_000,
+        fee_sat: 2_000,
         utxos: vec![
             Utxo {
                 txid: "7f3b662ea8b6ff2e0e1a1f9bd0f1c39a6b8ba51e1b0f0e0d0c0b0a0908070605"
@@ -148,7 +146,6 @@ fn a_bitcoin_request_returns_one_payload_per_selected_input() {
     };
 
     let unsigned = build_unsigned(&SigningRequest {
-        chain: Chain::Btc,
         transaction: spec,
         public_key: PublicKey {
             key_hex: compressed_public(key.secret_bytes()),
@@ -172,7 +169,6 @@ fn a_solana_payload_is_the_message_not_a_digest() {
     // the network rejects, so the scheme tag has to say so.
     let key = tinywallet::key::derive(Chain::Solana, VECTOR, "m/44'/501'/0'/0'").unwrap();
     let unsigned = build_unsigned(&SigningRequest {
-        chain: Chain::Solana,
         transaction: TransactionSpec::Solana {
             from: key.address().to_string(),
             to: "11111111111111111111111111111111".to_string(),
@@ -193,26 +189,53 @@ fn a_solana_payload_is_the_message_not_a_digest() {
 }
 
 #[test]
-fn a_chain_tag_that_disagrees_with_its_transaction_is_refused() {
-    // The tag and the fields are independent on the wire, so the mismatch is
-    // reachable and must not be resolved by guessing which one is right.
-    let error = build_unsigned(&SigningRequest {
-        chain: Chain::Btc,
-        transaction: evm_spec(),
-        public_key: PublicKey {
-            key_hex: compressed_public(&evm_key()),
-        },
-    })
-    .unwrap_err();
+fn the_chain_comes_from_the_transaction_rather_than_a_separate_field() {
+    // This replaces a test that fed a request whose `chain` tag contradicted
+    // its transaction. That state is no longer expressible: the requests carry
+    // no `chain`, so `TransactionSpec` is the single source of truth and the
+    // disagreement cannot be constructed. What is worth pinning instead is
+    // that the mapping is right for every variant.
+    use tinywallet::wire::Utxo;
 
-    let rendered = format!("{error:?}");
-    assert!(rendered.contains("InvalidInput"), "{rendered}");
+    let cases = [
+        (
+            TransactionSpec::Btc {
+                from: String::new(),
+                to: String::new(),
+                amount_sat: 0,
+                fee_sat: 0,
+                utxos: Vec::<Utxo>::new(),
+            },
+            Chain::Btc,
+        ),
+        (evm_spec(), Chain::Evm),
+        (
+            TransactionSpec::Solana {
+                from: String::new(),
+                to: String::new(),
+                lamports: 0,
+                recent_blockhash: String::new(),
+            },
+            Chain::Solana,
+        ),
+        (
+            TransactionSpec::Tron {
+                raw_data_hex: String::new(),
+                expected_to: String::new(),
+                expected_txid: String::new(),
+            },
+            Chain::Tron,
+        ),
+    ];
+
+    for (spec, expected) in cases {
+        assert_eq!(spec.chain(), expected);
+    }
 }
 
 #[test]
 fn an_ed25519_signature_is_refused_for_a_secp256k1_chain() {
     let error = attach_signature(&AttachRequest {
-        chain: Chain::Evm,
         transaction: evm_spec(),
         public_key: PublicKey {
             key_hex: compressed_public(&evm_key()),
@@ -230,7 +253,6 @@ fn an_ed25519_signature_is_refused_for_a_secp256k1_chain() {
 #[test]
 fn a_wrong_signature_count_is_refused_rather_than_truncated() {
     let error = attach_signature(&AttachRequest {
-        chain: Chain::Evm,
         transaction: evm_spec(),
         public_key: PublicKey {
             key_hex: compressed_public(&evm_key()),
@@ -248,7 +270,6 @@ fn a_tron_transaction_whose_txid_does_not_match_its_bytes_is_refused() {
     // The defence against a compromised node: it must not be possible to get a
     // signature over bytes whose recomputed id disagrees with what was claimed.
     let error = build_unsigned(&SigningRequest {
-        chain: Chain::Tron,
         transaction: TransactionSpec::Tron {
             raw_data_hex: "0a02b1f12208".to_string() + &"ab".repeat(64),
             expected_to: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t".to_string(),

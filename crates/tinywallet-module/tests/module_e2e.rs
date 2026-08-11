@@ -52,7 +52,7 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
     signs_an_evm_transfer_identically_to_the_library(&proxy).await;
     signs_a_multi_input_bitcoin_spend(&proxy).await;
     signs_a_solana_transfer(&proxy).await;
-    refuses_a_chain_tag_that_contradicts_its_transaction(&proxy).await;
+    refuses_a_request_the_module_cannot_build(&proxy).await;
 
     assert!(matches!(modules.list()[0].state, ModuleState::Ready));
     broker_task.abort();
@@ -129,7 +129,7 @@ async fn signs_an_evm_transfer_identically_to_the_library(proxy: &tinybus::Proxy
         chain_id: 1,
     };
 
-    let signed = round_trip(proxy, Chain::Evm, &spec, &secret).await;
+    let signed = round_trip(proxy, &spec, &secret).await;
 
     let expected = tx::evm::LegacyTransaction {
         nonce: 9,
@@ -163,7 +163,7 @@ async fn signs_a_multi_input_bitcoin_spend(proxy: &tinybus::Proxy) {
         from: derived.address().to_string(),
         to: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
         amount_sat: 150_000,
-        fee_rate_sat_vb: 2_000,
+        fee_sat: 2_000,
         utxos: (0..3)
             .map(|vout| tinywallet::wire::Utxo {
                 txid: txid.to_string(),
@@ -173,7 +173,7 @@ async fn signs_a_multi_input_bitcoin_spend(proxy: &tinybus::Proxy) {
             .collect(),
     };
 
-    let signed = round_trip(proxy, Chain::Btc, &spec, &secret).await;
+    let signed = round_trip(proxy, &spec, &secret).await;
 
     let expected = tx::btc::Transfer {
         from: derived.address().to_string(),
@@ -215,7 +215,6 @@ async fn signs_a_solana_transfer(proxy: &tinybus::Proxy) {
         .call(
             "BuildUnsigned",
             (SigningRequest {
-                chain: Chain::Solana,
                 transaction: spec.clone(),
                 public_key: public.clone(),
             },),
@@ -234,7 +233,6 @@ async fn signs_a_solana_transfer(proxy: &tinybus::Proxy) {
         .call(
             "AttachSignature",
             (AttachRequest {
-                chain: Chain::Solana,
                 transaction: spec.clone(),
                 public_key: public,
                 signatures: vec![Signature::Ed25519 {
@@ -258,17 +256,21 @@ async fn signs_a_solana_transfer(proxy: &tinybus::Proxy) {
 }
 
 /// A malformed request must come back as a named error, not a signature.
-async fn refuses_a_chain_tag_that_contradicts_its_transaction(proxy: &tinybus::Proxy) {
+///
+/// This used to send a request whose `chain` tag contradicted its transaction.
+/// That is no longer expressible — the requests carry no `chain` and the spec
+/// names its own — so the case is now a transaction the module can parse but
+/// cannot build: a Tron payload whose recomputed `txID` disagrees with the one
+/// claimed, which is the defence against a compromised node.
+async fn refuses_a_request_the_module_cannot_build(proxy: &tinybus::Proxy) {
     let result: tinybus::Result<UnsignedTransaction> = proxy
         .call(
             "BuildUnsigned",
             (SigningRequest {
-                chain: Chain::Btc,
-                transaction: TransactionSpec::Solana {
-                    from: "11111111111111111111111111111112".to_string(),
-                    to: "11111111111111111111111111111113".to_string(),
-                    lamports: 1,
-                    recent_blockhash: "11111111111111111111111111111114".to_string(),
+                transaction: TransactionSpec::Tron {
+                    raw_data_hex: "0a02b1f12208".to_string() + &"ab".repeat(64),
+                    expected_to: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t".to_string(),
+                    expected_txid: "00".repeat(32),
                 },
                 public_key: PublicKey {
                     key_hex: "02".repeat(33),
@@ -277,7 +279,7 @@ async fn refuses_a_chain_tag_that_contradicts_its_transaction(proxy: &tinybus::P
         )
         .await;
 
-    let error = result.expect_err("a contradictory request must not produce a signature");
+    let error = result.expect_err("a tampered transaction must not produce a signature");
     assert_eq!(
         error.wire_name(),
         "ai.tinyhumans.tinywallet.Error.InvalidInput",
@@ -288,7 +290,6 @@ async fn refuses_a_chain_tag_that_contradicts_its_transaction(proxy: &tinybus::P
 /// Drive both calls for a secp256k1 chain, signing locally in between.
 async fn round_trip(
     proxy: &tinybus::Proxy,
-    chain: Chain,
     spec: &TransactionSpec,
     secret: &[u8],
 ) -> SignedTransaction {
@@ -300,7 +301,6 @@ async fn round_trip(
         .call(
             "BuildUnsigned",
             (SigningRequest {
-                chain,
                 transaction: spec.clone(),
                 public_key: public_key.clone(),
             },),
@@ -330,7 +330,6 @@ async fn round_trip(
         .call(
             "AttachSignature",
             (AttachRequest {
-                chain,
                 transaction: spec.clone(),
                 public_key,
                 signatures,
