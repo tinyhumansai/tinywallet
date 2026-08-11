@@ -247,31 +247,21 @@ impl TransactionSpec {
     /// The single source of truth for the chain, which is why neither request
     /// type carries it separately.
     ///
-    /// # Errors
-    ///
-    /// [`UnknownChain`] if the variant was added after this build. The enum is
-    /// `#[non_exhaustive]`, so a newer peer can send a shape this code cannot
-    /// name — and guessing a chain for it would mean building the wrong
-    /// transaction rather than refusing.
-    pub fn chain(&self) -> Result<Chain, UnknownChain> {
+    /// Infallible, and deliberately so despite `#[non_exhaustive]`. That
+    /// attribute binds only *downstream* crates, and a downstream crate calls
+    /// this method rather than matching the enum itself — so there is no
+    /// wildcard arm to write here, and adding a variant is a compile error in
+    /// this file, which is where it should be caught.
+    #[must_use]
+    pub fn chain(&self) -> Chain {
         match self {
-            Self::Btc { .. } => Ok(Chain::Btc),
-            Self::Evm { .. } => Ok(Chain::Evm),
-            Self::Solana { .. } => Ok(Chain::Solana),
-            Self::Tron { .. } => Ok(Chain::Tron),
-            // Unreachable inside this crate — `#[non_exhaustive]` binds only
-            // downstream — but it is what a consumer built against an older
-            // revision falls into, which is exactly who needs the refusal.
-            #[allow(unreachable_patterns)]
-            _ => Err(UnknownChain),
+            Self::Btc { .. } => Chain::Btc,
+            Self::Evm { .. } => Chain::Evm,
+            Self::Solana { .. } => Chain::Solana,
+            Self::Tron { .. } => Chain::Tron,
         }
     }
 }
-
-/// A transaction shape this build does not recognise.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("this build does not recognise that transaction kind")]
-pub struct UnknownChain;
 
 /// One spendable Bitcoin output.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -107,7 +107,6 @@ fn into_bus_error(failure: Failure) -> BusError {
 fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failure> {
     // `chain_of` runs first so an unrecognised shape is refused before any
     // arm is tried; the chain itself then comes from the variant.
-    chain_of(&request.transaction)?;
     let payloads = match &request.transaction {
         TransactionSpec::Btc {
             from,
@@ -154,8 +153,8 @@ fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failu
                 tx::tron::digest(raw_data_hex).map_err(|e| build_failed(&e))?,
             )]
         }
-        // Unreachable: `chain_of` above already refused anything this build
-        // cannot name. Required because the enum is `#[non_exhaustive]`.
+        // Required because `TransactionSpec` is `#[non_exhaustive]`: a shape
+        // added after this build must be refused, never guessed at.
         _ => return Err(unknown_kind()),
     };
     Ok(UnsignedTransaction { payloads })
@@ -163,7 +162,6 @@ fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failu
 
 /// Assemble the signed transaction for `request`.
 fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failure> {
-    chain_of(&request.transaction)?;
     match &request.transaction {
         TransactionSpec::Btc {
             from,
@@ -234,22 +232,6 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
         }
         _ => Err(unknown_kind()),
     }
-}
-
-/// The chain a transaction belongs to, or a refusal.
-///
-/// `TransactionSpec` names its own chain, so a request can no longer disagree
-/// with itself — the tag and the fields used to be independent, and this
-/// function is what is left once that redundancy was removed. The remaining
-/// failure is a variant added after this build, which must be refused rather
-/// than guessed at.
-fn chain_of(spec: &TransactionSpec) -> Result<Chain, Failure> {
-    spec.chain().map_err(|_| unknown_kind())
-}
-
-/// The refusal for a transaction shape added after this build.
-fn unknown_kind() -> Failure {
-    Failure::InvalidInput("this build does not understand that transaction kind".to_string())
 }
 
 /// Collapse a `tinywallet` build error, which is never the caller's fault by

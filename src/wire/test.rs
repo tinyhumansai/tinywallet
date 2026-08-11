@@ -227,14 +227,6 @@ fn every_transaction_names_its_own_chain() {
     ];
 
     for (spec, expected) in cases {
-        assert_eq!(spec.chain().unwrap(), expected);
+        assert_eq!(spec.chain(), expected);
     }
-}
-
-#[test]
-fn the_unknown_chain_error_renders_without_leaking_the_payload() {
-    // A consumer built against an older revision meets this, and the message
-    // goes into their logs — so it names the situation and nothing else.
-    let rendered = super::UnknownChain.to_string();
-    assert!(rendered.contains("transaction kind"), "{rendered}");
 }
