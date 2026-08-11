@@ -113,7 +113,11 @@ btc = ["dep:bs58", "dep:bech32", "dep:ripemd", "dep:sha2"]
 # Serde derives on the crate's core types (today `Chain`). A named gate rather
 # than relying on `dep:serde` being implied, because `#[cfg(feature = "serde")]`
 # on the enum has to name something that actually exists.
-serde = ["dep:serde"]
+# `serde/derive` is required, not incidental: `Chain` uses the derive macros.
+# A local `cargo check --features serde` passes without it only because the
+# dev-dependency on `serde` with `derive` unifies the feature in — a downstream
+# consumer taking this crate with `serde` alone gets no derive and fails.
+serde = ["dep:serde", "serde/derive"]
 # EVM (Ethereum and compatible chains) address validation. Dependency-free:
 # an EVM address is 20 hex-encoded bytes, so the whole format is spelled out
 # in `src/address/evm.rs` rather than pulling in a chain client for it.
@@ -150,7 +154,7 @@ x402 = ["dep:serde", "dep:serde_json", "serde/derive", "eip712"]
 # transaction building into a loadable module can take this crate with
 # `default-features = false`, share one definition of the contract, and link no
 # chain library at all. Same carve-out `tinydocs::spec` makes.
-wire = ["serde", "serde/derive"]
+wire = ["serde"]
 # Transaction building and signing (`tinywallet::tx`). This is the only gate
 # that pulls the `bitcoin` crate, for PSBT construction and secp256k1
 # recoverable signing. Everything else — addresses, derivation, reference data
