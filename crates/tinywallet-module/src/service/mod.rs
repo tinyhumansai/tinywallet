@@ -54,8 +54,10 @@ pub const OBJECT_PATH: &str = "/ai/tinyhumans/tinywallet/Wallet";
 const INVALID_INPUT_ERROR: &str = "ai.tinyhumans.tinywallet.Error.InvalidInput";
 /// Building or assembling the transaction failed. A caller cannot fix it.
 const BUILD_FAILED_ERROR: &str = "ai.tinyhumans.tinywallet.Error.BuildFailed";
-/// The chain named is not compiled into this module.
-const UNSUPPORTED_CHAIN_ERROR: &str = "ai.tinyhumans.tinywallet.Error.UnsupportedChain";
+// There is no `UnsupportedChain` error name. Every chain this build can name
+// is compiled in, and a chain it cannot name arrives as a `TransactionSpec`
+// variant it does not recognise — which is `InvalidInput`, because the request
+// is one this module cannot act on rather than a capability that is missing.
 
 /// The served object. Holds nothing: every call is self-contained.
 struct Wallet;
@@ -87,8 +89,6 @@ enum Failure {
     InvalidInput(String),
     /// Building or assembling failed for a reason the caller did not cause.
     BuildFailed(String),
-    /// The chain is not in this build.
-    UnsupportedChain(Chain),
 }
 
 /// Map a failure onto the wire name a host matches on.
@@ -96,10 +96,6 @@ fn into_bus_error(failure: Failure) -> BusError {
     let (name, message) = match failure {
         Failure::InvalidInput(message) => (INVALID_INPUT_ERROR, message),
         Failure::BuildFailed(message) => (BUILD_FAILED_ERROR, message),
-        Failure::UnsupportedChain(chain) => (
-            UNSUPPORTED_CHAIN_ERROR,
-            format!("this build has no support for {chain}"),
-        ),
     };
     BusError::MethodFailed {
         name: name.to_string(),
