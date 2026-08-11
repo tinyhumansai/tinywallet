@@ -234,6 +234,15 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
     }
 }
 
+/// The refusal for a transaction shape added after this build.
+///
+/// `TransactionSpec` is `#[non_exhaustive]`, so a peer built against a newer
+/// revision can send a variant this module cannot name. Refusing beats
+/// guessing: the alternative is building some other chain's transaction.
+fn unknown_kind() -> Failure {
+    Failure::InvalidInput("this build does not understand that transaction kind".to_string())
+}
+
 /// Collapse a `tinywallet` build error, which is never the caller's fault by
 /// the time it is reached — inputs are checked before building.
 fn build_failed(error: &tx::Error) -> Failure {

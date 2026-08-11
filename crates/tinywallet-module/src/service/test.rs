@@ -229,7 +229,7 @@ fn the_chain_comes_from_the_transaction_rather_than_a_separate_field() {
     ];
 
     for (spec, expected) in cases {
-        assert_eq!(spec.chain().unwrap(), expected);
+        assert_eq!(spec.chain(), expected);
     }
 }
 
