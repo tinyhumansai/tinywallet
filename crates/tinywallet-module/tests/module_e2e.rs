@@ -215,7 +215,6 @@ async fn signs_a_solana_transfer(proxy: &tinybus::Proxy) {
         .call(
             "BuildUnsigned",
             (SigningRequest {
-                chain: Chain::Solana,
                 transaction: spec.clone(),
                 public_key: public.clone(),
             },),
@@ -234,7 +233,6 @@ async fn signs_a_solana_transfer(proxy: &tinybus::Proxy) {
         .call(
             "AttachSignature",
             (AttachRequest {
-                chain: Chain::Solana,
                 transaction: spec.clone(),
                 public_key: public,
                 signatures: vec![Signature::Ed25519 {
@@ -263,7 +261,6 @@ async fn refuses_a_chain_tag_that_contradicts_its_transaction(proxy: &tinybus::P
         .call(
             "BuildUnsigned",
             (SigningRequest {
-                chain: Chain::Btc,
                 transaction: TransactionSpec::Solana {
                     from: "11111111111111111111111111111112".to_string(),
                     to: "11111111111111111111111111111113".to_string(),

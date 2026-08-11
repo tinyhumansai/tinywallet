@@ -19,7 +19,6 @@ use crate::chain::Chain;
 #[test]
 fn a_signing_request_round_trips_through_json() {
     let request = SigningRequest {
-        chain: Chain::Evm,
         transaction: TransactionSpec::Evm {
             to: "0x1111111111111111111111111111111111111111".to_string(),
             value_wei: "1000".to_string(),
@@ -136,7 +135,6 @@ fn an_attach_request_carries_one_signature_per_payload() {
         ],
     };
     let attach = AttachRequest {
-        chain: Chain::Btc,
         transaction: TransactionSpec::Btc {
             from: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
             to: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
