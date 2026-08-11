@@ -118,9 +118,12 @@ pub struct PublicKey {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SigningRequest {
-    /// Which chain's rules apply.
-    pub chain: Chain,
-    /// The transaction fields, in the shape that chain's builder expects.
+    /// The transaction to build, which names its own chain.
+    ///
+    /// There is deliberately no separate `chain` field. Carrying one alongside
+    /// this would let a request say `btc` while holding an EVM transaction —
+    /// a state the backend would have to detect and reject at runtime. Reading
+    /// the chain off the variant instead makes that disagreement unrepresentable.
     pub transaction: TransactionSpec,
     /// The public key that will sign.
     pub public_key: PublicKey,
@@ -133,9 +136,9 @@ pub struct SigningRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AttachRequest {
-    /// Which chain's rules apply.
-    pub chain: Chain,
     /// The same fields passed to the matching [`SigningRequest`].
+    ///
+    /// As there, the chain comes from the variant rather than a parallel field.
     pub transaction: TransactionSpec,
     /// The public key that signed.
     pub public_key: PublicKey,
@@ -237,6 +240,34 @@ pub enum TransactionSpec {
         expected_txid: String,
     },
 }
+
+impl TransactionSpec {
+    /// Which chain this transaction belongs to.
+    ///
+    /// The single source of truth for the chain, which is why neither request
+    /// type carries it separately.
+    ///
+    /// # Errors
+    ///
+    /// [`UnknownChain`] if the variant was added after this build. The enum is
+    /// `#[non_exhaustive]`, so a newer peer can send a shape this code cannot
+    /// name — and guessing a chain for it would mean building the wrong
+    /// transaction rather than refusing.
+    pub fn chain(&self) -> Result<Chain, UnknownChain> {
+        match self {
+            Self::Btc { .. } => Ok(Chain::Btc),
+            Self::Evm { .. } => Ok(Chain::Evm),
+            Self::Solana { .. } => Ok(Chain::Solana),
+            Self::Tron { .. } => Ok(Chain::Tron),
+            _ => Err(UnknownChain),
+        }
+    }
+}
+
+/// A transaction shape this build does not recognise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("this build does not recognise that transaction kind")]
+pub struct UnknownChain;
 
 /// One spendable Bitcoin output.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
