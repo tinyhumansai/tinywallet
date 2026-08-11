@@ -38,11 +38,11 @@
 //! into a rewrite loop over something that was already correct.
 
 use tinybus::{Connection, Error as BusError, Result as BusResult};
+use tinywallet::tx;
 use tinywallet::wire::{
     AttachRequest, Scheme, Signature, SignedTransaction, SigningPayload, SigningRequest,
     TransactionSpec, UnsignedTransaction,
 };
-use tinywallet::{Chain, tx};
 
 /// Well-known name and interface exported by the `TinyWallet` module.
 pub const BUS_NAME: &str = "ai.tinyhumans.tinywallet.Wallet";
