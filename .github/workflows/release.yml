@@ -214,6 +214,11 @@ jobs:
   native-bundles:
     name: Module bundle (${{ matrix.id }})
     needs: release-target
+    # `always()` is required even though `release-target` succeeds: GitHub
+    # propagates a skip transitively, so a skipped `publish` upstream would
+    # skip this job regardless of its direct dependency's result. The explicit
+    # success check is what actually gates it.
+    if: ${{ always() && needs.release-target.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -346,6 +351,11 @@ jobs:
     needs:
       - release-target
       - native-bundles
+    # Same transitive-skip rule as above.
+    if: >-
+      ${{ always()
+      && needs.release-target.result == 'success'
+      && needs.native-bundles.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
