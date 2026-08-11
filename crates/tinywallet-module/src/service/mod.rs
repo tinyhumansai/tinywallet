@@ -109,17 +109,17 @@ fn into_bus_error(failure: Failure) -> BusError {
 
 /// Compute the signing payloads for `request`.
 fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failure> {
-    let payloads = match (&request.transaction, chain_of(&request.transaction)?) {
-        (
-            TransactionSpec::Btc {
+    // `chain_of` runs first so an unrecognised shape is refused before any
+    // arm is tried; the chain itself then comes from the variant.
+    chain_of(&request.transaction)?;
+    let payloads = match &request.transaction {
+        TransactionSpec::Btc {
                 from,
                 to,
                 amount_sat,
                 fee_sat,
                 utxos,
-            },
-            Chain::Btc,
-        ) => {
+            } => {
             let transfer = btc_transfer(from, to, *amount_sat, *fee_sat);
             let public = compressed_public_key(&request.public_key.key_hex)?;
             let (_, digests) = transfer
@@ -127,14 +127,14 @@ fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failu
                 .map_err(|e| build_failed(&e))?;
             digests.into_iter().map(secp256k1_payload).collect()
         }
-        (spec @ TransactionSpec::Evm { .. }, Chain::Evm) => {
+        spec @ TransactionSpec::Evm { .. } => {
             vec![secp256k1_payload(
                 evm_transaction(spec)?
                     .digest()
                     .map_err(|e| build_failed(&e))?,
             )]
         }
-        (spec @ TransactionSpec::Solana { .. }, Chain::Solana) => {
+        spec @ TransactionSpec::Solana { .. } => {
             // ed25519 signs the message itself — there is nothing to pre-hash,
             // so this payload is the whole serialized message, not a digest.
             vec![SigningPayload {
@@ -144,14 +144,11 @@ fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failu
                 scheme: Scheme::Ed25519,
             }]
         }
-        (
-            TransactionSpec::Tron {
+        TransactionSpec::Tron {
                 raw_data_hex,
                 expected_to,
                 expected_txid,
-            },
-            Chain::Tron,
-        ) => {
+            } => {
             // Tron's node builds the transaction, so the only defence against a
             // compromised endpoint is checking that what came back is what was
             // asked for — before signing it, which is here.
@@ -161,23 +158,24 @@ fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failu
                 tx::tron::digest(raw_data_hex).map_err(|e| build_failed(&e))?,
             )]
         }
+        // Unreachable: `chain_of` above already refused anything this build
+        // cannot name. Required because the enum is `#[non_exhaustive]`.
+        _ => return Err(unknown_kind()),
     };
     Ok(UnsignedTransaction { payloads })
 }
 
 /// Assemble the signed transaction for `request`.
 fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failure> {
-    match (&request.transaction, chain_of(&request.transaction)?) {
-        (
-            TransactionSpec::Btc {
+    chain_of(&request.transaction)?;
+    match &request.transaction {
+        TransactionSpec::Btc {
                 from,
                 to,
                 amount_sat,
                 fee_sat,
                 utxos,
-            },
-            Chain::Btc,
-        ) => {
+            } => {
             let transfer = btc_transfer(from, to, *amount_sat, *fee_sat);
             let public = compressed_public_key(&request.public_key.key_hex)?;
             let signatures = request
@@ -197,7 +195,7 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
                 raw,
             })
         }
-        (spec @ TransactionSpec::Evm { .. }, Chain::Evm) => {
+        spec @ TransactionSpec::Evm { .. } => {
             let (rs, recovery) = single_secp256k1(&request.signatures)?;
             let signed = evm_transaction(spec)?
                 .attach_signature(&rs, recovery)
@@ -207,7 +205,7 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
                 raw: format!("0x{}", hex(&signed)),
             })
         }
-        (spec @ TransactionSpec::Solana { .. }, Chain::Solana) => {
+        spec @ TransactionSpec::Solana { .. } => {
             let signature = single_ed25519(&request.signatures)?;
             let signed = solana_transfer(spec)?
                 .attach_signature(&signature)
@@ -220,14 +218,11 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
                 raw: base64(&signed),
             })
         }
-        (
-            TransactionSpec::Tron {
+        TransactionSpec::Tron {
                 raw_data_hex,
                 expected_to,
                 expected_txid,
-            },
-            Chain::Tron,
-        ) => {
+            } => {
             // Verified again rather than trusted from the first call: the two
             // requests are independent, and a host could reach this one with
             // different bytes than the digest was computed over.
@@ -241,6 +236,7 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
                 raw: tx::tron::signature_hex(&signature),
             })
         }
+        _ => Err(unknown_kind()),
     }
 }
 
@@ -252,9 +248,12 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
 /// failure is a variant added after this build, which must be refused rather
 /// than guessed at.
 fn chain_of(spec: &TransactionSpec) -> Result<Chain, Failure> {
-    spec.chain().map_err(|_| {
-        Failure::InvalidInput("this build does not understand that transaction kind".to_string())
-    })
+    spec.chain().map_err(|_| unknown_kind())
+}
+
+/// The refusal for a transaction shape added after this build.
+fn unknown_kind() -> Failure {
+    Failure::InvalidInput("this build does not understand that transaction kind".to_string())
 }
 
 /// Collapse a `tinywallet` build error, which is never the caller's fault by
