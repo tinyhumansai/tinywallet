@@ -176,3 +176,65 @@ fn a_signed_transaction_may_omit_a_locally_unknowable_txid() {
         signed
     );
 }
+
+#[test]
+fn every_transaction_names_its_own_chain() {
+    // `chain()` is the single source of truth now that the requests carry no
+    // `chain` field, so a wrong arm here would route a transaction to the
+    // wrong chain's builder — with a real key already loaded.
+    use crate::chain::Chain;
+
+    let cases = [
+        (
+            TransactionSpec::Btc {
+                from: String::new(),
+                to: String::new(),
+                amount_sat: 0,
+                fee_sat: 0,
+                utxos: Vec::new(),
+            },
+            Chain::Btc,
+        ),
+        (
+            TransactionSpec::Evm {
+                to: String::new(),
+                value_wei: "0".to_string(),
+                data_hex: String::new(),
+                nonce: 0,
+                gas_limit: 0,
+                gas_price_wei: "0".to_string(),
+                chain_id: 1,
+            },
+            Chain::Evm,
+        ),
+        (
+            TransactionSpec::Solana {
+                from: String::new(),
+                to: String::new(),
+                lamports: 0,
+                recent_blockhash: String::new(),
+            },
+            Chain::Solana,
+        ),
+        (
+            TransactionSpec::Tron {
+                raw_data_hex: String::new(),
+                expected_to: String::new(),
+                expected_txid: String::new(),
+            },
+            Chain::Tron,
+        ),
+    ];
+
+    for (spec, expected) in cases {
+        assert_eq!(spec.chain().unwrap(), expected);
+    }
+}
+
+#[test]
+fn the_unknown_chain_error_renders_without_leaking_the_payload() {
+    // A consumer built against an older revision meets this, and the message
+    // goes into their logs — so it names the situation and nothing else.
+    let rendered = super::UnknownChain.to_string();
+    assert!(rendered.contains("transaction kind"), "{rendered}");
+}
