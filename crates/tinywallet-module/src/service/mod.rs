@@ -109,7 +109,7 @@ fn into_bus_error(failure: Failure) -> BusError {
 
 /// Compute the signing payloads for `request`.
 fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failure> {
-    let payloads = match (&request.transaction, request.chain) {
+    let payloads = match (&request.transaction, chain_of(&request.transaction)?) {
         (
             TransactionSpec::Btc {
                 from,
@@ -161,14 +161,13 @@ fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failu
                 tx::tron::digest(raw_data_hex).map_err(|e| build_failed(&e))?,
             )]
         }
-        (spec, chain) => return Err(mismatched(spec, chain)),
     };
     Ok(UnsignedTransaction { payloads })
 }
 
 /// Assemble the signed transaction for `request`.
 fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failure> {
-    match (&request.transaction, request.chain) {
+    match (&request.transaction, chain_of(&request.transaction)?) {
         (
             TransactionSpec::Btc {
                 from,
@@ -242,34 +241,20 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
                 raw: tx::tron::signature_hex(&signature),
             })
         }
-        (spec, chain) => Err(mismatched(spec, chain)),
     }
 }
 
-/// A `chain` tag that does not agree with the transaction it carries.
-fn mismatched(spec: &TransactionSpec, chain: Chain) -> Failure {
-    let named = match spec {
-        TransactionSpec::Btc { .. } => Chain::Btc,
-        TransactionSpec::Evm { .. } => Chain::Evm,
-        TransactionSpec::Solana { .. } => Chain::Solana,
-        TransactionSpec::Tron { .. } => Chain::Tron,
-        // `TransactionSpec` is `#[non_exhaustive]`, so a variant added later
-        // must land here rather than failing to compile in a crate that cannot
-        // see it. Refusing is the safe direction: never sign an unknown shape.
-        _ => {
-            return Failure::InvalidInput(
-                "this build does not understand that transaction kind".to_string(),
-            );
-        }
-    };
-    if named == chain {
-        // Same chain on both sides, so the pairing failed for the only other
-        // reason: this build does not carry it.
-        return Failure::UnsupportedChain(chain);
-    }
-    Failure::InvalidInput(format!(
-        "the request names {chain} but carries a {named} transaction"
-    ))
+/// The chain a transaction belongs to, or a refusal.
+///
+/// `TransactionSpec` names its own chain, so a request can no longer disagree
+/// with itself — the tag and the fields used to be independent, and this
+/// function is what is left once that redundancy was removed. The remaining
+/// failure is a variant added after this build, which must be refused rather
+/// than guessed at.
+fn chain_of(spec: &TransactionSpec) -> Result<Chain, Failure> {
+    spec.chain().map_err(|_| {
+        Failure::InvalidInput("this build does not understand that transaction kind".to_string())
+    })
 }
 
 /// Collapse a `tinywallet` build error, which is never the caller's fault by
