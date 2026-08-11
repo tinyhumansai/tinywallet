@@ -129,7 +129,7 @@ async fn signs_an_evm_transfer_identically_to_the_library(proxy: &tinybus::Proxy
         chain_id: 1,
     };
 
-    let signed = round_trip(proxy, Chain::Evm, &spec, &secret).await;
+    let signed = round_trip(proxy, &spec, &secret).await;
 
     let expected = tx::evm::LegacyTransaction {
         nonce: 9,
@@ -173,7 +173,7 @@ async fn signs_a_multi_input_bitcoin_spend(proxy: &tinybus::Proxy) {
             .collect(),
     };
 
-    let signed = round_trip(proxy, Chain::Btc, &spec, &secret).await;
+    let signed = round_trip(proxy, &spec, &secret).await;
 
     let expected = tx::btc::Transfer {
         from: derived.address().to_string(),
@@ -285,7 +285,6 @@ async fn refuses_a_chain_tag_that_contradicts_its_transaction(proxy: &tinybus::P
 /// Drive both calls for a secp256k1 chain, signing locally in between.
 async fn round_trip(
     proxy: &tinybus::Proxy,
-    chain: Chain,
     spec: &TransactionSpec,
     secret: &[u8],
 ) -> SignedTransaction {
@@ -297,7 +296,6 @@ async fn round_trip(
         .call(
             "BuildUnsigned",
             (SigningRequest {
-                chain,
                 transaction: spec.clone(),
                 public_key: public_key.clone(),
             },),
@@ -327,7 +325,6 @@ async fn round_trip(
         .call(
             "AttachSignature",
             (AttachRequest {
-                chain,
                 transaction: spec.clone(),
                 public_key,
                 signatures,
