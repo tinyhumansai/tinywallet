@@ -163,7 +163,7 @@ async fn signs_a_multi_input_bitcoin_spend(proxy: &tinybus::Proxy) {
         from: derived.address().to_string(),
         to: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
         amount_sat: 150_000,
-        fee_rate_sat_vb: 2_000,
+        fee_sat: 2_000,
         utxos: (0..3)
             .map(|vout| tinywallet::wire::Utxo {
                 txid: txid.to_string(),

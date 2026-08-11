@@ -124,7 +124,7 @@ fn a_bitcoin_request_returns_one_payload_per_selected_input() {
         from: key.address().to_string(),
         to: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
         amount_sat: 150_000,
-        fee_rate_sat_vb: 2_000,
+        fee_sat: 2_000,
         utxos: vec![
             Utxo {
                 txid: "7f3b662ea8b6ff2e0e1a1f9bd0f1c39a6b8ba51e1b0f0e0d0c0b0a0908070605"

@@ -141,7 +141,7 @@ fn an_attach_request_carries_one_signature_per_payload() {
             from: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
             to: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
             amount_sat: 1_000,
-            fee_rate_sat_vb: 5,
+            fee_sat: 5,
             utxos: vec![],
         },
         public_key: PublicKey {

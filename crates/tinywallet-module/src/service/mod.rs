@@ -115,12 +115,12 @@ fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failu
                 from,
                 to,
                 amount_sat,
-                fee_rate_sat_vb,
+                fee_sat,
                 utxos,
             },
             Chain::Btc,
         ) => {
-            let transfer = btc_transfer(from, to, *amount_sat, *fee_rate_sat_vb);
+            let transfer = btc_transfer(from, to, *amount_sat, *fee_sat);
             let public = compressed_public_key(&request.public_key.key_hex)?;
             let (_, digests) = transfer
                 .sighashes(&btc_utxos(utxos), &public)
@@ -174,12 +174,12 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
                 from,
                 to,
                 amount_sat,
-                fee_rate_sat_vb,
+                fee_sat,
                 utxos,
             },
             Chain::Btc,
         ) => {
-            let transfer = btc_transfer(from, to, *amount_sat, *fee_rate_sat_vb);
+            let transfer = btc_transfer(from, to, *amount_sat, *fee_sat);
             let public = compressed_public_key(&request.public_key.key_hex)?;
             let signatures = request
                 .signatures

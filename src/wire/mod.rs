@@ -183,8 +183,12 @@ pub enum TransactionSpec {
         to: String,
         /// Amount in satoshis.
         amount_sat: u64,
-        /// Fee rate in satoshis per virtual byte.
-        fee_rate_sat_vb: u64,
+        /// Absolute fee in satoshis.
+        ///
+        /// Bitcoin's fee is implicit — `sum(inputs) - sum(outputs)` — so it is
+        /// stated here rather than derived from a rate. A caller that thinks
+        /// in sat/vB converts before sending.
+        fee_sat: u64,
         /// Every spendable output held by `from`.
         utxos: Vec<Utxo>,
     },
