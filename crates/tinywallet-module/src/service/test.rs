@@ -288,6 +288,101 @@ fn a_tron_transaction_whose_txid_does_not_match_its_bytes_is_refused() {
 }
 
 #[test]
+fn a_tron_transaction_paying_a_decoy_recipient_is_refused_on_the_signing_side() {
+    // The case that motivated moving this module off `verify_transfer`: the
+    // requested address IS present in `raw_data`, but as an unrelated trailing
+    // field, while `to_address` pays someone else. A byte-run search over the
+    // hex is satisfied by the decoy and would have signed it.
+    //
+    // The host checks this too, but the check that matters is the one on the
+    // side holding the key — a host is exactly what a caller could be lying to.
+    fn varint(mut v: u64) -> Vec<u8> {
+        let mut out = Vec::new();
+        loop {
+            let mut b = (v & 0x7f) as u8;
+            v >>= 7;
+            if v != 0 {
+                b |= 0x80;
+            }
+            out.push(b);
+            if v == 0 {
+                return out;
+            }
+        }
+    }
+    fn tagged(number: u64, wire: u64) -> Vec<u8> {
+        varint((number << 3) | wire)
+    }
+    fn bytes_field(number: u64, payload: &[u8]) -> Vec<u8> {
+        let mut out = tagged(number, 2);
+        out.extend(varint(payload.len() as u64));
+        out.extend(payload);
+        out
+    }
+    fn addr(a: &str) -> Vec<u8> {
+        let h = tinywallet::address::tron::to_hex(a).unwrap();
+        (0..h.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    const REQUESTED: &str = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+    const ATTACKER: &str = "TLyqzVGLV1srkB7dToTAEqgDSfPtXRJZYH";
+
+    // TransferContract paying the attacker, for the requested amount.
+    let mut payload = bytes_field(2, &addr(ATTACKER));
+    payload.extend({
+        let mut f = tagged(3, 0);
+        f.extend(varint(1_000_000));
+        f
+    });
+    let mut any = bytes_field(1, b"type.googleapis.com/protocol.TransferContract");
+    any.extend(bytes_field(2, &payload));
+    let mut contract = {
+        let mut f = tagged(1, 0);
+        f.extend(varint(1));
+        f
+    };
+    contract.extend(bytes_field(2, &any));
+    let mut raw = bytes_field(11, &contract);
+    // The decoy: the requested recipient, somewhere harmless.
+    raw.extend(bytes_field(99, &addr(REQUESTED)));
+
+    let raw_data_hex = hex(&raw);
+    let expected_txid = tx::tron::recompute_txid(&raw_data_hex).unwrap();
+    let transfer = tinywallet::wire::TronTransfer::Native {
+        amount_sun: 1_000_000,
+    };
+
+    // The old check would have passed this.
+    assert!(
+        tx::tron::verify_transfer(&raw_data_hex, REQUESTED, &expected_txid, &transfer).is_ok(),
+        "precondition: the byte-run search is fooled by the decoy"
+    );
+
+    let error = build_unsigned(&SigningRequest {
+        transaction: TransactionSpec::Tron {
+            raw_data_hex,
+            expected_to: REQUESTED.to_string(),
+            expected_txid,
+            transfer,
+        },
+        public_key: PublicKey {
+            key_hex: compressed_public(&evm_key()),
+        },
+    })
+    .unwrap_err();
+
+    let rendered = format!("{error:?}");
+    assert!(rendered.contains("InvalidInput"), "{rendered}");
+    assert!(
+        rendered.contains("does not pay the requested recipient"),
+        "{rendered}"
+    );
+}
+
+#[test]
 fn the_exported_names_are_the_published_ones() {
     // A host resolves the module by these strings; changing either is a
     // breaking change that no type system catches.

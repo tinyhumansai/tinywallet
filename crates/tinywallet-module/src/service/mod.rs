@@ -148,7 +148,18 @@ fn build_unsigned(request: &SigningRequest) -> Result<UnsignedTransaction, Failu
             // Tron's node builds the transaction, so the only defence against a
             // compromised endpoint is checking that what came back is what was
             // asked for — before signing it, which is here.
-            tx::tron::verify_transfer(raw_data_hex, expected_to, expected_txid, transfer)
+            //
+            // `verify_contract`, not `verify_transfer`: the latter searches for
+            // the recipient and amount as byte runs anywhere in `raw_data`, so a
+            // node can pay someone else and leave the requested address in an
+            // unrelated field and still be signed. This parses the protobuf and
+            // reads the fields that will actually execute.
+            //
+            // `fee_limit_sun` is `None` because the wire spec does not carry it
+            // — only the host knows what it pinned in its `createtransaction`
+            // request, and it checks that before handing the spec over. Every
+            // other field is checked here, on the side that holds the key.
+            tx::tron::verify_contract(raw_data_hex, expected_to, expected_txid, transfer, None)
                 .map_err(|e| Failure::InvalidInput(e.to_string()))?;
             vec![secp256k1_payload(
                 tx::tron::digest(raw_data_hex).map_err(|e| build_failed(&e))?,
@@ -221,8 +232,9 @@ fn attach_signature(request: &AttachRequest) -> Result<SignedTransaction, Failur
         } => {
             // Verified again rather than trusted from the first call: the two
             // requests are independent, and a host could reach this one with
-            // different bytes than the digest was computed over.
-            tx::tron::verify_transfer(raw_data_hex, expected_to, expected_txid, transfer)
+            // different bytes than the digest was computed over. Structurally,
+            // for the same reason as the sign path above.
+            tx::tron::verify_contract(raw_data_hex, expected_to, expected_txid, transfer, None)
                 .map_err(|e| Failure::InvalidInput(e.to_string()))?;
             let (rs, recovery) = single_secp256k1(&request.signatures)?;
             let signature =
