@@ -35,6 +35,7 @@
 //! `verify_contract`. Prefer the latter wherever the caller knows what it
 //! asked for.
 
+#[cfg(feature = "tx")]
 use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
 use sha2::{Digest, Sha256};
 
@@ -258,6 +259,7 @@ fn parse_single_contract<'a>(raw_fields: &[proto::Field<'a>]) -> Result<ParsedCo
     })
 }
 
+#[cfg(feature = "tx")]
 /// Sign a Tron `raw_data` payload.
 ///
 /// Signs `sha256(raw_data)` — the same value as the `txID`.
