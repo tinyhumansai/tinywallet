@@ -82,10 +82,22 @@ fn parse_path(path: &str) -> Result<Vec<u32>> {
                 path: path.to_string(),
             });
         };
-        out.push(index.parse::<u32>().map_err(|e| Error::InvalidPath {
+        let index = index.parse::<u32>().map_err(|e| Error::InvalidPath {
             path: path.to_string(),
             reason: format!("segment '{segment}': {e}"),
-        })?);
+        })?;
+        // The raw index must leave the hardening bit clear, because the caller
+        // sets it (`index | 0x8000_0000`). A segment that already carries it
+        // would OR to itself, so `m/44'/501'/2147483648'` and
+        // `m/44'/501'/0'` would silently derive the same key from visibly
+        // different paths — a wrong answer, not a rejected one.
+        if index >= 0x8000_0000 {
+            return Err(Error::InvalidPath {
+                path: path.to_string(),
+                reason: format!("segment '{segment}' exceeds the maximum raw index"),
+            });
+        }
+        out.push(index);
     }
 
     if out.is_empty() {

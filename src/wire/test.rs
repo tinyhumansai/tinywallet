@@ -88,6 +88,14 @@ fn an_ed25519_signature_cannot_deserialize_as_a_secp256k1_one() {
     let ed = json!({ "scheme": "ed25519", "signature_hex": "cd".repeat(64) });
     let decoded: Signature = serde_json::from_value(ed).unwrap();
     assert!(matches!(decoded, Signature::Ed25519 { .. }));
+
+    // And the converse: an ed25519-length signature labelled `secp256k1` is
+    // refused at the boundary rather than accepted and failed later.
+    let mismatched = json!({
+        "scheme": "secp256k1",
+        "signature_hex": "cd".repeat(64)
+    });
+    assert!(serde_json::from_value::<Signature>(mismatched).is_err());
 }
 
 #[test]

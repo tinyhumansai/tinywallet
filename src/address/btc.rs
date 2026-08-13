@@ -33,7 +33,7 @@
 //! against the published BIP-173 and BIP-350 vectors, and key derivation is
 //! not.
 //!
-//! The four mainnet forms, in full:
+//! The five mainnet forms, in full:
 //!
 //! | Type | Encoding | Prefix / witness version | Program length |
 //! | --- | --- | --- | --- |
