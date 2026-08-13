@@ -15,6 +15,8 @@
 #[cfg(feature = "btc")]
 pub mod btc;
 pub mod evm;
+#[cfg(feature = "tron")]
+pub mod proto;
 mod rlp;
 #[cfg(feature = "solana")]
 pub mod solana;
