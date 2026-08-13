@@ -22,10 +22,11 @@
 //! prove the *contents* match the request — [`verify_transfer`] does that, by
 //! checking the recipient and amount appear in the returned bytes.
 
+#[cfg(feature = "tx")]
 use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
 use sha2::{Digest, Sha256};
 
-use super::{Error, Result};
+use super::{Error, Result, proto};
 use crate::wire::TronTransfer;
 
 /// The 65-byte signature Tron expects: `r || s || recovery_id`.
@@ -83,7 +84,7 @@ pub fn verify_transfer(
 
     let raw = decode_hex(raw_data_hex)?;
     let expected = match transfer {
-        TronTransfer::Native { amount_sun } => encode_varint(*amount_sun),
+        TronTransfer::Native { amount_sun } => proto::encode_varint(*amount_sun),
         TronTransfer::Trc20 { parameter_hex } => decode_hex(parameter_hex)?,
     };
     if expected.is_empty() || !raw.windows(expected.len()).any(|window| window == expected) {
@@ -98,21 +99,158 @@ pub fn verify_transfer(
     Ok(())
 }
 
-fn encode_varint(mut value: u64) -> Vec<u8> {
-    let mut encoded = Vec::new();
-    loop {
-        let mut byte = (value & 0x7f) as u8;
-        value >>= 7;
-        if value != 0 {
-            byte |= 0x80;
-        }
-        encoded.push(byte);
-        if value == 0 {
-            return encoded;
-        }
+/// Tron's `ContractType` for a native transfer.
+const CONTRACT_TYPE_TRANSFER: u64 = 1;
+/// Tron's `ContractType` for a smart-contract call.
+const CONTRACT_TYPE_TRIGGER_SMART_CONTRACT: u64 = 31;
+/// `keccak256("transfer(address,uint256)")[..4]`, as hex.
+const TRC20_TRANSFER_SELECTOR_HEX: &str = "a9059cbb";
+
+fn untrusted(reason: impl Into<String>) -> Error {
+    Error::UntrustedResponse {
+        reason: reason.into(),
     }
 }
 
+/// Verify a node-built transaction by **parsing** its `raw_data`.
+///
+/// [`verify_transfer`] confirms the `txID` matches the bytes, then looks for
+/// the recipient and the amount as byte runs somewhere inside them. That is a
+/// positional-blind search, and the gap it leaves is real: a value appearing
+/// *somewhere* does not make it the field that will be executed. A node can
+/// pay someone else and leave the requested address in an unrelated field, and
+/// the scan is satisfied.
+///
+/// This reads the protobuf structurally instead. It checks the contract type,
+/// the recipient at its declared field number, the amount, and for TRC-20 the
+/// full calldata including the selector, the `call_value` and the `fee_limit`
+/// — and refuses a message whose singular fields repeat, because "last one
+/// wins" is how a second recipient gets past a checker that reads the first.
+///
+/// `fee_limit_sun` is the limit the caller pinned in its request, if it pinned
+/// one; it is not part of [`TronTransfer`] because only the caller knows it.
+///
+/// Prefer this wherever the caller knows what it asked for.
+///
+/// # Errors
+///
+/// [`Error::Address`] if `to` is not a valid Tron address,
+/// [`Error::InvalidField`] if `raw_data_hex` is not valid hex or not
+/// well-formed protobuf, and [`Error::UntrustedResponse`] if the transaction
+/// does not encode the transfer described by `transfer`.
+pub fn verify_contract(
+    raw_data_hex: &str,
+    to: &str,
+    txid: &str,
+    transfer: &TronTransfer,
+    fee_limit_sun: Option<u64>,
+) -> Result<()> {
+    let expected_id = recompute_txid(raw_data_hex)?;
+    if !expected_id.eq_ignore_ascii_case(txid.trim()) {
+        return Err(untrusted(
+            "txID does not match sha256(raw_data); the response was altered",
+        ));
+    }
+
+    let raw = decode_hex(raw_data_hex)?;
+    let expected_recipient =
+        decode_hex(&crate::address::tron::to_hex(to).map_err(Error::Address)?)?;
+
+    let raw_fields = proto::parse_fields(&raw)?;
+    let contract = parse_single_contract(&raw_fields)?;
+
+    match transfer {
+        TronTransfer::Native { amount_sun } => {
+            if contract.kind != CONTRACT_TYPE_TRANSFER
+                || !contract.type_url.ends_with(".TransferContract")
+            {
+                return Err(untrusted("the transaction is not a native transfer"));
+            }
+            let payload = proto::parse_fields(contract.payload)?;
+            if proto::one_bytes(&payload, 2, "TransferContract.to_address")? != expected_recipient {
+                return Err(untrusted(
+                    "the transaction does not pay the requested recipient",
+                ));
+            }
+            if proto::one_varint(&payload, 3, "TransferContract.amount")? != *amount_sun {
+                return Err(untrusted("the transaction has a different native amount"));
+            }
+        }
+        TronTransfer::Trc20 { parameter_hex } => {
+            if contract.kind != CONTRACT_TYPE_TRIGGER_SMART_CONTRACT
+                || !contract.type_url.ends_with(".TriggerSmartContract")
+            {
+                return Err(untrusted("the transaction is not a smart-contract trigger"));
+            }
+            let payload = proto::parse_fields(contract.payload)?;
+            if proto::one_bytes(&payload, 2, "TriggerSmartContract.contract_address")?
+                != expected_recipient
+            {
+                return Err(untrusted("the transaction targets a different contract"));
+            }
+            // A TRC-20 transfer moves no TRX. A non-zero call_value would send
+            // native funds alongside the token transfer that was requested.
+            let call_value =
+                proto::optional_varint(&payload, 3, "TriggerSmartContract.call_value")?
+                    .unwrap_or(0);
+            if call_value != 0 {
+                return Err(untrusted("the transaction has a non-zero TRC20 call_value"));
+            }
+            if let (Some(expected), Some(actual)) = (
+                fee_limit_sun,
+                proto::optional_varint(&raw_fields, 18, "Transaction.raw.fee_limit")?,
+            ) && actual != expected
+            {
+                return Err(untrusted("the transaction has a different fee_limit"));
+            }
+
+            let mut expected_data = decode_hex(TRC20_TRANSFER_SELECTOR_HEX)?;
+            expected_data.extend(decode_hex(parameter_hex)?);
+            if proto::one_bytes(&payload, 4, "TriggerSmartContract.data")? != expected_data {
+                return Err(untrusted(
+                    "the transaction has different TRC20 transfer data",
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// The one contract carried by a Tron transaction, unwrapped from its `Any`.
+struct ParsedContract<'a> {
+    kind: u64,
+    type_url: &'a str,
+    payload: &'a [u8],
+}
+
+/// Unwrap `Transaction.raw.contract[0]` and its `google.protobuf.Any`.
+///
+/// Tron's schema makes `contract` repeated, but a transaction has only ever
+/// carried one — and [`proto::one_bytes`] refusing a second is the point: two
+/// contracts would mean signing something beyond what was checked.
+fn parse_single_contract<'a>(raw_fields: &[proto::Field<'a>]) -> Result<ParsedContract<'a>> {
+    let contract_bytes = proto::one_bytes(raw_fields, 11, "Transaction.raw.contract")?;
+    let contract_fields = proto::parse_fields(contract_bytes)?;
+    let kind = proto::one_varint(&contract_fields, 1, "Transaction.Contract.type")?;
+    let any_bytes = proto::one_bytes(&contract_fields, 2, "Transaction.Contract.parameter")?;
+    let any_fields = proto::parse_fields(any_bytes)?;
+    let type_url =
+        std::str::from_utf8(proto::one_bytes(&any_fields, 1, "Any.type_url")?).map_err(|_| {
+            Error::InvalidField {
+                field: "Any.type_url",
+                reason: "is not UTF-8".to_string(),
+            }
+        })?;
+    let payload = proto::one_bytes(&any_fields, 2, "Any.value")?;
+    Ok(ParsedContract {
+        kind,
+        type_url,
+        payload,
+    })
+}
+
+#[cfg(feature = "tx")]
 /// Sign a Tron `raw_data` payload.
 ///
 /// Signs `sha256(raw_data)` — the same value as the `txID`.
@@ -208,7 +346,10 @@ fn hex_lower(bytes: &[u8]) -> String {
 mod test {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-    use super::{recompute_txid, sign, signature_hex, verify_transfer};
+    use super::{
+        CONTRACT_TYPE_TRANSFER, CONTRACT_TYPE_TRIGGER_SMART_CONTRACT, TRC20_TRANSFER_SELECTOR_HEX,
+        hex_lower, recompute_txid, sign, signature_hex, verify_transfer,
+    };
     use crate::tx::Error;
     use crate::wire::TronTransfer;
 
@@ -359,5 +500,282 @@ mod test {
             sign(&raw_data(), &[0u8; 32]).unwrap_err(),
             Error::Signing { .. }
         ));
+    }
+    // ---- verify_contract: the structural check -----------------------------
+
+    use super::verify_contract;
+    use crate::tx::proto::encode_varint;
+
+    fn field(number: u64, wire: u64) -> Vec<u8> {
+        encode_varint((number << 3) | wire)
+    }
+
+    fn bytes_field(number: u64, payload: &[u8]) -> Vec<u8> {
+        let mut out = field(number, 2);
+        out.extend(encode_varint(payload.len() as u64));
+        out.extend(payload);
+        out
+    }
+
+    fn varint_field(number: u64, value: u64) -> Vec<u8> {
+        let mut out = field(number, 0);
+        out.extend(encode_varint(value));
+        out
+    }
+
+    fn to_bytes(address: &str) -> Vec<u8> {
+        hex_decode(&crate::address::tron::to_hex(address).unwrap())
+    }
+
+    fn hex_decode(value: &str) -> Vec<u8> {
+        (0..value.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&value[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    /// Wrap a contract payload in `Transaction.raw` → `contract` → `Any`.
+    fn wrap(kind: u64, type_url: &str, payload: &[u8], extra: &[u8]) -> String {
+        let mut any = bytes_field(1, type_url.as_bytes());
+        any.extend(bytes_field(2, payload));
+
+        let mut contract = varint_field(1, kind);
+        contract.extend(bytes_field(2, &any));
+
+        let mut raw = bytes_field(11, &contract);
+        raw.extend(extra);
+        hex_lower(&raw)
+    }
+
+    fn native_raw(to: &str, amount_sun: u64) -> String {
+        let mut payload = bytes_field(2, &to_bytes(to));
+        payload.extend(varint_field(3, amount_sun));
+        wrap(
+            CONTRACT_TYPE_TRANSFER,
+            "type.googleapis.com/protocol.TransferContract",
+            &payload,
+            &[],
+        )
+    }
+
+    fn trc20_raw(contract_address: &str, parameter_hex: &str, fee_limit: Option<u64>) -> String {
+        let mut data = hex_decode(TRC20_TRANSFER_SELECTOR_HEX);
+        data.extend(hex_decode(parameter_hex));
+
+        let mut payload = bytes_field(2, &to_bytes(contract_address));
+        payload.extend(bytes_field(4, &data));
+
+        let extra = fee_limit
+            .map(|limit| varint_field(18, limit))
+            .unwrap_or_default();
+        wrap(
+            CONTRACT_TYPE_TRIGGER_SMART_CONTRACT,
+            "type.googleapis.com/protocol.TriggerSmartContract",
+            &payload,
+            &extra,
+        )
+    }
+
+    /// 32-byte-padded recipient and amount, the ERC-20 `transfer` parameters.
+    fn trc20_parameter(to: &str, amount: u64) -> String {
+        let recipient = to_bytes(to);
+        let mut param = vec![0u8; 32];
+        // Tron's 21-byte address drops its 0x41 prefix in ABI encoding.
+        param[12..32].copy_from_slice(&recipient[1..21]);
+        let mut amount_word = vec![0u8; 32];
+        amount_word[24..32].copy_from_slice(&amount.to_be_bytes());
+        param.extend(amount_word);
+        hex_lower(&param)
+    }
+
+    #[test]
+    fn a_well_formed_native_transfer_verifies_structurally() {
+        let raw = native_raw(TO, 1_000_000);
+        let id = recompute_txid(&raw).unwrap();
+        let transfer = TronTransfer::Native {
+            amount_sun: 1_000_000,
+        };
+        assert!(verify_contract(&raw, TO, &id, &transfer, None).is_ok());
+    }
+
+    #[test]
+    fn a_native_transfer_for_a_different_amount_is_rejected() {
+        // The amount is read from `TransferContract.amount` rather than found
+        // anywhere in the bytes. `verify_transfer` also rejects this one — it
+        // searches for the amount's varint as a byte run — but it rejects it
+        // for a reason that happens to coincide, not because it looked at the
+        // field. The decoy test below is where the two answers diverge.
+        let raw = native_raw(TO, 1_000_000);
+        let id = recompute_txid(&raw).unwrap();
+
+        let transfer = TronTransfer::Native { amount_sun: 42 };
+        match verify_contract(&raw, TO, &id, &transfer, None).unwrap_err() {
+            Error::UntrustedResponse { reason } => {
+                assert!(reason.contains("different native amount"));
+            }
+            other => panic!("expected UntrustedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_recipient_present_but_not_as_the_to_address_is_rejected() {
+        // The substring scan's blind spot, made concrete: the requested
+        // address appears in the bytes — as an unrelated trailing field —
+        // while `to_address` pays someone else entirely.
+        let other = "TLyqzVGLV1srkB7dToTAEqgDSfPtXRJZYH";
+        let mut payload = bytes_field(2, &to_bytes(other));
+        payload.extend(varint_field(3, 1_000_000));
+        // Smuggle the requested recipient in somewhere harmless.
+        let decoy = bytes_field(99, &to_bytes(TO));
+        let raw = wrap(
+            CONTRACT_TYPE_TRANSFER,
+            "type.googleapis.com/protocol.TransferContract",
+            &payload,
+            &decoy,
+        );
+        let id = recompute_txid(&raw).unwrap();
+        let transfer = TronTransfer::Native {
+            amount_sun: 1_000_000,
+        };
+
+        // Both of `verify_transfer`'s checks are satisfied: the requested
+        // address is present (in the decoy) and so is the amount's varint.
+        // Neither is the field that will execute.
+        assert!(
+            verify_transfer(&raw, TO, &id, &transfer).is_ok(),
+            "the positional-blind check is fooled by the decoy"
+        );
+
+        match verify_contract(&raw, TO, &id, &transfer, None).unwrap_err() {
+            Error::UntrustedResponse { reason } => {
+                assert!(reason.contains("does not pay the requested recipient"));
+            }
+            other => panic!("expected UntrustedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_trc20_call_dressed_as_a_native_transfer_is_rejected() {
+        // Contract type is checked, so a token trigger cannot pass as TRX.
+        let param = trc20_parameter(TO, 5);
+        let raw = trc20_raw(TO, &param, None);
+        let id = recompute_txid(&raw).unwrap();
+
+        let transfer = TronTransfer::Native { amount_sun: 5 };
+        match verify_contract(&raw, TO, &id, &transfer, None).unwrap_err() {
+            Error::UntrustedResponse { reason } => {
+                assert!(reason.contains("not a native transfer"));
+            }
+            other => panic!("expected UntrustedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_well_formed_trc20_transfer_verifies_structurally() {
+        let param = trc20_parameter(TO, 5);
+        let raw = trc20_raw(TO, &param, Some(150_000_000));
+        let id = recompute_txid(&raw).unwrap();
+        let transfer = TronTransfer::Trc20 {
+            parameter_hex: param,
+        };
+        assert!(verify_contract(&raw, TO, &id, &transfer, Some(150_000_000)).is_ok());
+    }
+
+    #[test]
+    fn trc20_calldata_that_does_not_match_the_request_is_rejected() {
+        let raw = trc20_raw(TO, &trc20_parameter(TO, 5), None);
+        let id = recompute_txid(&raw).unwrap();
+        // Same recipient, different amount inside the ABI parameters.
+        let transfer = TronTransfer::Trc20 {
+            parameter_hex: trc20_parameter(TO, 9_999),
+        };
+        match verify_contract(&raw, TO, &id, &transfer, None).unwrap_err() {
+            Error::UntrustedResponse { reason } => {
+                assert!(reason.contains("different TRC20 transfer data"));
+            }
+            other => panic!("expected UntrustedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_trc20_call_smuggling_native_value_is_rejected() {
+        // call_value is field 3 of TriggerSmartContract. A token transfer
+        // moves no TRX, so a non-zero value here is TRX leaving the wallet
+        // alongside the transfer that was actually requested.
+        let param = trc20_parameter(TO, 5);
+        let mut data = hex_decode(TRC20_TRANSFER_SELECTOR_HEX);
+        data.extend(hex_decode(&param));
+
+        let mut payload = bytes_field(2, &to_bytes(TO));
+        payload.extend(varint_field(3, 1_000_000)); // call_value
+        payload.extend(bytes_field(4, &data));
+        let raw = wrap(
+            CONTRACT_TYPE_TRIGGER_SMART_CONTRACT,
+            "type.googleapis.com/protocol.TriggerSmartContract",
+            &payload,
+            &[],
+        );
+        let id = recompute_txid(&raw).unwrap();
+
+        let transfer = TronTransfer::Trc20 {
+            parameter_hex: param,
+        };
+        match verify_contract(&raw, TO, &id, &transfer, None).unwrap_err() {
+            Error::UntrustedResponse { reason } => {
+                assert!(reason.contains("non-zero TRC20 call_value"));
+            }
+            other => panic!("expected UntrustedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_raised_fee_limit_is_rejected_when_the_request_pinned_one() {
+        let param = trc20_parameter(TO, 5);
+        let raw = trc20_raw(TO, &param, Some(9_000_000_000));
+        let id = recompute_txid(&raw).unwrap();
+
+        let transfer = TronTransfer::Trc20 {
+            parameter_hex: param,
+        };
+        match verify_contract(&raw, TO, &id, &transfer, Some(150_000_000)).unwrap_err() {
+            Error::UntrustedResponse { reason } => assert!(reason.contains("different fee_limit")),
+            other => panic!("expected UntrustedResponse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_second_contract_is_refused_rather_than_checked_once() {
+        // Two contracts would mean signing something beyond what was verified,
+        // so the singular read refuses the message outright.
+        let mut payload = bytes_field(2, &to_bytes(TO));
+        payload.extend(varint_field(3, 1_000_000));
+        let mut any = bytes_field(1, b"type.googleapis.com/protocol.TransferContract");
+        any.extend(bytes_field(2, &payload));
+        let mut contract = varint_field(1, CONTRACT_TYPE_TRANSFER);
+        contract.extend(bytes_field(2, &any));
+
+        let mut raw = bytes_field(11, &contract);
+        raw.extend(bytes_field(11, &contract));
+        let raw = hex_lower(&raw);
+        let id = recompute_txid(&raw).unwrap();
+
+        let transfer = TronTransfer::Native {
+            amount_sun: 1_000_000,
+        };
+        assert!(verify_contract(&raw, TO, &id, &transfer, None).is_err());
+    }
+
+    #[test]
+    fn a_tampered_raw_data_fails_the_structural_check_too() {
+        let raw = native_raw(TO, 1_000_000);
+        let id = recompute_txid(&raw).unwrap();
+        let tampered = native_raw(TO, 1_000_001);
+        let transfer = TronTransfer::Native {
+            amount_sun: 1_000_000,
+        };
+        match verify_contract(&tampered, TO, &id, &transfer, None).unwrap_err() {
+            Error::UntrustedResponse { reason } => assert!(reason.contains("altered")),
+            other => panic!("expected UntrustedResponse, got {other:?}"),
+        }
     }
 }

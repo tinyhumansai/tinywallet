@@ -12,11 +12,15 @@
 //! well-formed transaction that moves the wrong funds, or one that is valid on
 //! a chain the user did not intend.
 
-#[cfg(feature = "btc")]
+#[cfg(all(feature = "tx", feature = "btc"))]
 pub mod btc;
+#[cfg(feature = "tx")]
 pub mod evm;
+#[cfg(feature = "tron")]
+pub mod proto;
+#[cfg(feature = "tx")]
 mod rlp;
-#[cfg(feature = "solana")]
+#[cfg(all(feature = "tx", feature = "solana"))]
 pub mod solana;
 #[cfg(feature = "tron")]
 pub mod tron;

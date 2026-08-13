@@ -155,12 +155,27 @@ x402 = ["dep:serde", "dep:serde_json", "serde/derive", "eip712"]
 # `default-features = false`, share one definition of the contract, and link no
 # chain library at all. Same carve-out `tinydocs::spec` makes.
 wire = ["serde"]
+# The half of `tinywallet::tx` that reads and checks bytes rather than
+# producing signatures: `tx::proto` (the structural protobuf reader) and the
+# verification half of `tx::tron` — `recompute_txid`, `verify_transfer`,
+# `verify_contract`, `digest`, `attach_signature`, `signature_hex`.
+#
+# Split out because those are exactly what a host needs when signing itself
+# lives somewhere else. A host that has moved transaction *building* into a
+# loadable module — the case the `tx` comment below already describes — still
+# has to verify what a Tron node handed back before it signs, and verification
+# is `&[u8]` walking plus sha2, with no reason to drag in `bitcoin` and a
+# native secp256k1 build to reach it.
+#
+# Implied by `tx`, so nothing that took `tx` before sees a change.
+tx-codec = ["dep:sha2", "wire"]
 # Transaction building and signing (`tinywallet::tx`). This is the only gate
 # that pulls the `bitcoin` crate, for PSBT construction and secp256k1
 # recoverable signing. Everything else — addresses, derivation, reference data
 # — is deliberately reachable without it, so a host that has moved signing into
 # a loadable module sheds `bitcoin` and its native build entirely.
 tx = [
+    "tx-codec",
     "btc",
     "evm",
     "keccak",
