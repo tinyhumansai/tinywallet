@@ -69,7 +69,7 @@ pub mod eip712;
 pub mod key;
 #[cfg(feature = "net")]
 pub mod rpc;
-#[cfg(feature = "tx")]
+#[cfg(feature = "tx-codec")]
 pub mod tx;
 #[cfg(feature = "wire")]
 pub mod wire;
