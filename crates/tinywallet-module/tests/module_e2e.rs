@@ -31,7 +31,18 @@ use tinywallet::{Chain, tx};
 use tinywallet_module::{BUS_NAME, OBJECT_PATH};
 
 /// Every method the manifest must declare, in order.
-const EXPECTED_METHODS: &[&str] = &["BuildUnsigned", "AttachSignature"];
+///
+/// The manifest's own list is hand-written in `module_export!`, so this is a
+/// second hand-written list checked against it. That catches a manifest edited
+/// without the interface, which is the failure that actually happens — a method
+/// absent from the manifest is not advertised to a host at all.
+const EXPECTED_METHODS: &[&str] = &[
+    "BuildUnsigned",
+    "AttachSignature",
+    "DeriveAccount",
+    "SignTransaction",
+    "ExportKey",
+];
 
 /// The BIP-39 test vector mnemonic. Never use it for real funds.
 const VECTOR: &str = "abandon abandon abandon abandon abandon abandon \
@@ -53,6 +64,7 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
     signs_a_multi_input_bitcoin_spend(&proxy).await;
     signs_a_solana_transfer(&proxy).await;
     refuses_a_request_the_module_cannot_build(&proxy).await;
+    refuses_a_confidential_call_to_an_unattested_module(&proxy).await;
 
     assert!(matches!(modules.list()[0].state, ModuleState::Ready));
     broker_task.abort();
@@ -391,4 +403,57 @@ fn base64(bytes: &[u8]) -> String {
         });
     }
     out
+}
+
+/// The guard, proven against the real loader.
+///
+/// This module is loaded from a bare path with no `modules.toml` beside it, so
+/// nobody vouched for its bytes and the broker must refuse to carry a secret to
+/// it — even though the artifact is genuine, the name resolves, and the very
+/// same method would succeed if it were attested.
+///
+/// It is the negative half that makes the confidential flow worth anything. A
+/// positive result alone would be equally consistent with a broker that carried
+/// every confidential message to anyone who asked.
+async fn refuses_a_confidential_call_to_an_unattested_module(proxy: &tinybus::Proxy) {
+    let request = serde_json::json!({
+        "secret": {
+            "mnemonic": VECTOR,
+            "derivation_path": "m/44'/60'/0'/0/0",
+            "chain": "evm",
+        },
+        "transaction": {
+            "kind": "evm",
+            "to": "0x3535353535353535353535353535353535353535",
+            "value_wei": "1000000000000000000",
+            "data_hex": "0x",
+            "nonce": 9,
+            "gas_limit": 21_000,
+            "gas_price_wei": "20000000000",
+            "chain_id": 1,
+        },
+    });
+
+    let error = proxy
+        .call_confidential::<SignedTransaction>("SignTransaction", (request.clone(),))
+        .await
+        .expect_err("an unattested module must not receive a recovery phrase");
+
+    // The specific error matters: "not attested" and "no such name" send an
+    // operator to fix different things, and the module *is* installed here.
+    let rendered = error.to_string();
+    assert!(
+        rendered.contains("NotAttested") || rendered.to_lowercase().contains("attest"),
+        "expected an attestation refusal, got: {rendered}"
+    );
+
+    // The refusal is about confidentiality, not about the method or the
+    // arguments: the identical call without the flag is carried and answered.
+    // Without this the test would also pass if `SignTransaction` were simply
+    // broken or unadvertised.
+    let signed = proxy
+        .call::<SignedTransaction>("SignTransaction", (request,))
+        .await
+        .expect("the same call unflagged is an ordinary call and must succeed");
+    assert!(signed.raw.starts_with("0x"), "{}", signed.raw);
 }

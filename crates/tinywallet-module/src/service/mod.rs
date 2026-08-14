@@ -1,25 +1,52 @@
 //! `TinyBus` service boundary for the wallet surface.
 //!
-//! One object, `/ai/tinyhumans/tinywallet/Wallet`, exporting two methods:
+//! One object, `/ai/tinyhumans/tinywallet/Wallet`, exporting two flows:
 //!
 //! ```text
-//! BuildUnsigned(SigningRequest) -> UnsignedTransaction
-//! AttachSignature(AttachRequest) -> SignedTransaction
+//! // The host holds the key.
+//! BuildUnsigned(SigningRequest)   -> UnsignedTransaction
+//! AttachSignature(AttachRequest)  -> SignedTransaction
+//!
+//! // This module holds the key. Confidential calls only.
+//! DeriveAccount(SecretMaterial)   -> DerivedAccount
+//! SignTransaction(SignRequest)    -> SignedTransaction
+//! ExportKey(ExportRequest)        -> ExportedKey
 //! ```
 //!
-//! # Two methods, and no state between them
+//! # Two flows, because there are two kinds of host
 //!
-//! The host holds the key. It asks what needs signing, signs it locally, and
-//! hands back only a signature — so no method here takes key material, and
-//! there is nothing in this module a leak could disclose.
+//! The first pair keeps the key in the host: it asks what needs signing, signs
+//! locally, and hands back only a signature. That is the right arrangement
+//! whenever the backend is *reachable* — a service in its own process, across a
+//! socket — and the only one available when the bus cannot say what is on the
+//! other end.
 //!
-//! `AttachSignature` re-sends the transaction fields rather than a handle to
-//! something remembered from `BuildUnsigned`. A module that held half-built
-//! transactions between calls would need a store, a bound on it, and an expiry
-//! for callers that never return — the whole apparatus `tinydocs` needs for
-//! produced documents. Rebuilding avoids all of it, and is safe because
-//! building is deterministic: the same fields yield the transaction the digests
-//! were computed over.
+//! The second set exists because tinybus can now say. A confidential message is
+//! delivered to a module whose artifact the host hashed against a digest an
+//! operator asserted, or to nobody: never to a transport peer, never fanned out
+//! to a subscriber, never printed by a monitor. For a host that loads this
+//! module that is strictly better — it stops linking the derivation and signing
+//! stack at all, and the key stops being reassembled in a process whose main job
+//! is something else.
+//!
+//! **This is admission control, not isolation.** A loaded module shares the
+//! host's address space and can read host memory directly; it never needed the
+//! bus to reach a secret. What the rule buys is that the bus will not be the
+//! delivery mechanism for code nobody allowlisted. Neither flow is deprecated,
+//! and a backend whose compromise must not reach a key belongs in a separate
+//! process — where it is ineligible for the second set by construction.
+//!
+//! # No state between calls, in either flow
+//!
+//! A confidential call is one method, not two, for the same reason
+//! `AttachSignature` re-sends its fields: a module that held key material
+//! between calls would need a store, a bound on it, and an expiry for callers
+//! that never return. `SignTransaction` derives, builds, signs and assembles
+//! before it returns, so there is no window to bound.
+//!
+//! Rebuilding rather than remembering is safe because building is
+//! deterministic: the same fields yield the transaction the digests were
+//! computed over.
 //!
 //! # Everything travels inline
 //!
@@ -38,11 +65,12 @@
 //! into a rewrite loop over something that was already correct.
 
 use tinybus::{Connection, Error as BusError, Result as BusResult};
-use tinywallet::tx;
 use tinywallet::wire::{
-    AttachRequest, Scheme, Signature, SignedTransaction, SigningPayload, SigningRequest,
-    TransactionSpec, UnsignedTransaction,
+    AttachRequest, DerivedAccount, ExportRequest, ExportedKey, PublicKey, Scheme, SecretMaterial,
+    SignRequest, Signature, SignedTransaction, SigningPayload, SigningRequest, TransactionSpec,
+    UnsignedTransaction,
 };
+use tinywallet::{Chain, key, tx};
 
 /// Well-known name and interface exported by the `TinyWallet` module.
 pub const BUS_NAME: &str = "ai.tinyhumans.tinywallet.Wallet";
@@ -80,6 +108,220 @@ impl Wallet {
     async fn attach_signature(&self, request: AttachRequest) -> BusResult<SignedTransaction> {
         attach_signature(&request).map_err(into_bus_error)
     }
+
+    /// Report the address and public key for a phrase, without disclosing a key.
+    ///
+    /// Confidential: the request carries a recovery phrase. The reply does not
+    /// — both of its fields are public information.
+    async fn derive_account(&self, mut secret: SecretMaterial) -> BusResult<DerivedAccount> {
+        let result = derive_account(&secret);
+        wipe(&mut secret);
+        result.map_err(into_bus_error)
+    }
+
+    /// Derive, build, sign and assemble, without the key leaving this module.
+    ///
+    /// Confidential. This is the method a host should use for everything it
+    /// can: the phrase arrives, is used, and is wiped inside one call.
+    async fn sign_transaction(&self, mut request: SignRequest) -> BusResult<SignedTransaction> {
+        let result = sign_transaction(&request);
+        wipe(&mut request.secret);
+        result.map_err(into_bus_error)
+    }
+
+    /// Hand back the raw derived key.
+    ///
+    /// Confidential in both directions. This is the one method that discloses
+    /// key material, and it exists only for a host that must feed a signer it
+    /// does not control. Anything that can use `SignTransaction` should.
+    async fn export_key(&self, mut request: ExportRequest) -> BusResult<ExportedKey> {
+        let result = export_key(&request);
+        wipe(&mut request.secret);
+        result.map_err(into_bus_error)
+    }
+}
+
+/// Overwrite the recovery phrase once the call that needed it is done.
+///
+/// **What this achieves, precisely.** It shortens the window in which *this*
+/// copy of the phrase is legible in the module's heap. It does not make the
+/// module safe against something reading its address space — nothing can, since
+/// a loaded module and its host share one — and it does not reach the copies it
+/// does not own: the JSON frame the bus decoded from, and any reallocation
+/// `String` performed while that decoding grew it. Both are outside this
+/// function's reach and neither is claimed to be handled.
+///
+/// It is still worth doing. A phrase that stays resident for the process
+/// lifetime ends up in core dumps and swap; one wiped at the end of the call
+/// mostly does not. The bound is real even though it is partial, and the
+/// alternative to a partial bound here is no bound at all.
+///
+/// `SecretMaterial` cannot simply implement `Drop` itself: it lives in
+/// `tinywallet::wire`, which is deliberately dependency-free so a host can take
+/// the contract without linking anything, and `zeroize` is a dependency.
+fn wipe(secret: &mut SecretMaterial) {
+    use zeroize::Zeroize;
+    secret.mnemonic.zeroize();
+}
+
+/// Derive the key for `secret`, wiping it when the guard drops.
+///
+/// Every confidential entry point goes through here, so there is one place that
+/// knows how a phrase becomes a key and one place that decides what a failure
+/// says. The error deliberately names neither the phrase nor the path: a
+/// rejected mnemonic that echoed itself into a log would defeat the point of
+/// having carried it confidentially.
+fn derive(secret: &SecretMaterial) -> Result<key::DerivedKey, Failure> {
+    key::derive(secret.chain, &secret.mnemonic, &secret.derivation_path).map_err(|error| {
+        // `key::Error`'s Display is written not to quote the phrase; this maps
+        // by variant anyway rather than trusting that to stay true.
+        Failure::InvalidInput(match error {
+            key::Error::InvalidMnemonic => "recovery phrase is not valid BIP-39".to_string(),
+            key::Error::InvalidPath { .. } => "derivation path is malformed".to_string(),
+            key::Error::UnhardenedSolanaPath { .. } => {
+                "Solana derivation path must be fully hardened".to_string()
+            }
+            other => format!("key derivation failed: {}", failure_kind(&other)),
+        })
+    })
+}
+
+/// A stable, phrase-free label for a derivation failure this build did not map.
+fn failure_kind(error: &key::Error) -> &'static str {
+    match error {
+        key::Error::ChainNotCompiled { .. } => "chain not compiled into this module",
+        _ => "unsupported",
+    }
+}
+
+fn derive_account(secret: &SecretMaterial) -> Result<DerivedAccount, Failure> {
+    let derived = derive(secret)?;
+    Ok(DerivedAccount {
+        address: derived.address().to_string(),
+        public_key: PublicKey {
+            key_hex: public_key_hex(secret.chain, derived.secret_bytes())?,
+        },
+    })
+}
+
+fn sign_transaction(request: &SignRequest) -> Result<SignedTransaction, Failure> {
+    let derived = derive(&request.secret)?;
+
+    // The chain the caller asked to derive for and the chain the transaction is
+    // for must agree. Without this a Solana phrase could be walked with EVM
+    // rules and sign an EVM transaction from an address the user never saw —
+    // the request would look consistent and the money would be gone.
+    if request.secret.chain != request.transaction.chain() {
+        return Err(Failure::InvalidInput(
+            "derivation chain does not match the transaction's chain".to_string(),
+        ));
+    }
+
+    let public_key = PublicKey {
+        key_hex: public_key_hex(request.secret.chain, derived.secret_bytes())?,
+    };
+
+    // Built, signed and reassembled through exactly the paths the split flow
+    // uses. Sharing them is what makes `the_one_shot_path_agrees_with_the_split_path`
+    // a real assertion rather than two implementations agreeing by luck.
+    let unsigned = build_unsigned(&SigningRequest {
+        transaction: request.transaction.clone(),
+        public_key: public_key.clone(),
+    })?;
+    let signatures = unsigned
+        .payloads
+        .iter()
+        .map(|payload| sign_payload(payload, derived.secret_bytes()))
+        .collect::<Result<Vec<_>, Failure>>()?;
+    attach_signature(&AttachRequest {
+        transaction: request.transaction.clone(),
+        public_key,
+        signatures,
+    })
+}
+
+fn export_key(request: &ExportRequest) -> Result<ExportedKey, Failure> {
+    let derived = derive(&request.secret)?;
+    Ok(ExportedKey {
+        secret_key_hex: hex(derived.secret_bytes()),
+        address: derived.address().to_string(),
+    })
+}
+
+/// The compressed public key a chain's builder expects, as lowercase hex.
+fn public_key_hex(chain: Chain, secret: &[u8]) -> Result<String, Failure> {
+    // Solana is the ed25519 chain; the other three are secp256k1. Written as a
+    // two-way split rather than a match because `Chain` is `#[non_exhaustive]`,
+    // so a match would need a wildcard that silently treated a future chain as
+    // secp256k1 — which is what the `else` does too, but visibly.
+    if chain == Chain::Solana {
+        let key = ed25519_signing_key(secret)?;
+        Ok(hex(&key.verifying_key().to_bytes()))
+    } else {
+        {
+            use bitcoin::secp256k1::{PublicKey as SecpPublic, Secp256k1, SecretKey};
+            let secret = SecretKey::from_slice(secret).map_err(|_| {
+                Failure::BuildFailed("derived key is not a valid scalar".to_string())
+            })?;
+            Ok(hex(&SecpPublic::from_secret_key(
+                &Secp256k1::new(),
+                &secret,
+            )
+            .serialize()))
+        }
+    }
+}
+
+/// Sign one payload with the scheme it names.
+///
+/// The scheme comes from the payload rather than from the chain, so this cannot
+/// drift from what the builder actually produced: a builder that starts
+/// emitting a different scheme is followed here automatically.
+fn sign_payload(payload: &SigningPayload, secret: &[u8]) -> Result<Signature, Failure> {
+    let bytes = decode_hex(&payload.bytes_hex)?;
+    match payload.scheme {
+        Scheme::Secp256k1Prehash => {
+            use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
+            // `Message::from_digest` takes exactly 32 bytes. The builder always
+            // emits that, and a payload that is not is a bug worth failing on
+            // rather than padding into something signable.
+            let digest: [u8; 32] = bytes.try_into().map_err(|_| {
+                Failure::BuildFailed("secp256k1 payload is not a 32-byte digest".to_string())
+            })?;
+            let secret = SecretKey::from_slice(secret).map_err(|_| {
+                Failure::BuildFailed("derived key is not a valid scalar".to_string())
+            })?;
+            let recoverable = Secp256k1::signing_only()
+                .sign_ecdsa_recoverable(&Message::from_digest(digest), &secret);
+            let (recovery_id, compact) = recoverable.serialize_compact();
+            Ok(Signature::Secp256k1 {
+                rs_hex: hex(&compact),
+                recovery_id: u8::try_from(recovery_id.to_i32())
+                    .map_err(|_| Failure::BuildFailed("recovery id out of range".to_string()))?,
+            })
+        }
+        Scheme::Ed25519 => {
+            use ed25519_dalek::Signer;
+            let key = ed25519_signing_key(secret)?;
+            Ok(Signature::Ed25519 {
+                signature_hex: hex(&key.sign(&bytes).to_bytes()),
+            })
+        }
+        // `Scheme` is `#[non_exhaustive]`, so a future variant compiles against
+        // this build and arrives here. Refuse it. Falling back to either arm
+        // would sign real bytes with the wrong scheme — the one outcome that
+        // must never be reachable by adding a variant somewhere else.
+        _ => Err(Failure::BuildFailed(
+            "signing scheme is not supported by this module build".to_string(),
+        )),
+    }
+}
+
+fn ed25519_signing_key(secret: &[u8]) -> Result<ed25519_dalek::SigningKey, Failure> {
+    let bytes: [u8; 32] = secret
+        .try_into()
+        .map_err(|_| Failure::BuildFailed("derived ed25519 key is not 32 bytes".to_string()))?;
+    Ok(ed25519_dalek::SigningKey::from_bytes(&bytes))
 }
 
 /// Why a call failed, before it becomes a wire error name.
@@ -512,7 +754,17 @@ mod exports {
         setup = super::setup,
         worker_threads = 2,
         provides = ["ai.tinyhumans.tinywallet.Wallet"],
-        methods = ["BuildUnsigned", "AttachSignature"],
+        // Hand-maintained, and the compiler cannot check it against the
+        // `#[tinybus::interface]` block above — a method missing here is
+        // simply not advertised. `the_manifest_advertises_every_method` in
+        // `tests/module_e2e.rs` is the guard; keep the two in step.
+        methods = [
+            "BuildUnsigned",
+            "AttachSignature",
+            "DeriveAccount",
+            "SignTransaction",
+            "ExportKey",
+        ],
         signals = [],
         requires = [],
         optional = [],

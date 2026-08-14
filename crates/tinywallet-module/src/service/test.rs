@@ -401,3 +401,215 @@ fn base64_matches_its_specification_for_every_padding_case() {
     assert_eq!(super::base64(b"fooba"), "Zm9vYmE=");
     assert_eq!(super::base64(b"foobar"), "Zm9vYmFy");
 }
+
+// ---------------------------------------------------------------------------
+// The confidential flow
+// ---------------------------------------------------------------------------
+
+use tinywallet::wire::{ExportRequest, SecretMaterial, SignRequest};
+
+use super::{derive_account, export_key, sign_transaction};
+
+fn secret(chain: Chain, path: &str) -> SecretMaterial {
+    SecretMaterial {
+        mnemonic: VECTOR.to_string(),
+        derivation_path: path.to_string(),
+        chain,
+    }
+}
+
+#[test]
+fn the_one_shot_path_agrees_with_the_split_path_byte_for_byte() {
+    // The load-bearing test for this flow, and the counterpart to
+    // `the_split_path_reproduces_a_one_shot_signature`. Moving the key into
+    // this module must not change a single byte of what gets broadcast; if it
+    // does, funds move differently than the host's own tests believe.
+    let spec = evm_spec();
+    let key = evm_key();
+
+    // Split: host derives, module builds, host signs, module assembles.
+    let public_key = PublicKey {
+        key_hex: compressed_public(&key),
+    };
+    let unsigned = build_unsigned(&SigningRequest {
+        transaction: spec.clone(),
+        public_key: public_key.clone(),
+    })
+    .unwrap();
+    let split = attach_signature(&AttachRequest {
+        transaction: spec.clone(),
+        public_key,
+        signatures: unsigned
+            .payloads
+            .iter()
+            .map(|payload| host_sign(&payload.bytes_hex, &key))
+            .collect(),
+    })
+    .unwrap();
+
+    // One-shot: the module does all of it from the phrase alone.
+    let one_shot = sign_transaction(&SignRequest {
+        secret: secret(Chain::Evm, "m/44'/60'/0'/0/0"),
+        transaction: spec,
+    })
+    .unwrap();
+
+    assert_eq!(one_shot, split);
+}
+
+#[test]
+fn a_solana_transfer_signs_the_same_way_through_both_paths() {
+    // Solana is the ed25519 arm, and the only chain whose payload is the
+    // message rather than a digest — so the secp256k1 case passing says
+    // nothing about it.
+    let spec = TransactionSpec::Solana {
+        from: tinywallet::key::derive(Chain::Solana, VECTOR, "m/44'/501'/0'/0'")
+            .unwrap()
+            .address()
+            .to_string(),
+        to: "11111111111111111111111111111113".to_string(),
+        lamports: 1_000,
+        recent_blockhash: "11111111111111111111111111111114".to_string(),
+    };
+
+    let derived = tinywallet::key::derive(Chain::Solana, VECTOR, "m/44'/501'/0'/0'").unwrap();
+    let signing = ed25519_dalek::SigningKey::from_bytes(
+        &<[u8; 32]>::try_from(derived.secret_bytes()).unwrap(),
+    );
+    let public_key = PublicKey {
+        key_hex: hex(&signing.verifying_key().to_bytes()),
+    };
+    let unsigned = build_unsigned(&SigningRequest {
+        transaction: spec.clone(),
+        public_key: public_key.clone(),
+    })
+    .unwrap();
+    let signatures = unsigned
+        .payloads
+        .iter()
+        .map(|payload| {
+            use ed25519_dalek::Signer;
+            let bytes = super::decode_hex(&payload.bytes_hex).unwrap();
+            Signature::Ed25519 {
+                signature_hex: hex(&signing.sign(&bytes).to_bytes()),
+            }
+        })
+        .collect();
+    let split = attach_signature(&AttachRequest {
+        transaction: spec.clone(),
+        public_key,
+        signatures,
+    })
+    .unwrap();
+
+    let one_shot = sign_transaction(&SignRequest {
+        secret: secret(Chain::Solana, "m/44'/501'/0'/0'"),
+        transaction: spec,
+    })
+    .unwrap();
+
+    assert_eq!(one_shot, split);
+}
+
+#[test]
+fn a_derivation_chain_that_disagrees_with_the_transaction_is_refused() {
+    // Without this check a Solana phrase walked with EVM rules would sign a
+    // real EVM transaction from an address the user has never seen. The
+    // request is internally plausible, so nothing downstream would object.
+    let error = sign_transaction(&SignRequest {
+        secret: secret(Chain::Solana, "m/44'/501'/0'/0'"),
+        transaction: evm_spec(),
+    })
+    .unwrap_err();
+
+    match error {
+        super::Failure::InvalidInput(message) => {
+            assert!(message.contains("chain"), "{message}");
+        }
+        super::Failure::BuildFailed(message) => {
+            panic!("expected InvalidInput, got BuildFailed({message})")
+        }
+    }
+
+    // And the matching pair is accepted, so the test cannot pass by refusing
+    // everything.
+    assert!(
+        sign_transaction(&SignRequest {
+            secret: secret(Chain::Evm, "m/44'/60'/0'/0/0"),
+            transaction: evm_spec(),
+        })
+        .is_ok()
+    );
+}
+
+#[test]
+fn deriving_an_account_reports_the_published_vector_address_and_no_key() {
+    // Pinned against the BIP-39 vector rather than against another call into
+    // the same derivation code, which would agree with itself however wrong it
+    // was.
+    let account = derive_account(&secret(Chain::Evm, "m/44'/60'/0'/0/0")).unwrap();
+    assert_eq!(
+        account.address,
+        "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
+    );
+
+    // A compressed SEC1 public key, and emphatically not the secret: 33 bytes
+    // starting 02 or 03, and different from the 32-byte private key.
+    assert_eq!(account.public_key.key_hex.len(), 66);
+    assert!(
+        account.public_key.key_hex.starts_with("02")
+            || account.public_key.key_hex.starts_with("03")
+    );
+    assert_ne!(account.public_key.key_hex, hex(&evm_key()));
+}
+
+#[test]
+fn an_exported_key_is_the_derived_key_for_the_address_it_names() {
+    let exported = export_key(&ExportRequest {
+        secret: secret(Chain::Evm, "m/44'/60'/0'/0/0"),
+    })
+    .unwrap();
+    assert_eq!(exported.secret_key_hex, hex(&evm_key()));
+    assert_eq!(
+        exported.address,
+        "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
+    );
+}
+
+#[test]
+fn neither_a_phrase_nor_an_exported_key_survives_being_formatted() {
+    // A derived `Debug` would put a live recovery phrase into every log line
+    // and panic message that ever formatted a request. That is the leak this
+    // whole arrangement exists to prevent, arriving through the back door — so
+    // it is asserted rather than left to review.
+    let material = secret(Chain::Evm, "m/44'/60'/0'/0/0");
+    let rendered = format!("{material:?}");
+    assert!(!rendered.contains("abandon"), "{rendered}");
+    assert!(rendered.contains("<redacted>"), "{rendered}");
+    // The non-secret fields stay legible, or the redaction has cost the
+    // diagnostics it was meant to preserve.
+    assert!(rendered.contains("m/44'/60'/0'/0/0"), "{rendered}");
+
+    let exported = export_key(&ExportRequest { secret: material }).unwrap();
+    let rendered = format!("{exported:?}");
+    assert!(!rendered.contains(&exported.secret_key_hex), "{rendered}");
+    assert!(rendered.contains("<redacted>"), "{rendered}");
+}
+
+#[test]
+fn a_rejected_phrase_is_not_quoted_back_in_the_error() {
+    // An error that echoed the phrase would write it wherever the error went,
+    // undoing the confidential delivery that carried it here.
+    let error = sign_transaction(&SignRequest {
+        secret: SecretMaterial {
+            mnemonic: "clearly not a valid bip39 phrase at all".to_string(),
+            derivation_path: "m/44'/60'/0'/0/0".to_string(),
+            chain: Chain::Evm,
+        },
+        transaction: evm_spec(),
+    })
+    .unwrap_err();
+
+    let rendered = format!("{error:?}");
+    assert!(!rendered.contains("clearly not a valid"), "{rendered}");
+}

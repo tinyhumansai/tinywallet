@@ -1485,6 +1485,7 @@ dependencies = [
  "tinybus-module",
  "tinywallet",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

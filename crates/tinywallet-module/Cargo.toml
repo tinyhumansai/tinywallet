@@ -43,6 +43,18 @@ serde_json = "1"
 # Base58 for a Solana transaction id, which is its 64-byte signature. The
 # library's own encoder takes a 32-byte address, so it does not fit here.
 bs58 = "0.5"
+# Signing. These were dev-dependencies for as long as the host held the key and
+# these tests only had to imitate it; they are real dependencies now that the
+# module signs. `secp-recovery` is required, not incidental: three of the four
+# chains need the recovery id, and the non-recoverable API cannot produce it.
+bitcoin = { version = "0.32", default-features = false, features = ["std", "secp-recovery"] }
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# Wiping the recovery phrase once the call that needed it has returned. This
+# does not make the module safe against a reader of its address space — nothing
+# can, since a loaded module shares the host's — and it does not reach the JSON
+# frame the bus decoded from. It bounds how long this module's own copy stays
+# legible, which keeps it out of core dumps and swap. See `wipe`.
+zeroize = "1"
 
 [lints]
 workspace = true

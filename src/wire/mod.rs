@@ -296,3 +296,134 @@ pub struct Utxo {
 
 #[cfg(test)]
 mod test;
+
+// ---------------------------------------------------------------------------
+// The confidential half of the contract
+// ---------------------------------------------------------------------------
+//
+// Everything above exists so that key material never crosses this boundary.
+// Everything below deliberately carries it, and the two coexist rather than one
+// replacing the other, because they answer different questions.
+//
+// The split above is right whenever the backend is *reachable*: a service in
+// its own process, across a socket, on another host. It is also the only option
+// when the bus cannot say what is on the other end.
+//
+// tinybus can now say. A confidential message is delivered to a module whose
+// artifact the host hashed against a digest an operator asserted, or to nobody
+// at all — never to a transport peer, never fanned out to a subscriber, never
+// printed by a monitor. That makes a second arrangement possible for a *loaded*
+// backend, and it is strictly better where it applies: the host stops linking
+// the derivation and signing stack at all, and the key stops being reassembled
+// in a process whose job is the user interface.
+//
+// It is worth being exact about what this does and does not buy, because the
+// temptation is to read it as isolation. A loaded module shares the host's
+// address space and can read host memory directly — it never needed the bus to
+// reach a secret. What the rule buys is that the bus will not be the *delivery
+// mechanism* for code nobody allowlisted. A backend whose compromise must not
+// reach a key belongs in a separate process, where this design makes it
+// ineligible to receive one, and where the types above are the ones to use.
+
+/// A recovery phrase and the derivation to apply to it.
+///
+/// This is the only type in this crate that carries key material, and it may
+/// only travel as the body of a confidential call.
+///
+/// `Debug` is implemented by hand and prints `<redacted>` for the phrase. A
+/// derived one would put a live recovery phrase into every log line, panic
+/// message and error report that ever formatted a request — which is the
+/// failure this whole module is arranged to prevent, arriving through the back
+/// door. `DerivedKey` in `crate::key` redacts for the same reason.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SecretMaterial {
+    /// The BIP-39 phrase, already decrypted by the host.
+    pub mnemonic: String,
+    /// BIP-32 style derivation path, e.g. `m/44'/60'/0'/0/0`.
+    pub derivation_path: String,
+    /// Which chain's derivation rules and address format to apply.
+    pub chain: Chain,
+}
+
+impl std::fmt::Debug for SecretMaterial {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SecretMaterial")
+            .field("mnemonic", &"<redacted>")
+            .field("derivation_path", &self.derivation_path)
+            .field("chain", &self.chain)
+            .finish()
+    }
+}
+
+/// What a host learns about an account without learning its key.
+///
+/// The reply to `DeriveAccount`. Both fields are public information, so this
+/// carries nothing the host could not have computed itself had it kept the
+/// derivation stack — which is the point: it no longer has to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DerivedAccount {
+    /// The address, in the chain's canonical text form.
+    pub address: String,
+    /// The compressed public key, lowercase hex.
+    pub public_key: PublicKey,
+}
+
+/// Derive, build, sign and assemble in one call.
+///
+/// The single-round-trip counterpart to [`SigningRequest`] + [`AttachRequest`].
+/// There is no intermediate state and nothing for the caller to hold, because
+/// the secret arrives, is used, and goes out of scope inside one method — a
+/// two-step confidential flow would mean a module holding key material between
+/// calls, with a store to bound and an expiry to get right.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SignRequest {
+    /// The phrase and derivation to sign with.
+    pub secret: SecretMaterial,
+    /// The transaction to build and sign.
+    pub transaction: TransactionSpec,
+}
+
+/// Ask for the raw derived key itself.
+///
+/// This exists for one real case: a host that must hand the key to a signer it
+/// does not control — an embedded library with its own `from_seed` entry point,
+/// or a user exporting their key deliberately. Every other operation should use
+/// [`SignRequest`], which never lets the key out.
+///
+/// It is a separate type from [`SignRequest`] rather than a flag on it so the
+/// two cannot be confused at a call site, and so a reviewer grepping for the
+/// paths that extract a key finds exactly this one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportRequest {
+    /// The phrase and derivation to export.
+    pub secret: SecretMaterial,
+}
+
+/// The raw derived key.
+///
+/// Returned only from a confidential call, so it inherits the confidential flag
+/// on the way back and is delivered to the connection that asked — never fanned
+/// out, never monitored.
+///
+/// `Debug` redacts, for the same reason [`SecretMaterial`] does.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportedKey {
+    /// The 32-byte secret key, lowercase hex.
+    pub secret_key_hex: String,
+    /// The address it controls, so a caller can check it got the key it meant.
+    pub address: String,
+}
+
+impl std::fmt::Debug for ExportedKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExportedKey")
+            .field("secret_key_hex", &"<redacted>")
+            .field("address", &self.address)
+            .finish()
+    }
+}
