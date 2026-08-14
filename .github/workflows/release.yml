@@ -13,9 +13,9 @@ on:
           - major
       existing_tag:
         description: >-
-          Build and publish artifacts for a tag that already exists, skipping
-          the version bump and the crates.io publish. Recovery path for a run
-          that tagged but did not produce its bundles.
+          Build and upload artifacts for a tag that already exists, skipping the
+          version bump and the tagging. Recovery path for a run that tagged but
+          did not produce its bundles.
         type: string
         required: false
         default: ''
