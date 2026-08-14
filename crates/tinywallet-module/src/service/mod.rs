@@ -11,6 +11,7 @@
 //! DeriveAccount(SecretMaterial)   -> DerivedAccount
 //! SignTransaction(SignRequest)    -> SignedTransaction
 //! ExportKey(ExportRequest)        -> ExportedKey
+//! SignMessage(SignMessageRequest) -> Signature
 //! ```
 //!
 //! # Two flows, because there are two kinds of host
@@ -67,8 +68,8 @@
 use tinybus::{Connection, Error as BusError, Result as BusResult};
 use tinywallet::wire::{
     AttachRequest, DerivedAccount, ExportRequest, ExportedKey, PublicKey, Scheme, SecretMaterial,
-    SignRequest, Signature, SignedTransaction, SigningPayload, SigningRequest, TransactionSpec,
-    UnsignedTransaction,
+    SignMessageRequest, SignRequest, Signature, SignedTransaction, SigningPayload, SigningRequest,
+    TransactionSpec, UnsignedTransaction,
 };
 use tinywallet::{Chain, key, tx};
 
@@ -134,6 +135,18 @@ impl Wallet {
     /// Confidential in both directions. This is the one method that discloses
     /// key material, and it exists only for a host that must feed a signer it
     /// does not control. Anything that can use `SignTransaction` should.
+    /// Sign opaque bytes with the key derived from a phrase.
+    ///
+    /// Confidential. Blind: nothing here can check what the bytes mean, so
+    /// prefer `SignTransaction` wherever the request can be expressed as a
+    /// `TransactionSpec`. See `SignMessageRequest` for when this is the right
+    /// call and why it is still better than the alternative.
+    async fn sign_message(&self, mut request: SignMessageRequest) -> BusResult<Signature> {
+        let result = sign_message(&request);
+        wipe(&mut request.secret);
+        result.map_err(into_bus_error)
+    }
+
     async fn export_key(&self, mut request: ExportRequest) -> BusResult<ExportedKey> {
         let result = export_key(&request);
         wipe(&mut request.secret);
@@ -238,6 +251,21 @@ fn sign_transaction(request: &SignRequest) -> Result<SignedTransaction, Failure>
         public_key,
         signatures,
     })
+}
+
+fn sign_message(request: &SignMessageRequest) -> Result<Signature, Failure> {
+    let derived = derive(&request.secret)?;
+    // Routed through the same `sign_payload` the transaction paths use, so the
+    // prehash-vs-whole-message distinction is decided in exactly one place. A
+    // second implementation here is how the two would eventually disagree, and
+    // a signature over the wrong bytes is still a valid signature.
+    sign_payload(
+        &SigningPayload {
+            bytes_hex: request.message_hex.clone(),
+            scheme: request.scheme,
+        },
+        derived.secret_bytes(),
+    )
 }
 
 fn export_key(request: &ExportRequest) -> Result<ExportedKey, Failure> {
@@ -764,6 +792,7 @@ mod exports {
             "DeriveAccount",
             "SignTransaction",
             "ExportKey",
+            "SignMessage",
         ],
         signals = [],
         requires = [],

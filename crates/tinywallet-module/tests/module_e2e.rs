@@ -42,6 +42,7 @@ const EXPECTED_METHODS: &[&str] = &[
     "DeriveAccount",
     "SignTransaction",
     "ExportKey",
+    "SignMessage",
 ];
 
 /// The BIP-39 test vector mnemonic. Never use it for real funds.
