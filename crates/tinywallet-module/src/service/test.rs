@@ -406,9 +406,9 @@ fn base64_matches_its_specification_for_every_padding_case() {
 // The confidential flow
 // ---------------------------------------------------------------------------
 
-use tinywallet::wire::{ExportRequest, SecretMaterial, SignRequest};
+use tinywallet::wire::{ExportRequest, SecretMaterial, SignMessageRequest, SignRequest};
 
-use super::{derive_account, export_key, sign_transaction};
+use super::{derive_account, export_key, sign_message, sign_transaction};
 
 fn secret(chain: Chain, path: &str) -> SecretMaterial {
     SecretMaterial {
@@ -612,4 +612,102 @@ fn a_rejected_phrase_is_not_quoted_back_in_the_error() {
 
     let rendered = format!("{error:?}");
     assert!(!rendered.contains("clearly not a valid"), "{rendered}");
+}
+
+#[test]
+fn a_signed_message_verifies_against_the_derived_public_key() {
+    // Pinned against ed25519 verification rather than against another call into
+    // the same signing code, which would agree with itself however wrong it was.
+    use ed25519_dalek::{Signature as DalekSignature, Verifier, VerifyingKey};
+
+    let message = b"solana message bytes the module cannot interpret";
+    let signature = sign_message(&SignMessageRequest {
+        secret: secret(Chain::Solana, "m/44'/501'/0'/0'"),
+        message_hex: hex(message),
+        scheme: Scheme::Ed25519,
+    })
+    .unwrap();
+
+    let Signature::Ed25519 { signature_hex } = signature else {
+        panic!("an ed25519 request must produce an ed25519 signature");
+    };
+
+    let account = derive_account(&secret(Chain::Solana, "m/44'/501'/0'/0'")).unwrap();
+    let verifying = VerifyingKey::from_bytes(
+        &<[u8; 32]>::try_from(super::decode_hex(&account.public_key.key_hex).unwrap()).unwrap(),
+    )
+    .unwrap();
+    let bytes: [u8; 64] = super::decode_hex(&signature_hex)
+        .unwrap()
+        .try_into()
+        .unwrap();
+    verifying
+        .verify(message, &DalekSignature::from_bytes(&bytes))
+        .expect("the signature must verify under the account's own public key");
+}
+
+#[test]
+fn signing_a_message_honours_the_requested_scheme_rather_than_the_chain() {
+    // The scheme is explicit precisely so it cannot be inferred wrongly. An EVM
+    // key asked for a prehash signature must get one — and a 32-byte digest is
+    // required, so a caller cannot hand over a whole message by mistake and
+    // have it hashed into something it did not mean to sign.
+    let digest = [7u8; 32];
+    let signature = sign_message(&SignMessageRequest {
+        secret: secret(Chain::Evm, "m/44'/60'/0'/0/0"),
+        message_hex: hex(&digest),
+        scheme: Scheme::Secp256k1Prehash,
+    })
+    .unwrap();
+    assert!(matches!(signature, Signature::Secp256k1 { .. }));
+
+    let too_long = sign_message(&SignMessageRequest {
+        secret: secret(Chain::Evm, "m/44'/60'/0'/0/0"),
+        message_hex: hex(&[7u8; 33]),
+        scheme: Scheme::Secp256k1Prehash,
+    });
+    assert!(
+        too_long.is_err(),
+        "a prehash request must refuse anything that is not a 32-byte digest"
+    );
+}
+
+#[test]
+fn a_message_signature_equals_what_the_transaction_path_produces() {
+    // The two paths must not drift: `SignMessage` over the bytes the builder
+    // emitted has to equal what `SignTransaction` puts in the transaction, or
+    // the Solana callers that use it would broadcast a different signature than
+    // the equivalent module-built transfer.
+    let spec = TransactionSpec::Solana {
+        from: tinywallet::key::derive(Chain::Solana, VECTOR, "m/44'/501'/0'/0'")
+            .unwrap()
+            .address()
+            .to_string(),
+        to: "11111111111111111111111111111113".to_string(),
+        lamports: 7,
+        recent_blockhash: "11111111111111111111111111111114".to_string(),
+    };
+    let account = derive_account(&secret(Chain::Solana, "m/44'/501'/0'/0'")).unwrap();
+    let unsigned = build_unsigned(&SigningRequest {
+        transaction: spec,
+        public_key: account.public_key.clone(),
+    })
+    .unwrap();
+    let payload = &unsigned.payloads[0];
+
+    let direct = sign_message(&SignMessageRequest {
+        secret: secret(Chain::Solana, "m/44'/501'/0'/0'"),
+        message_hex: payload.bytes_hex.clone(),
+        scheme: payload.scheme,
+    })
+    .unwrap();
+
+    let via_payload = super::sign_payload(
+        payload,
+        tinywallet::key::derive(Chain::Solana, VECTOR, "m/44'/501'/0'/0'")
+            .unwrap()
+            .secret_bytes(),
+    )
+    .unwrap();
+    assert_eq!(direct, via_payload);
 }
