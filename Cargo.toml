@@ -6,8 +6,17 @@ rust-version = "1.85"
 license = "GPL-3.0-only"
 description = "Agent-friendly multi-chain wallet primitives in Rust."
 repository = "https://github.com/tinyhumansai/tinywallet"
-documentation = "https://docs.rs/tinywallet"
 readme = "README.md"
+# Not published to crates.io. Hosts take this crate as a git submodule and get
+# its behaviour as the module artifacts the release workflow builds, so a
+# registry upload would be a third distribution channel nobody reads. Declared
+# here as well as being absent from the workflow, so a local `cargo publish`
+# refuses rather than quietly succeeding and creating one.
+#
+# `documentation` is deliberately not set: it pointed at docs.rs, which only
+# builds for published crates, so the link was dead. `cargo doc` from the repo
+# is the documentation.
+publish = false
 keywords = ["wallet", "bitcoin", "solana", "ethereum", "tron"]
 categories = ["cryptography::cryptocurrencies"]
 # Keep the published package to what a consumer actually needs.
