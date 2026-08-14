@@ -29,9 +29,23 @@ permissions:
 
 jobs:
   publish:
-    name: Publish crate
-    # Skipped entirely when re-cutting artifacts for an existing tag: the crate
-    # at that version is already published, or deliberately is not.
+    name: Version and tag
+    # This crate is **not published to crates.io**. It is consumed as a git
+    # submodule by its hosts and shipped to them as the module artifacts this
+    # workflow builds, so a registry upload would be a third distribution
+    # channel nobody reads.
+    #
+    # There used to be a `cargo publish` step here, and its failure was not
+    # cosmetic: `release-target` gates on this job succeeding, so a release
+    # would tag the commit, fail the upload, and then skip every artifact job —
+    # forcing a second run with `existing_tag` to build the bundles. `cargo
+    # package` below still runs, so a manifest that could not be packaged is
+    # still caught; nothing uploads it.
+    #
+    # The job id stays `publish` because several `needs:` and `needs.publish.*`
+    # references depend on it.
+    #
+    # Skipped entirely when re-cutting artifacts for an existing tag.
     if: ${{ github.ref == 'refs/heads/main' && inputs.existing_tag == '' }}
     runs-on: ubuntu-latest
     environment: Production
@@ -161,20 +175,19 @@ jobs:
           git push origin "HEAD:${GITHUB_REF_NAME}"
           git push origin "${RELEASE_TAG}"
 
-      - name: Publish to crates.io
-        run: cargo publish --locked --package tinywallet
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-  # What the bundles actually need is a tag and a version — not a successful
-  # crates.io upload. Those were the same job, so a missing registry token took
-  # the module artifacts down with it even though nothing about them touches
-  # crates.io. This job is the seam.
+  # What the bundles need is a tag and a version. That used to be entangled with
+  # a crates.io upload in one job, so a missing registry token took the module
+  # artifacts down with it even though nothing about them touches crates.io.
+  # The upload is gone now, so this job's gate means what it says: the tag
+  # exists and was pushed.
   release-target:
     name: Resolve release target
     needs: publish
-    # `always()` so a skipped or failed publish still yields a target: the two
-    # are genuinely independent releases that happened to share a job.
+    # `always()` is required because this job must still run when `publish` is
+    # *skipped* — the `existing_tag` recovery path, where the tag already
+    # exists. It is deliberately NOT tolerant of a `publish` *failure*: that job
+    # now only versions, packages and tags, and without a tag there is nothing
+    # for the bundles to attach to.
     if: ${{ always() && (inputs.existing_tag != '' || needs.publish.result == 'success') }}
     runs-on: ubuntu-latest
     outputs:
