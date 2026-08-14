@@ -427,3 +427,44 @@ impl std::fmt::Debug for ExportedKey {
             .finish()
     }
 }
+
+/// Sign opaque bytes with a key derived from a phrase.
+///
+/// # This is a blind signature, and that is the whole caveat
+///
+/// Every other signing method here takes transaction *fields*, so the backend
+/// can rebuild the transaction, check the recipient against what the caller
+/// claimed, and refuse a mismatch — the Tron decoy test exists to prove it
+/// does. This one takes bytes. A backend cannot check what it is signing,
+/// because it does not know what the bytes mean.
+///
+/// It exists for encodings the host owns and the backend does not model:
+/// Solana SPL token transfers, and the x402 payment transaction with its
+/// compute-budget instructions, memo and second signature slot for a fee payer.
+/// Teaching a general wallet crate the x402 wire format to gain a check would
+/// put one protocol's details in a place every other host also pays for.
+///
+/// **What it is not.** It is not a downgrade from those paths, because the
+/// alternative for these two callers is not a verified signature — it is
+/// deriving the key in the host and signing there, which is what they did
+/// before. Compared to that it is strictly better: the key exists only inside
+/// the backend. Compared to [`SignRequest`] it is strictly worse, so anything
+/// that can express itself as a [`TransactionSpec`] must use that instead.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SignMessageRequest {
+    /// The phrase and derivation to sign with.
+    pub secret: SecretMaterial,
+    /// Lowercase hex of the exact bytes to sign.
+    ///
+    /// For [`Scheme::Secp256k1Prehash`] these must already be a 32-byte digest;
+    /// for [`Scheme::Ed25519`] they are the whole message and must not be
+    /// pre-hashed.
+    pub message_hex: String,
+    /// Which signing scheme to apply.
+    ///
+    /// Explicit rather than inferred from the chain, so a caller cannot get a
+    /// prehash signature over a message it had already hashed, or the reverse,
+    /// by changing an unrelated field.
+    pub scheme: Scheme,
+}
