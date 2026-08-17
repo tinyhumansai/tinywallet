@@ -72,7 +72,7 @@ ripemd = { version = "0.2", optional = true }
 # `secp256k1` C library. Deriving a key wrong is silent and unrecoverable, so
 # this stays delegated to a vetted implementation — see `src/key/bip32.rs`.
 # Already in the graph beneath `coins-bip39`, so it costs nothing.
-coins-bip32 = { version = "0.8", optional = true }
+coins-bip32 = { version = "0.13", optional = true }
 # Keccak-256, the hash EIP-55 checksums are defined over. Only needed for the
 # EVM checksum helpers, so it rides its own gate rather than `evm`'s — the
 # common case (validate an address) stays dependency-free.
