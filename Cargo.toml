@@ -57,7 +57,7 @@ bitcoin = { version = "0.32", default-features = false, features = ["std", "secp
 # bech32/bech32m segwit address encoding and decoding, checksum variant
 # selection and witness-program length rules included. Replaces the parsing
 # half of what `bitcoin` used to do here.
-bech32 = { version = "0.11", optional = true }
+bech32 = { version = "0.12", optional = true }
 # RIPEMD-160, the second half of Bitcoin's HASH160. Only needed to turn a
 # public key into a P2WPKH witness program.
 #
