@@ -87,7 +87,7 @@ coins-bip32 = { version = "0.8", optional = true }
 # crate asks of sha3 is `Keccak256::digest`, identical in both.
 #
 # Revisit when `coins-bip32` moves, and only then.
-sha3 = { version = "0.10", optional = true }
+sha3 = { version = "0.12", optional = true }
 # Async trait methods for the `Transport` seam in `src/rpc/`. Rust cannot yet
 # express an object-safe async trait natively, and `Transport` must be
 # `dyn`-compatible because chain code takes `&dyn Transport`.
