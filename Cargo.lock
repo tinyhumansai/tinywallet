@@ -262,9 +262,9 @@ dependencies = [
 
 [[package]]
 name = "coins-bip39"
-version = "0.13.0"
+version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57a98df2f583fadfaba6b093112a7f1220ff810ea65e41d2fb7ebbee7c265d33"
+checksum = "07ccb31dbb25bf261ba5bf34d4871445935f4ea106fbec3eddaec442516e03ff"
 dependencies = [
  "bitvec",
  "coins-bip32 0.13.1",
