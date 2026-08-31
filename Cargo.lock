@@ -234,9 +234,9 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "coins-bip32"
-version = "0.13.1"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1fc16cf8742cbecd285d3465532affa37e23e8120a0ac813f613923c730cd9b"
+checksum = "4ec898b40b1c43443eecfcbba555275cd71d390a8ab711bfe98bb47c9600f798"
 dependencies = [
  "bs58",
  "coins-core",
@@ -252,9 +252,9 @@ dependencies = [
 
 [[package]]
 name = "coins-bip39"
-version = "0.13.1"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07ccb31dbb25bf261ba5bf34d4871445935f4ea106fbec3eddaec442516e03ff"
+checksum = "bc93a7279d207eac6a187a3408bb64a5299f3143ffed6c49b833720062e5fd79"
 dependencies = [
  "bitvec",
  "coins-bip32",
