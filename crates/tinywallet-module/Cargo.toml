@@ -43,7 +43,6 @@ tinybus-module = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybu
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 # Method arguments and returns are the `tinywallet::wire` contract, decoded from
 # and encoded to JSON frames.
-serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Base58 for a Solana transaction id, which is its 64-byte signature. The
 # library's own encoder takes a 32-byte address, so it does not fit here.
