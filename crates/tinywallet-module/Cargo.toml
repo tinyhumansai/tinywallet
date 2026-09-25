@@ -11,6 +11,9 @@ publish = false
 [lib]
 crate-type = ["rlib", "cdylib"]
 
+[features]
+static-link = []
+
 [dependencies]
 # The wire contract both sides speak. Taken directly rather than through
 # `tinywallet`'s re-export so the module's identity and the host's come from one
@@ -32,12 +35,12 @@ tinywallet = { path = "../..", default-features = false, features = [
     "eip712",
 ] }
 # TinyBus provides the typed service interface and the dynamic module host ABI.
-tinybus = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybus", default-features = false, features = [
+tinybus = { version = "=0.1.2", default-features = false, features = [
     "macros",
     "modules",
 ] }
 # The module-side SDK owns its runtime and exports the stable C entrypoints.
-tinybus-module = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybus-module" }
+tinybus-module = "=0.1.2"
 # The interface macro requires every method to be `async fn`, so a runtime has
 # to exist even though nothing here awaits I/O.
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
