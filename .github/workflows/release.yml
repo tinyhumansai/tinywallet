@@ -150,7 +150,14 @@ jobs:
           # platform job fails to resolve. That produces a tagged release with
           # zero artifacts, which is exactly what happened on tinyvoice v0.1.4.
           bump crates/tinywallet-bus/Cargo.toml
-          # Refreshes both workspace members in the lockfile. `cargo update -p`
+          # The two crates the bus re-exports from, bumped for the same reason:
+          # a manifest this step misses leaves `Cargo.lock` disagreeing with the
+          # tree at the tag and every `--locked` bundle job fails to resolve.
+          # Their path dependencies carry no version requirement, so there is no
+          # inter-crate pin to rewrite alongside the version.
+          bump crates/tinywallet-crypto/Cargo.toml
+          bump crates/tinywallet-x402/Cargo.toml
+          # Refreshes every workspace member in the lockfile. `cargo update -p`
           # cannot do this: these are path dependencies, and the later
           # `--locked` steps fail against a stale lock.
           cargo update --workspace
@@ -163,20 +170,21 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock \
+            crates/tinywallet-crypto/Cargo.toml crates/tinywallet-x402/Cargo.toml \
             crates/tinywallet-bus/Cargo.toml crates/tinywallet-module/Cargo.toml
           git commit -m "Release ${RELEASE_TAG}"
           git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
 
-      # Scoped to the contract crate, which is the only member with no path
+      # Scoped to `tinywallet-crypto`, which is the only member with no path
       # dependency of its own. `cargo package` rewrites a path dependency to a
-      # registry lookup, so packaging `tinywallet` (which now takes
-      # `tinywallet-bus` by path) or `tinywallet-module` fails with "no matching
+      # registry lookup, so packaging `tinywallet-bus`, `tinywallet-x402`,
+      # `tinywallet` or `tinywallet-module` (each takes a sibling by path) fails with "no matching
       # package named `tinywallet-bus` found, location searched: crates.io
       # index" — a crate that is `publish = false` will never be there. Nothing
       # is uploaded either way; this step exists to catch a manifest that could
       # not be packaged at all.
       - name: Package crate
-        run: cargo package --locked --package tinywallet-bus
+        run: cargo package --locked --package tinywallet-crypto
 
       - name: Push release commit and tag
         env:
