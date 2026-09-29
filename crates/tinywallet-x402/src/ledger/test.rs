@@ -4,7 +4,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::fs;
-use std::sync::PoisonError;
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 
@@ -289,7 +288,7 @@ fn a_record_serialises_camel_case_with_snake_case_status() {
 
 #[test]
 fn the_global_ledger_errors_until_initialised_then_works() {
-    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = TEST_LOCK.blocking_lock();
     reset_global();
 
     assert_eq!(
@@ -322,7 +321,7 @@ fn the_global_ledger_errors_until_initialised_then_works() {
 
 #[test]
 fn a_poisoned_global_lock_is_recovered() {
-    let _guard = TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = TEST_LOCK.blocking_lock();
     let dir = tempfile::tempdir().unwrap();
     init_global(dir.path(), SESSION, budget());
     let _ = std::panic::catch_unwind(|| {

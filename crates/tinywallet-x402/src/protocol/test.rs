@@ -4,7 +4,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use base64::Engine as _;
@@ -324,9 +324,7 @@ async fn the_chain_of_a_bare_requirement_follows_its_network_prefix() {
 
 #[tokio::test]
 async fn paying_needs_an_initialised_ledger() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     ledger::reset_global();
     let headers = challenge_headers(&challenge(vec![solana_requirement()]));
     let err = handle_402_and_pay(&StubBuilder::default(), &headers, "https://x")
@@ -340,9 +338,7 @@ async fn paying_needs_an_initialised_ledger() {
 
 #[tokio::test]
 async fn a_payment_within_budget_yields_the_header_and_ledger_metadata() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger(SpendingBudget::default());
     let builder = StubBuilder::default();
     let headers = challenge_headers(&challenge(vec![evm_requirement(), solana_requirement()]));
@@ -364,9 +360,7 @@ async fn a_payment_within_budget_yields_the_header_and_ledger_metadata() {
 
 #[tokio::test]
 async fn an_unparseable_amount_is_a_protocol_error() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger(SpendingBudget::default());
     let mut requirement = solana_requirement();
     requirement.amount = "lots".into();
@@ -383,9 +377,7 @@ async fn an_unparseable_amount_is_a_protocol_error() {
 
 #[tokio::test]
 async fn each_budget_limit_refuses_with_its_own_error() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let headers = challenge_headers(&challenge(vec![solana_requirement()]));
     let builder = StubBuilder::default();
 
@@ -441,9 +433,7 @@ async fn each_budget_limit_refuses_with_its_own_error() {
 
 #[tokio::test]
 async fn a_wallet_failure_is_passed_through() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger(SpendingBudget::default());
     let builder = StubBuilder {
         fail_with: Some("wallet secret: locked".into()),

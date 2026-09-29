@@ -59,9 +59,10 @@ where
     Ok(f(ledger))
 }
 
-/// Serialises the tests that touch the process-wide ledger.
+/// Serialises the tests that touch the process-wide ledger. An async mutex, so
+/// an async test can hold it across its awaits.
 #[cfg(test)]
-pub(crate) static TEST_LOCK: Mutex<()> = Mutex::new(());
+pub(crate) static TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// Drop the process-wide ledger, as at process start.
 #[cfg(test)]

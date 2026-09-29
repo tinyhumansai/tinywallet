@@ -68,7 +68,7 @@ uuid = { version = "1", features = ["v4"], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Drives the async tests; the crate itself pulls in no runtime.
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "io-util"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync"] }
 # A loopback HTTP server so the 402 client and the tool are exercised against a
 # real socket, without network access.
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }

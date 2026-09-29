@@ -3,7 +3,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::sync::{Arc, PoisonError};
+use std::sync::Arc;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -165,9 +165,7 @@ async fn a_402_without_a_challenge_header_is_not_an_x402_endpoint() {
 
 #[tokio::test]
 async fn the_v1_challenge_header_is_accepted() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger();
     let server = TestServer::start(ServerConfig {
         challenge_header: "X-PAYMENT-REQUIRED",
@@ -199,9 +197,7 @@ async fn an_oversized_body_is_cut_on_a_character_boundary() {
 
 #[tokio::test]
 async fn an_evm_402_is_paid_recorded_and_reported() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger();
     let proxy = Arc::new(FakeProxyPolicy::default());
     let server = TestServer::start(paid_config(evm_requirement())).await;
@@ -251,9 +247,7 @@ async fn an_evm_402_is_paid_recorded_and_reported() {
 
 #[tokio::test]
 async fn a_solana_402_is_labelled_solana() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger();
     let server = TestServer::start(paid_config(solana_requirement())).await;
     let result = run(&tool(), json!({"url": server.url})).await;
@@ -263,9 +257,7 @@ async fn a_solana_402_is_labelled_solana() {
 
 #[tokio::test]
 async fn a_rejected_payment_is_recorded_as_failed() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger();
     let server = TestServer::start(ServerConfig {
         paid_status: 500,
@@ -287,9 +279,7 @@ async fn a_rejected_payment_is_recorded_as_failed() {
 
 #[tokio::test]
 async fn a_missing_or_unreadable_receipt_leaves_the_transaction_blank() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     for receipt in [None, Some("***".to_string()), Some(B64.encode("{}"))] {
         let _dir = init_ledger();
         let server = TestServer::start(ServerConfig {
@@ -308,9 +298,7 @@ async fn a_missing_or_unreadable_receipt_leaves_the_transaction_blank() {
 
 #[tokio::test]
 async fn a_payment_the_budget_refuses_is_reported_and_not_sent() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let dir = tempfile::tempdir().unwrap();
     ledger::init_global(
         dir.path(),
@@ -334,9 +322,7 @@ async fn a_payment_the_budget_refuses_is_reported_and_not_sent() {
 
 #[tokio::test]
 async fn paying_without_a_ledger_is_reported() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     ledger::reset_global();
     let server = TestServer::start(paid_config(evm_requirement())).await;
     let result = run(&tool(), json!({"url": server.url})).await;
@@ -348,9 +334,7 @@ async fn paying_without_a_ledger_is_reported() {
 
 #[tokio::test]
 async fn a_wallet_that_cannot_sign_is_reported() {
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger();
     let server = TestServer::start(paid_config(evm_requirement())).await;
     let tool = X402RequestTool::new(
@@ -373,9 +357,7 @@ async fn a_wallet_that_cannot_sign_is_reported() {
 async fn a_retry_that_never_answers_is_recorded_as_failed() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    let _guard = ledger::TEST_LOCK
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
