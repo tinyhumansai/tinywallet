@@ -270,7 +270,7 @@ impl Tool for X402RequestTool {
 
 /// `0.002500 USDC` for `2500`.
 #[allow(clippy::cast_precision_loss)] // atomic USDC amounts stay far below 2^53
-fn format_usdc(amount_atomic: u64) -> String {
+pub(super) fn format_usdc(amount_atomic: u64) -> String {
     format!("{:.6} USDC", amount_atomic as f64 / 1_000_000.0)
 }
 
@@ -320,7 +320,7 @@ async fn format_response(response: reqwest::Response, url: &str) -> ToolResult {
     ToolResult::success(format!("HTTP {status} from {url}\n\n{body}"))
 }
 
-async fn format_response_with_payment(
+pub(super) async fn format_response_with_payment(
     response: reqwest::Response,
     url: &str,
     amount_display: &str,
