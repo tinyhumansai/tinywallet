@@ -77,7 +77,7 @@ tempfile = "3"
 # The root crate's `key` gate derives a known account from a BIP-39 mnemonic, so
 # `FakePaymentSigner` signs as exactly the account a real wallet would. A
 # dev-dependency only: never linked into a host.
-tinywallet = { path = "../..", default-features = false, features = ["key"] }
+tinywallet = { path = "../..", default-features = false, features = ["key", "solana"] }
 # Local secp256k1 / ed25519 signing for `FakePaymentSigner`, and to recover the
 # signer from an EIP-3009 signature in tests.
 k256 = { version = "0.13", default-features = false, features = ["ecdsa"] }

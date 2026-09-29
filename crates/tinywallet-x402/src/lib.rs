@@ -55,3 +55,6 @@ pub mod protocol;
 pub mod tools;
 #[cfg(feature = "wire")]
 pub mod wire;
+
+#[cfg(all(test, feature = "pay"))]
+mod test_support;
