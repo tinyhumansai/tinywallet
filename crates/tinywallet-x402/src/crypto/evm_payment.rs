@@ -45,7 +45,7 @@ pub(super) async fn build_evm_payment(
 
 /// Turn the seam's `r ‖ s ‖ recovery_id` into the `r ‖ s ‖ v` an EIP-712
 /// signature carries, where `v` is the recovery id offset by 27.
-fn eip712_signature(signature: &[u8]) -> Result<[u8; 65], X402Error> {
+pub(super) fn eip712_signature(signature: &[u8]) -> Result<[u8; 65], X402Error> {
     let Ok(raw) = <[u8; 65]>::try_from(signature) else {
         return Err(X402Error::Wallet(
             "the wallet module returned a malformed signature".to_string(),

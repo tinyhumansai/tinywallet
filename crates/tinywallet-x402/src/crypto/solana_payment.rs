@@ -158,7 +158,7 @@ pub(super) fn b58_to_32(addr: &str) -> Result<[u8; 32], X402Error> {
 
 /// The associated token account for `owner` and `mint`: the first bump, counting
 /// down from 255, whose candidate address is *off* the ed25519 curve.
-fn derive_ata(
+pub(super) fn derive_ata(
     owner: &[u8; 32],
     mint: &[u8; 32],
     token_program: &[u8; 32],
@@ -184,7 +184,7 @@ fn derive_ata(
 }
 
 /// Solana's compact-u16 length encoding.
-fn encode_shortvec(value: usize) -> Vec<u8> {
+pub(super) fn encode_shortvec(value: usize) -> Vec<u8> {
     let mut out = Vec::new();
     let mut v = value;
     loop {
@@ -285,7 +285,7 @@ fn encode_legacy_message(
 
 /// A memo that makes two otherwise identical transfers distinct transactions:
 /// 16 fresh bytes as lowercase hex.
-fn random_memo_nonce() -> Vec<u8> {
+pub(super) fn random_memo_nonce() -> Vec<u8> {
     hex::encode(&fresh_nonce()[..16]).into_bytes()
 }
 
