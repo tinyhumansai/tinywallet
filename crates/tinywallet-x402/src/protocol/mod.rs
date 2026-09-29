@@ -7,12 +7,12 @@
 //!
 //! ## Module layout
 //!
-//! - [`error`] — the client's error type ([`X402Error`]).
-//! - [`headers`] — parsing the challenge and settlement headers and encoding the
+//! - `error` — the client's error type ([`X402Error`]).
+//! - `headers` — parsing the challenge and settlement headers and encoding the
 //!   proof.
-//! - [`builder`] — the [`PaymentBuilder`] seam.
-//! - [`proxy`] — the [`ProxyPolicy`] seam for outbound HTTP.
-//! - [`client`] — [`X402Client`] and the `handle_402*` entry points.
+//! - `builder` — the [`PaymentBuilder`] seam.
+//! - `proxy` — the [`ProxyPolicy`] seam for outbound HTTP.
+//! - `client` — [`X402Client`] and the `handle_402*` entry points.
 
 mod builder;
 mod client;

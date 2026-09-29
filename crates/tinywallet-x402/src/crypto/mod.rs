@@ -2,13 +2,13 @@
 //!
 //! Everything chain-specific about x402 lives here, and nothing above it does.
 //!
-//! - [`signer`] — the [`PaymentSigner`] seam: the host's wallet, seen as "give
+//! - `signer` — the [`PaymentSigner`] seam: the host's wallet, seen as "give
 //!   me your address" and "sign these bytes".
-//! - [`evm_payment`] — EIP-3009 `transferWithAuthorization` over an EIP-712
+//! - `evm_payment` — EIP-3009 `transferWithAuthorization` over an EIP-712
 //!   digest.
-//! - [`solana_payment`] — a partially-signed SPL `TransferChecked` legacy
+//! - `solana_payment` — a partially-signed SPL `TransferChecked` legacy
 //!   transaction.
-//! - [`payments`] — [`CryptoPayments`], the [`PaymentBuilder`] that picks
+//! - `payments` — [`CryptoPayments`], the [`PaymentBuilder`] that picks
 //!   between the two.
 //!
 //! ## Where keys are
