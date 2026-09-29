@@ -83,17 +83,18 @@ as a real one.
 
 ## Crates: the contract, the pure rules, and the signer
 
-The repository builds five libraries and one loadable module.
+The repository builds six libraries and one loadable module.
 
 | Crate | Holds | Pulls |
 | --- | --- | --- |
 | `tinywallet-crypto` | the `Chain` enum, address validation, reference data, the `rpc::Transport` seam, and the Tron protobuf reader and verification | hashes and codecs only — no native build |
 | `tinywallet-x402` | the x402 wire types, EIP-712 hashing and ERC-20 calldata (`wire`, `eip712`, `abi`) | `tinywallet-crypto`, keccak, serde |
+| `tinywallet-web3` | the wallet, swap, bridge and dapp flows and their agent tools (`tools`), behind host seams: `WalletSigner`, `WalletAccounts`, `RpcEndpoints`, `Web3Backend`, `QuoteScope` | `tinywallet-crypto`, `tinywallet-bus` (`wire`), `tinywallet-x402` (`abi`) — never `bitcoin`, `k256` or `coins-*` |
 | `tinywallet-bus` | the wire contract, the bus member names, the contract version, and one-release compat re-exports | `tinywallet-crypto`, `tinywallet-x402` (`eip712`, `abi` only) |
 | `tinywallet` (root) | key derivation, transaction building and signing, chain queries; re-exports the crates above | `bitcoin` and its native `secp256k1` build, `coins-bip39`, `ed25519-dalek` |
 | `tinywallet-module` | the TinyBus adapter, built as a `cdylib` | all of the above |
 
-The first three never link `bitcoin`, `k256` or `coins-*`; CI asserts it. That is
+The host-linked crates (everything but the root crate and the module) never link `bitcoin`, `k256` or `coins-*`; CI asserts it. That is
 what lets a host move signing into the module: it depends on `tinywallet-bus`
 (or `tinywallet-crypto`) alone, and still validates an address before it sends a
 spec and verifies what a Tron node handed back before it signs. Everything the
@@ -125,6 +126,19 @@ crates/tinywallet-x402/src/
 ├── wire/               # x402 v2 header payload types
 ├── eip712/             # typed-data hashing and the EIP-3009 authorization
 └── abi/                # ERC-20 `transfer` calldata
+crates/tinywallet-web3/src/
+├── lib.rs
+├── quote/              # rail-neutral: the capped, TTL'd, owner-gated quote store
+├── seams/              # rail-neutral: `QuoteScope`
+├── crypto/             # the crypto rail
+│   ├── wallet/         #   `WalletEngine`, `WalletChain`, `WalletStatus`
+│   ├── execution/      #   balances, transfers, lookups on the engine
+│   ├── chains/         #   btc / evm / solana / tron choreography (private)
+│   ├── service/        #   `Web3Service`: swap, bridge, dapp calls
+│   ├── defaults/       #   static networks, assets, explorer links
+│   ├── abi/            #   ERC-20 calldata wrapper
+│   └── seams/          #   `WalletSigner`, `WalletAccounts`, `RpcEndpoints`, `Web3Backend`
+└── tools/              # agent tools (feature `tools`)
 src/                    # the root crate: what needs a key or a chain library
 ├── lib.rs
 ├── key/                # BIP-39 / BIP-32 / SLIP-0010 derivation

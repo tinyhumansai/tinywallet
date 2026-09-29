@@ -93,7 +93,7 @@ code inside each crate, so a later `tinywallet-payments` crate below both
 - `tinywallet-web3` (PR 2): rail-neutral `quote` and `seams` (`QuoteScope`);
   crypto-specific `crypto::{wallet, chains, execution, defaults, seams}`; and
   `tools`.
-- Nothing rail-neutral goes into `tinywallet-crypto`. A CI grep over `quote/` and
+- Nothing rail-neutral goes into `tinywallet-crypto`. A CI grep over `quote/`, `seams/` and
   `ledger/` for `tinywallet_crypto|WalletChain|EvmNetwork` must match nothing.
 - The signing seams are deliberately not generalized: a card rail authorizes
   rather than signing bytes.
