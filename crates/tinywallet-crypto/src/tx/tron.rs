@@ -25,7 +25,7 @@
 use sha2::{Digest, Sha256};
 
 use super::{Error, Result, proto};
-use crate::wire::TronTransfer;
+use crate::TronTransfer;
 
 /// The 65-byte signature Tron expects: `r || s || recovery_id`.
 ///
@@ -324,8 +324,8 @@ mod test {
         CONTRACT_TYPE_TRANSFER, CONTRACT_TYPE_TRIGGER_SMART_CONTRACT, TRC20_TRANSFER_SELECTOR_HEX,
         attach_signature, digest, hex_lower, recompute_txid, signature_hex, verify_transfer,
     };
+    use crate::TronTransfer;
     use crate::tx::Error;
-    use crate::wire::TronTransfer;
 
     const TO: &str = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 

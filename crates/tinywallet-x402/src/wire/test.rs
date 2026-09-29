@@ -6,7 +6,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use super::{
+use crate::wire::{
     BASE_MAINNET_CAIP2, EvmAuthorization, EvmPaymentProof, PaymentExtra, PaymentPayload,
     PaymentProof, PaymentRequired, PaymentRequirements, ResourceInfo, SOLANA_MAINNET_CAIP2,
     SettlementResponse, SolanaPaymentProof, USDC_BASE_MAINNET, USDC_ETHEREUM_MAINNET,

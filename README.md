@@ -81,45 +81,56 @@ With a chain's gate off, `address::validate` returns `Error::ChainNotCompiled`
 for it — a build fact reported honestly, rather than a wrong answer dressed up
 as a real one.
 
-## Two crates: the contract and the signer
+## Crates: the contract, the pure rules, and the signer
 
-The repository builds two libraries and one loadable module.
+The repository builds five libraries and one loadable module.
 
 | Crate | Holds | Pulls |
 | --- | --- | --- |
-| `tinywallet-bus` | the wire contract, the bus member names, address validation, the ABI and EIP-712 encoders, reference data, the `rpc::Transport` seam, and the Tron protobuf reader and verification | hashes and codecs only — no native build |
-| `tinywallet` (root) | key derivation, transaction building and signing, chain queries, x402 payment types | `bitcoin` and its native `secp256k1` build, `coins-bip39`, `ed25519-dalek` |
-| `tinywallet-module` | the TinyBus adapter, built as a `cdylib` | both of the above |
+| `tinywallet-crypto` | the `Chain` enum, address validation, reference data, the `rpc::Transport` seam, and the Tron protobuf reader and verification | hashes and codecs only — no native build |
+| `tinywallet-x402` | the x402 wire types, EIP-712 hashing and ERC-20 calldata (`wire`, `eip712`, `abi`) | `tinywallet-crypto`, keccak, serde |
+| `tinywallet-bus` | the wire contract, the bus member names, the contract version, and one-release compat re-exports | `tinywallet-crypto`, `tinywallet-x402` (`eip712`, `abi` only) |
+| `tinywallet` (root) | key derivation, transaction building and signing, chain queries; re-exports the crates above | `bitcoin` and its native `secp256k1` build, `coins-bip39`, `ed25519-dalek` |
+| `tinywallet-module` | the TinyBus adapter, built as a `cdylib` | all of the above |
 
-The split is what lets a host move signing into the module: it depends on
-`tinywallet-bus` alone, and still validates an address before it sends a spec
-and verifies what a Tron node handed back before it signs. Everything the
-contract crate owns is re-exported from the root crate under its historical
-path, so `tinywallet::address::validate` and `tinywallet::wire::SigningRequest`
-resolve exactly as they did.
+The first three never link `bitcoin`, `k256` or `coins-*`; CI asserts it. That is
+what lets a host move signing into the module: it depends on `tinywallet-bus`
+(or `tinywallet-crypto`) alone, and still validates an address before it sends a
+spec and verifies what a Tron node handed back before it signs. Everything the
+sibling crates own is re-exported from the root crate under its historical path,
+so `tinywallet::address::validate` and `tinywallet::wire::SigningRequest`
+resolve exactly as they did. `tinywallet-bus` also re-exports the chain modules
+for compatibility; those re-exports are removed in the next minor release. See
+[`docs/specs/web3-split.md`](docs/specs/web3-split.md).
 
 ## Layout
 
 ```text
 crates/tinywallet-bus/src/
-├── lib.rs              # the contract crate's docs and re-export surface
+├── lib.rs              # contract docs and the compat re-export surface
 ├── names/              # BUS_NAME, OBJECT_PATH, one constant per member
 ├── version/            # CONTRACT_VERSION and its binding rule
+└── wire/               # the host/module request and response types
+crates/tinywallet-crypto/src/
+├── lib.rs
 ├── error/              # crate-wide `Error` and `Result<T>`
 ├── chain/              # the `Chain` enum, ungated
 ├── address/            # per-chain validation + the generic `validate` dispatch
-├── abi/                # ERC-20 `transfer` calldata
-├── eip712/             # typed-data hashing and the EIP-3009 authorization
 ├── asset/              # network and token reference data
 ├── rpc/                # the `Transport` seam — models I/O, performs none
-├── wire/               # the host/module request and response types
+├── transfer/           # `TronTransfer`, shared by the wire and the verifier
 └── tx/                 # `Error`, the protobuf reader, Tron verification
+crates/tinywallet-x402/src/
+├── lib.rs
+├── wire/               # x402 v2 header payload types
+├── eip712/             # typed-data hashing and the EIP-3009 authorization
+└── abi/                # ERC-20 `transfer` calldata
 src/                    # the root crate: what needs a key or a chain library
 ├── lib.rs
 ├── key/                # BIP-39 / BIP-32 / SLIP-0010 derivation
 ├── tx/                 # building and signing (btc, evm, solana, tron::sign)
 ├── client/             # chain queries over the `Transport` seam
-└── x402/               # machine-payment wire types
+└── x402/               # re-export of `tinywallet_x402::wire`
 crates/tinywallet-module/
 └── src/service/        # the TinyBus interface, built as a cdylib
 tests/

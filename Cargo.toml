@@ -31,26 +31,42 @@ exclude = [
 ]
 
 [workspace]
-members = ["crates/tinywallet-bus", "crates/tinywallet-module"]
-default-members = [".", "crates/tinywallet-bus", "crates/tinywallet-module"]
+members = [
+    "crates/tinywallet-crypto",
+    "crates/tinywallet-x402",
+    "crates/tinywallet-bus",
+    "crates/tinywallet-module",
+]
+default-members = [
+    ".",
+    "crates/tinywallet-crypto",
+    "crates/tinywallet-x402",
+    "crates/tinywallet-bus",
+    "crates/tinywallet-module",
+]
 # The vendored bus is a submodule with its own workspace; it must not be pulled
 # into this one.
 exclude = ["vendor/tinybus"]
 resolver = "3"
 
 [dependencies]
-# The wire contract, the address rules, the ABI/EIP-712 encoders and the
-# transaction-verification codec. Split out so a host that has moved signing
-# into the loadable module can take that crate alone and link none of what
-# follows; everything it owns is re-exported from this crate's own module
-# paths, so `tinywallet::address::…` and `tinywallet::wire::…` still resolve.
+# The wire contract. Split out so a host that has moved signing into the
+# loadable module can take that crate alone and link none of what follows;
+# `tinywallet::wire` re-exports it.
 #
-# No version requirement, deliberately, matching how `tinywallet-module` already
-# takes this crate: both are `publish = false`, so there is no registry copy a
-# requirement could select, and a stale `version = "0.4.0"` here would make the
-# release workflow's next minor bump fail resolution rather than resolve to the
-# sibling in this workspace.
+# No version requirement on the three sibling crates below, deliberately,
+# matching how `tinywallet-module` already takes them: all are `publish = false`,
+# so there is no registry copy a requirement could select, and a stale
+# `version = "0.4.0"` here would make the release workflow's next minor bump
+# fail resolution rather than resolve to the sibling in this workspace.
 tinywallet-bus = { path = "crates/tinywallet-bus", default-features = false }
+# The address rules, reference data, the `rpc::Transport` seam and the
+# transaction-verification codec. `tinywallet::{address, asset, chain, rpc, tx}`
+# re-export it. Default features off; each root gate below turns on its own.
+tinywallet-crypto = { path = "crates/tinywallet-crypto", default-features = false }
+# The x402 wire types, EIP-712 hashing and ERC-20 calldata.
+# `tinywallet::{x402, eip712, abi}` re-export it.
+tinywallet-x402 = { path = "crates/tinywallet-x402", default-features = false }
 # Derive macros for the transaction error type in `src/tx/mod.rs`.
 thiserror = "2"
 # Base58 for a Solana transaction's signature and account keys
@@ -128,44 +144,45 @@ required-features = ["btc", "evm", "solana", "tron", "keccak"]
 
 [features]
 default = ["btc", "evm", "solana", "tron", "keccak", "net", "key", "asset", "client", "tx", "x402", "wire", "eip712", "abi"]
-# Every gate below that names a module this crate no longer owns forwards to
-# `tinywallet-bus`. The names are unchanged on purpose: a consumer that asked
-# for `tinywallet/btc` before the split gets exactly what it got before, from a
+# Every gate below that names a module this crate no longer owns forwards to the
+# crate that does. The names are unchanged on purpose: a consumer that asked for
+# `tinywallet/btc` before the split gets exactly what it got before, from a
 # different crate.
 #
 # Bitcoin address parsing and validation.
-btc = ["tinywallet-bus/btc"]
+btc = ["tinywallet-crypto/btc"]
 # Serde derives on the crate's core types (today `Chain`).
-serde = ["dep:serde", "serde/derive", "tinywallet-bus/serde"]
+serde = ["dep:serde", "serde/derive", "tinywallet-crypto/serde"]
 # EVM (Ethereum and compatible chains) address validation.
-evm = ["tinywallet-bus/evm"]
+evm = ["tinywallet-crypto/evm"]
 # Solana base58 address validation.
-solana = ["tinywallet-bus/solana"]
+solana = ["tinywallet-crypto/solana"]
 # Tron base58check address validation and hex conversion.
-tron = ["tinywallet-bus/tron"]
+tron = ["tinywallet-crypto/tron"]
 # EIP-55 mixed-case checksum support for EVM addresses. `dep:sha3` is this
 # crate's own, for the addresses `key` derivation produces.
-keccak = ["evm", "dep:sha3", "tinywallet-bus/keccak"]
+keccak = ["evm", "dep:sha3", "tinywallet-crypto/keccak"]
 # The `Transport` network seam (`tinywallet::rpc`).
-net = ["tinywallet-bus/net"]
+net = ["tinywallet-crypto/net"]
 # Network and token reference data (`tinywallet::asset`).
-asset = ["btc", "evm", "solana", "tron", "tinywallet-bus/asset"]
+asset = ["btc", "evm", "solana", "tron", "tinywallet-crypto/asset"]
 # Chain queries over the `Transport` seam (`tinywallet::client`). Needs the
 # seam plus the reference data that names the networks.
 client = ["net", "asset", "tx", "dep:async-trait", "dep:serde", "dep:serde_json", "serde/derive"]
 # EIP-712 typed-data hashing (`tinywallet::eip712`) and the EIP-3009
 # authorization x402 signs.
-eip712 = ["tinywallet-bus/eip712"]
+eip712 = ["tinywallet-x402/eip712"]
 # ERC-20 `transfer` calldata (`tinywallet::abi`).
-abi = ["evm", "keccak", "eip712", "tinywallet-bus/abi"]
-x402 = ["dep:serde", "dep:serde_json", "serde/derive", "eip712"]
+abi = ["evm", "keccak", "eip712", "tinywallet-x402/abi"]
+# The x402 wire types (`tinywallet::x402`).
+x402 = ["eip712", "tinywallet-x402/wire"]
 # The host/backend wire contract (`tinywallet::wire`).
 wire = ["serde", "tinywallet-bus/wire"]
 # The half of `tinywallet::tx` that reads and checks bytes rather than
 # producing signatures: `tx::proto` and the verification half of `tx::tron`.
 #
 # Implied by `tx`, so nothing that took `tx` before sees a change.
-tx-codec = ["wire", "tinywallet-bus/tx-codec"]
+tx-codec = ["wire", "tinywallet-crypto/tx-codec"]
 # Transaction building and signing (`tinywallet::tx`). This is the only gate
 # that pulls the `bitcoin` crate, for PSBT construction and secp256k1
 # recoverable signing. Everything else — addresses, verification, reference
@@ -196,6 +213,8 @@ key = [
     "btc",
     "keccak",
 ]
+
+
 
 # Lints are defined at the workspace level and inherited by every member, so
 # the module crate is held to exactly the same bar as the library. CI runs

@@ -19,7 +19,7 @@ use std::str::FromStr;
 /// that do not need it. The representation is the lowercase variant name
 /// (`"btc"`, `"evm"`, …), matching [`FromStr`] and [`fmt::Display`] below, so a
 /// value written by one and read by the other agrees — this type crosses a
-/// host/backend boundary in [`crate::wire`], where a mismatch between the text
+/// host/backend boundary in `tinywallet_bus::wire`, where a mismatch between the text
 /// and JSON forms would be a runtime deserialization failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

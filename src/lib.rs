@@ -57,13 +57,14 @@
 //!
 //! The wire contract, the address rules, the ABI and EIP-712 encoders, the
 //! reference data, the [`rpc::Transport`] seam and the transaction *verification*
-//! codec are [`tinywallet_bus`]'s, and are re-exported below so every
+//! codec are [`tinywallet_crypto`]'s (the wire contract is [`tinywallet_bus`]'s, and
+//! the ABI, EIP-712 and x402 types are [`tinywallet_x402`]'s), and are re-exported below so every
 //! `tinywallet::…` path still resolves. What stays here is what needs a key or a
 //! chain library: derivation ([`key`]), building and signing ([`tx`]), the chain
 //! queries ([`client`]) and the x402 payment types ([`x402`]).
 //!
 //! The split exists so a host that has moved signing into the `tinywallet`
-//! `TinyBus` module can depend on `tinywallet-bus` alone and link no `bitcoin`
+//! `TinyBus` module can depend on `tinywallet-bus` (or `tinywallet-crypto`) alone and link no `bitcoin`
 //! crate, no native `secp256k1` build, and no BIP-39 implementation — while
 //! still validating an address before it sends a spec and verifying what a Tron
 //! node handed back before it signs.
@@ -77,19 +78,19 @@ pub mod tx;
 #[cfg(feature = "x402")]
 pub mod x402;
 
-// Re-exported rather than re-declared: `tinywallet-bus` owns these modules now,
-// and pointing this crate's paths at them keeps one definition of every type
-// that crosses the bus. A second copy here would make the host's `wire::Signature`
-// a different type from the module's, which is exactly the failure the split
-// was made to prevent.
-#[cfg(feature = "abi")]
-pub use tinywallet_bus::abi;
-#[cfg(feature = "asset")]
-pub use tinywallet_bus::asset;
-#[cfg(feature = "eip712")]
-pub use tinywallet_bus::eip712;
-#[cfg(feature = "net")]
-pub use tinywallet_bus::rpc;
+// Re-exported rather than re-declared: the sibling crates own these modules, and
+// pointing this crate's paths at them keeps one definition of every type that
+// crosses the bus. A second copy here would make the host's `wire::Signature` a
+// different type from the module's, which is exactly the failure the split was
+// made to prevent.
 #[cfg(feature = "wire")]
 pub use tinywallet_bus::wire;
-pub use tinywallet_bus::{Chain, Error, Result, address, chain};
+#[cfg(feature = "asset")]
+pub use tinywallet_crypto::asset;
+#[cfg(feature = "net")]
+pub use tinywallet_crypto::rpc;
+pub use tinywallet_crypto::{Chain, Error, Result, address, chain};
+#[cfg(feature = "abi")]
+pub use tinywallet_x402::abi;
+#[cfg(feature = "eip712")]
+pub use tinywallet_x402::eip712;

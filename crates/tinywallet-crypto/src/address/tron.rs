@@ -38,7 +38,7 @@ pub const ADDRESS_BYTES: usize = 21;
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::tron;
+/// use tinywallet_crypto::address::tron;
 ///
 /// assert!(tron::validate("TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").is_ok());
 ///
@@ -95,12 +95,12 @@ pub fn decode(address: &str) -> Result<[u8; ADDRESS_BYTES]> {
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::tron;
+/// use tinywallet_crypto::address::tron;
 ///
 /// let hex = tron::to_hex("TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")?;
 /// assert_eq!(hex.len(), 42);
 /// assert!(hex.starts_with("41"), "the version prefix is retained");
-/// # Ok::<(), tinywallet_bus::Error>(())
+/// # Ok::<(), tinywallet_crypto::Error>(())
 /// ```
 pub fn to_hex(address: &str) -> Result<String> {
     Ok(hex::encode(decode(address)?))
@@ -122,11 +122,11 @@ pub fn to_hex(address: &str) -> Result<String> {
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::tron;
+/// use tinywallet_crypto::address::tron;
 ///
 /// let bytes = tron::decode("TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")?;
 /// assert_eq!(tron::encode(&bytes)?, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t");
-/// # Ok::<(), tinywallet_bus::Error>(())
+/// # Ok::<(), tinywallet_crypto::Error>(())
 /// ```
 pub fn encode(bytes: &[u8; ADDRESS_BYTES]) -> Result<String> {
     if bytes[0] != MAINNET_PREFIX {

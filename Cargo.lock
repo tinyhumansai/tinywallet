@@ -1464,12 +1464,24 @@ dependencies = [
  "sha3 0.12.0",
  "thiserror 2.0.20",
  "tinywallet-bus",
+ "tinywallet-crypto",
+ "tinywallet-x402",
  "tokio",
  "zeroize",
 ]
 
 [[package]]
 name = "tinywallet-bus"
+version = "0.5.3"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tinywallet-crypto",
+ "tinywallet-x402",
+]
+
+[[package]]
+name = "tinywallet-crypto"
 version = "0.5.3"
 dependencies = [
  "async-trait",
@@ -1498,6 +1510,17 @@ dependencies = [
  "tinywallet-bus",
  "tokio",
  "zeroize",
+]
+
+[[package]]
+name = "tinywallet-x402"
+version = "0.5.3"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha3 0.12.0",
+ "thiserror 2.0.20",
+ "tinywallet-crypto",
 ]
 
 [[package]]

@@ -190,7 +190,7 @@ fn every_transaction_names_its_own_chain() {
     // `chain()` is the single source of truth now that the requests carry no
     // `chain` field, so a wrong arm here would route a transaction to the
     // wrong chain's builder — with a real key already loaded.
-    use crate::chain::Chain;
+    use tinywallet_crypto::Chain;
 
     let cases = [
         (

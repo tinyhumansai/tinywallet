@@ -41,7 +41,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::chain::Chain;
+use tinywallet_crypto::Chain;
 
 /// Bytes a host must sign, and how.
 ///
@@ -244,21 +244,10 @@ pub enum TransactionSpec {
     },
 }
 
-/// Transfer-specific verification for a node-built Tron transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
-pub enum TronTransfer {
-    /// A native TRX transfer; the amount is encoded as a protobuf varint.
-    Native {
-        /// Requested amount in sun.
-        amount_sun: u64,
-    },
-    /// A TRC20 transfer; the ABI parameter binds both recipient and amount.
-    Trc20 {
-        /// Unprefixed ABI-encoded transfer arguments.
-        parameter_hex: String,
-    },
-}
+/// Re-exported from `tinywallet-crypto`, which owns it so the Tron verifier can
+/// take it without depending on this crate. The path and the JSON encoding are
+/// unchanged.
+pub use tinywallet_crypto::TronTransfer;
 
 impl TransactionSpec {
     /// Which chain this transaction belongs to.

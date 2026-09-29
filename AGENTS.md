@@ -46,6 +46,22 @@ docs/
 └── adr/                # immutable architecture decision records
 ```
 
+## Workspace crates
+
+| Crate | Owns | Must not depend on |
+| --- | --- | --- |
+| `tinywallet-crypto` | `Chain`, `Error`, addresses, reference data, `rpc::Transport`, Tron verification, `TronTransfer` | the bus, x402, `bitcoin`, `k256`, `coins-*` |
+| `tinywallet-x402` | x402 wire types, EIP-712, ABI calldata; later the ledger, protocol and tools | the bus, `bitcoin`, `k256`, `coins-*` |
+| `tinywallet-bus` | names, contract version, wire types, one-release compat re-exports | anything heavier than x402's `eip712` and `abi` |
+| `tinywallet` (root) | `key/`, `tx/`, `client/`; the only place `bitcoin` lives | |
+| `tinywallet-module` | the TinyBus `cdylib` adapter | |
+
+Put a change in the crate that owns it, not the one that re-exports it. The
+`tinywallet-bus` re-exports of chain modules are compat shims removed in the next
+minor release; do not add new ones. CI fails if crypto, x402 or the bus gain a
+`bitcoin`, `k256` or `coins-*` dependency. The design is in
+[`docs/specs/web3-split.md`](docs/specs/web3-split.md).
+
 Each feature area belongs in a focused module directory under `src/`. A module
 root explains the module, wires its pieces together, and exposes the smallest
 useful API. Move substantial type definitions into `types.rs` and put

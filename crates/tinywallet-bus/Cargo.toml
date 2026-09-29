@@ -4,96 +4,64 @@ version = "0.5.3"
 edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-only"
-description = "The TinyBus wire contract for TinyWallet: member names, payload types, address rules, and contract version."
+description = "The TinyBus wire contract for TinyWallet: member names, payload types, and contract version."
 repository = "https://github.com/tinyhumansai/tinywallet"
-readme = "../../README.md"
+readme = "README.md"
 # Same reasoning as the root crate: hosts take this repository as a git
 # submodule, so a registry upload would be a third distribution channel nobody
 # reads.
 publish = false
 
-# Deliberately transport-free and chain-library-free: a host only needs this
-# vocabulary and these pure rules to call the dynamic module, not TinyBus, a
-# runtime, or a signing stack. Every dependency here is a hash, a codec, or
-# serde — nothing that builds native code.
+# Contract-only: names, version and the wire payload types. The chain rules that
+# used to live here are in `tinywallet-crypto` and `tinywallet-x402`; this crate
+# re-exports them for one release so existing paths keep resolving. It must
+# never enable anything heavier than the features below (no `bitcoin`, `k256`,
+# `coins-*`); CI asserts that.
 [dependencies]
-# Derive macros for the crate-wide error type in `src/error/mod.rs`.
-thiserror = "2"
-# Base58 (Solana) and base58check (Tron) address decoding. `check` brings in
-# the checksum variant Tron addresses require.
-bs58 = { version = "0.5", features = ["check"], optional = true }
-# Hex codec for the Tron hex-address form the TronGrid API speaks.
-hex = { version = "0.4", optional = true }
-# bech32/bech32m segwit address encoding and decoding, checksum variant
-# selection and witness-program length rules included. This is what lets a host
-# validate a Bitcoin address without the `bitcoin` crate's native secp256k1
-# build; see `src/address/btc.rs`.
-bech32 = { version = "0.12", optional = true }
-# SHA-256: Bitcoin's HASH160, Tron's base58check checksum, and the Tron txid.
-sha2 = { version = "0.11", optional = true }
-# Keccak-256, the hash EIP-55 checksums and EIP-712 struct hashes are defined
-# over.
-#
-# PINNED TO 0.10, and not by accident — do not let dependabot move it. The root
-# crate's `coins-bip32` line depends on `sha3` 0.10 and is not going to move, so
-# 0.10 is already in the graph of any consumer that also takes the root crate
-# with `key`. Asking for 0.12 here does not replace it, it ADDS a second copy.
-sha3 = { version = "0.12", optional = true }
-# Async trait methods for the `Transport` seam in `src/rpc/`. Rust cannot yet
-# express an object-safe async trait natively, and `Transport` must be
-# `dyn`-compatible because chain code takes `&dyn Transport`.
-async-trait = { version = "0.1", optional = true }
-# The `Transport` seam moves JSON payloads across the host boundary.
-serde_json = { version = "1", optional = true }
+# Chain, address and transaction-verification rules, and the `Transport` seam.
+# Default features off: each bus feature below forwards exactly the gate it
+# always meant.
+tinywallet-crypto = { path = "../tinywallet-crypto", default-features = false }
+# `eip712` and `abi`, re-exported for compatibility. Default features off, so
+# the x402 wire types and any future heavier feature (payment execution,
+# ledger, tools) never reach a host that only takes the bus.
+tinywallet-x402 = { path = "../tinywallet-x402", default-features = false, optional = true }
 # The wire payloads are encoded into TinyBus JSON frames.
 serde = { version = "1", optional = true }
 
 [dev-dependencies]
-# Drives the async `Transport` tests. The crate itself pulls in no runtime —
-# picking one is the host's call, so it is a dev-dependency only.
-tokio = { version = "1", features = ["macros", "rt"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [features]
 default = ["btc", "evm", "solana", "tron", "keccak", "net", "asset", "wire", "eip712", "abi", "tx-codec"]
-# Bitcoin address parsing and validation. Dependency-light on purpose: base58
-# via `bs58` (already here for Solana and Tron) and segwit via `bech32`.
-btc = ["dep:bs58", "dep:bech32", "dep:sha2"]
-# Serde derives on the crate's core types (today `Chain`). A named gate rather
-# than relying on `dep:serde` being implied, because `#[cfg(feature = "serde")]`
-# on the enum has to name something that actually exists.
-serde = ["dep:serde", "serde/derive"]
-# EVM address validation. Dependency-free: an EVM address is 20 hex-encoded
-# bytes, so the whole format is spelled out in `src/address/evm.rs`.
-evm = []
+# Every gate below forwards to the crate that owns the module now. The names are
+# unchanged on purpose, so a downstream `features = [...]` list keeps working.
+#
+# Bitcoin address parsing and validation.
+btc = ["tinywallet-crypto/btc"]
+# Serde derives on the crate's core types (today `Chain`).
+serde = ["dep:serde", "serde/derive", "tinywallet-crypto/serde"]
+# EVM address validation.
+evm = ["tinywallet-crypto/evm"]
 # Solana base58 address validation.
-solana = ["dep:bs58"]
+solana = ["tinywallet-crypto/solana"]
 # Tron base58check address validation and hex conversion.
-tron = ["dep:bs58", "dep:hex"]
+tron = ["tinywallet-crypto/tron"]
 # EIP-55 mixed-case checksum support for EVM addresses.
-keccak = ["evm", "dep:sha3"]
-# The `Transport` network seam (`tinywallet_bus::rpc`). Everything else in the
-# crate is a pure function; this is the one module that models I/O, and it still
-# performs none itself — the host supplies the implementation.
-net = ["dep:async-trait", "dep:serde_json", "dep:serde"]
-# Network and token reference data. Pure tables; the tests cross-check every
-# contract address against the address validators, so it needs every chain gate.
-asset = ["btc", "evm", "solana", "tron"]
-# The host/module wire contract (`tinywallet_bus::wire`). Deliberately outside
-# every chain gate and dependency-free beyond serde.
+keccak = ["tinywallet-crypto/keccak"]
+# The `Transport` network seam (`tinywallet_bus::rpc`).
+net = ["tinywallet-crypto/net"]
+# Network and token reference data.
+asset = ["tinywallet-crypto/asset"]
+# The host/module wire contract (`tinywallet_bus::wire`).
 wire = ["serde"]
-# EIP-712 typed-data hashing and the EIP-3009 authorization x402 signs. Pure
-# keccak over a fixed byte layout — no chain client, no bignum, no signer.
-eip712 = ["dep:sha3"]
-# ERC-20 `transfer` calldata. Outside the transaction gates because calldata is
-# an input to building a transaction, so a host that builds elsewhere still
-# needs it — and should not pay a bus round trip for keccak over 68 bytes.
-abi = ["evm", "keccak", "eip712"]
-# The half of transaction handling that reads and checks bytes rather than
-# producing signatures: `tx::proto` (the structural protobuf reader) and the
-# verification half of `tx::tron`.
-tx-codec = ["dep:sha2", "wire"]
+# EIP-712 typed-data hashing (`tinywallet-x402/eip712`).
+eip712 = ["dep:tinywallet-x402", "tinywallet-x402/eip712"]
+# ERC-20 `transfer` calldata (`tinywallet-x402/abi`).
+abi = ["eip712", "tinywallet-x402/abi"]
+# The Tron protobuf reader and verification half (`tinywallet_bus::tx`).
+tx-codec = ["tinywallet-crypto/tx-codec", "wire"]
 
 [lints]
 workspace = true
