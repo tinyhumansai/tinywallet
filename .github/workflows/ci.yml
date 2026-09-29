@@ -63,7 +63,7 @@ jobs:
             exit 1
           fi
           status=0
-          for crate in tinywallet-crypto tinywallet-x402 tinywallet-bus; do
+          for crate in tinywallet-crypto tinywallet-x402 tinywallet-bus tinywallet-web3; do
             for dep in bitcoin k256 coins-bip32 coins-bip39; do
               if cargo tree -e normal -i "$dep" -p "$crate" --all-features >/dev/null 2>&1; then
                 echo "$crate depends on $dep; it must stay signing-free" >&2
@@ -72,6 +72,20 @@ jobs:
             done
           done
           exit "$status"
+
+      # The rail-neutral half of `tinywallet-web3` (the quote store and the
+      # scope seam) must not name a chain, so a card rail can reuse it without
+      # touching the crypto code. `grep` exits 1 when nothing matches, which is
+      # the passing case.
+      - name: Rail-neutral web3 modules name no chain
+        shell: bash
+        run: |
+          set -uo pipefail
+          if grep -rnE 'tinywallet_crypto|WalletChain|EvmNetwork' \
+            crates/tinywallet-web3/src/quote crates/tinywallet-web3/src/seams; then
+            echo "quote/ and seams/ must stay free of crypto vocabulary" >&2
+            exit 1
+          fi
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
@@ -191,6 +205,13 @@ jobs:
             --package tinywallet-crypto \
             --package tinywallet-x402 \
             --package tinywallet-bus
+
+      # `tinywallet-web3` is built without `--all-features`: its `tools` feature
+      # pulls in `tinytools`, which declares a newer `rust-version` than this
+      # crate promises, so the MSRV check covers the engine and service and the
+      # stable jobs above cover the tools.
+      - name: Build the wallet flows with the declared MSRV
+        run: cargo build --all-targets --package tinywallet-web3
 
   supply-chain:
     name: Supply chain
