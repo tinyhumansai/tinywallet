@@ -32,6 +32,8 @@
 //! [CAIP-2]: https://chainagnostic.org/CAIPs/caip-2
 
 mod types;
+#[cfg(test)]
+mod wire_test;
 
 pub use types::{
     BASE_MAINNET_CAIP2, BASE_SEPOLIA_CAIP2, COMPUTE_BUDGET_PROGRAM, ETHEREUM_MAINNET_CAIP2,

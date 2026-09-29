@@ -66,6 +66,16 @@ fn solana_derives_the_published_vector() {
 }
 
 #[test]
+fn tron_derives_the_pinned_vector() {
+    // BIP-44 m/44'/195'/0'/0/0 from the vector mnemonic. Pinned so a regression
+    // in any of secp256k1, Keccak-256 or base58check flips this test rather than
+    // producing a valid address for the wrong account.
+    let key = derive(Chain::Tron, VECTOR, TRON_PATH).unwrap();
+    assert_eq!(key.address(), "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH");
+    assert_eq!(key.chain(), Chain::Tron);
+}
+
+#[test]
 fn every_chain_derives_an_address_its_own_validator_accepts() {
     // Cheap end-to-end coupling check between `key` and `address`: a
     // derivation that produced a malformed address would be caught here even
