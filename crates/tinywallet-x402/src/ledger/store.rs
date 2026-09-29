@@ -195,9 +195,16 @@ fn load_from_disk(path: &Path) -> Vec<PaymentRecord> {
     for line in BufReader::new(file).lines() {
         let line = match line {
             Ok(l) => l,
-            Err(e) => {
-                warn!("{LOG_PREFIX} read error: {e}");
+            // Invalid UTF-8 consumes the line, so the next read moves on.
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+                warn!("{LOG_PREFIX} skipping unreadable line: {e}");
                 continue;
+            }
+            // Any other error repeats forever on the same position (a directory
+            // where the file should be, a failing disk), so stop reading.
+            Err(e) => {
+                warn!("{LOG_PREFIX} read error, stopping load: {e}");
+                break;
             }
         };
         if line.trim().is_empty() {
