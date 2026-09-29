@@ -1464,6 +1464,8 @@ dependencies = [
  "sha3 0.12.0",
  "thiserror 2.0.20",
  "tinywallet-bus",
+ "tinywallet-crypto",
+ "tinywallet-x402",
  "tokio",
  "zeroize",
 ]
