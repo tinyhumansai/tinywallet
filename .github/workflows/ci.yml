@@ -198,19 +198,25 @@ jobs:
       #
       # The three sibling library crates are published-style dependencies of the
       # root crate and share its MSRV, so they are built here too.
+      #
+      # `tinywallet-x402` and `tinywallet-web3` are built below with the
+      # features that fit the declared MSRV, not with `--all-features`: their
+      # `tools` features pull in `tinytools`, which needs 1.88 (let-chains), and
+      # x402's `pay` feature pulls in `reqwest`, whose `yoke-derive` 0.8.3 does
+      # not compile on 1.85. The stable jobs above build every feature.
       - name: Build with the declared MSRV
         run: |
           cargo build --all-targets --all-features \
             --package tinywallet \
             --package tinywallet-crypto \
-            --package tinywallet-x402 \
             --package tinywallet-bus
 
-      # `tinywallet-web3` is built without `--all-features`: its `tools` feature
-      # pulls in `tinytools`, which declares a newer `rust-version` than this
-      # crate promises, so the MSRV check covers the engine and service and the
-      # stable jobs above cover the tools.
-      - name: Build the wallet flows with the declared MSRV
+      - name: Build x402 with the declared MSRV (no `pay`, no `tools`)
+        run: |
+          cargo build --all-targets --package tinywallet-x402 \
+            --no-default-features --features wire,eip712,abi,ledger
+
+      - name: Build the wallet flows with the declared MSRV (no `tools`)
         run: cargo build --all-targets --package tinywallet-web3
 
   supply-chain:
