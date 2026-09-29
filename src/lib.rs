@@ -83,14 +83,14 @@ pub mod x402;
 // crosses the bus. A second copy here would make the host's `wire::Signature` a
 // different type from the module's, which is exactly the failure the split was
 // made to prevent.
-#[cfg(feature = "abi")]
-pub use tinywallet_x402::abi;
-#[cfg(feature = "asset")]
-pub use tinywallet_crypto::asset;
-#[cfg(feature = "eip712")]
-pub use tinywallet_x402::eip712;
-#[cfg(feature = "net")]
-pub use tinywallet_crypto::rpc;
 #[cfg(feature = "wire")]
 pub use tinywallet_bus::wire;
+#[cfg(feature = "asset")]
+pub use tinywallet_crypto::asset;
+#[cfg(feature = "net")]
+pub use tinywallet_crypto::rpc;
 pub use tinywallet_crypto::{Chain, Error, Result, address, chain};
+#[cfg(feature = "abi")]
+pub use tinywallet_x402::abi;
+#[cfg(feature = "eip712")]
+pub use tinywallet_x402::eip712;

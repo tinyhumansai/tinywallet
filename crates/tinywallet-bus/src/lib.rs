@@ -55,9 +55,6 @@ pub mod wire;
 // Compat re-exports, removed in the next minor release. Each is gated exactly as
 // the module it replaces was, so a `default-features = false` consumer sees the
 // same surface as before.
-/// Compat re-export of `tinywallet_x402::abi`, removed in the next minor release.
-#[cfg(feature = "abi")]
-pub use tinywallet_x402::abi;
 /// Compat re-export of `tinywallet_crypto::address`, removed in the next minor release.
 pub use tinywallet_crypto::address;
 /// Compat re-export of `tinywallet_crypto::asset`, removed in the next minor release.
@@ -65,20 +62,23 @@ pub use tinywallet_crypto::address;
 pub use tinywallet_crypto::asset;
 /// Compat re-export of `tinywallet_crypto::chain`, removed in the next minor release.
 pub use tinywallet_crypto::chain;
-/// Compat re-export of `tinywallet_x402::eip712`, removed in the next minor release.
-#[cfg(feature = "eip712")]
-pub use tinywallet_x402::eip712;
 /// Compat re-export of `tinywallet_crypto::rpc`, removed in the next minor release.
 #[cfg(feature = "net")]
 pub use tinywallet_crypto::rpc;
 /// Compat re-export of `tinywallet_crypto::tx`, removed in the next minor release.
 #[cfg(feature = "tx-codec")]
 pub use tinywallet_crypto::tx;
+/// Compat re-export of `tinywallet_x402::abi`, removed in the next minor release.
+#[cfg(feature = "abi")]
+pub use tinywallet_x402::abi;
+/// Compat re-export of `tinywallet_x402::eip712`, removed in the next minor release.
+#[cfg(feature = "eip712")]
+pub use tinywallet_x402::eip712;
 
+pub use names::{BUS_NAME, CONFIDENTIAL_METHODS, METHODS, OBJECT_PATH};
 /// Compat re-exports of `tinywallet_crypto::{Chain, Error, Result}`, removed in
 /// the next minor release.
 pub use tinywallet_crypto::{Chain, Error, Result};
-pub use names::{BUS_NAME, CONFIDENTIAL_METHODS, METHODS, OBJECT_PATH};
 pub use version::{CONTRACT_VERSION, is_compatible};
 
 #[cfg(test)]

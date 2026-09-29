@@ -79,9 +79,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// # Ok::<(), tinywallet_x402::abi::Error>(())
 /// ```
 pub fn encode_erc20_transfer(to: &str, amount: &str) -> Result<String> {
-    let recipient = tinywallet_crypto::address::evm::validate(to).map_err(|e| Error::InvalidRecipient {
-        reason: e.to_string(),
-    })?;
+    let recipient =
+        tinywallet_crypto::address::evm::validate(to).map_err(|e| Error::InvalidRecipient {
+            reason: e.to_string(),
+        })?;
     let bytes = decode_evm_address(&recipient)?;
     let value = u256_from_decimal(amount).map_err(|e| Error::InvalidAmount {
         reason: e.to_string(),
