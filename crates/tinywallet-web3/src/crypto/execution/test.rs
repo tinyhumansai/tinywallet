@@ -187,7 +187,7 @@ async fn balances_need_a_configured_wallet() {
 }
 
 #[tokio::test]
-async fn tx_reads_reject_an_empty_hash_and_dispatch_per_chain() {
+async fn tx_reads_reject_an_empty_hash() {
     let rig = Rig::new();
     for result in [
         rig.engine
@@ -205,7 +205,11 @@ async fn tx_reads_reject_an_empty_hash_and_dispatch_per_chain() {
     ] {
         assert_eq!(result.unwrap_err(), "tx hash is empty");
     }
+}
 
+#[tokio::test]
+async fn tx_reads_dispatch_to_the_evm_btc_and_solana_clients() {
+    let rig = Rig::new();
     rig.transport
         .on_rpc("eth_getTransactionReceipt", Value::Null);
     rig.transport
@@ -239,7 +243,11 @@ async fn tx_reads_reject_an_empty_hash_and_dispatch_per_chain() {
         .await
         .unwrap();
     assert_eq!(sol.chain, WalletChain::Solana);
+}
 
+#[tokio::test]
+async fn tx_reads_dispatch_to_the_tron_and_receipt_clients() {
+    let rig = Rig::new();
     rig.transport
         .on_post("wallet/gettransactioninfobyid", &json!({}).to_string());
     rig.transport
