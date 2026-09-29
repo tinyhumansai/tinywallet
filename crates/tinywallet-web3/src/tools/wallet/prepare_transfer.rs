@@ -43,11 +43,11 @@ impl Tool for WalletPrepareTransferTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "wallet_prepare_transfer"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Prepare a cryptocurrency transfer. Returns a quote that must be confirmed before execution."
     }
 

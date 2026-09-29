@@ -58,11 +58,11 @@ impl Tool for Web3SwapQuoteTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "web3_swap_quote"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Prepare a single-chain crypto swap via deBridge. Returns a quote + quoteId to confirm with web3_swap_execute. For cross-chain swaps use web3_bridge_quote."
     }
 
@@ -98,11 +98,11 @@ impl Tool for Web3SwapExecuteTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "web3_swap_execute"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Confirm and execute a prepared web3_swap quote (signs + broadcasts)."
     }
 
@@ -125,11 +125,11 @@ impl Tool for Web3SwapRoutesTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "web3_swap_routes"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "List the chains deBridge can swap/bridge between."
     }
 

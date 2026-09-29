@@ -43,11 +43,11 @@ impl Tool for Web3BridgeQuoteTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "web3_bridge_quote"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Prepare a cross-chain bridge via deBridge DLN. Returns a quote + quoteId to confirm with web3_bridge_execute. Source and destination chains must differ."
     }
 
@@ -85,11 +85,11 @@ impl Tool for Web3BridgeExecuteTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "web3_bridge_execute"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Confirm and execute a prepared web3_bridge quote (signs + broadcasts the source-chain tx)."
     }
 

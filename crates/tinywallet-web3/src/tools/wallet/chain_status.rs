@@ -29,11 +29,11 @@ impl Tool for WalletChainStatusTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "wallet_chain_status"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "List blockchain chain readiness — which chains have a configured account and RPC provider."
     }
 

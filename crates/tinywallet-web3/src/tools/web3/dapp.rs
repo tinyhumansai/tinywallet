@@ -43,11 +43,11 @@ impl Tool for Web3DappCallTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "web3_dapp_call"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Prepare a generic EVM dapp contract call from pre-encoded calldata. Returns a quoteId to confirm with web3_dapp_execute."
     }
 
@@ -84,11 +84,11 @@ impl Tool for Web3DappExecuteTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "web3_dapp_execute"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Confirm and execute a prepared web3_dapp call (signs + broadcasts)."
     }
 

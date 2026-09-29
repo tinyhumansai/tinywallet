@@ -46,8 +46,8 @@ fn tx_query_schema(verb: &str) -> Value {
     })
 }
 
-fn parse_args(args: Value) -> Result<TxQueryArgs, ToolResult> {
-    serde_json::from_value(args).map_err(|e| ToolResult::error(format!("invalid arguments: {e}")))
+fn parse_args(args: Value) -> Result<TxQueryArgs, String> {
+    serde_json::from_value(args).map_err(|e| format!("invalid arguments: {e}"))
 }
 
 /// Checks the lifecycle state of a transaction.
@@ -70,11 +70,11 @@ impl Tool for WalletTxStatusTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "wallet_tx_status"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Check the on-chain lifecycle state (pending / confirmed / failed / not_found) of a transaction by hash."
     }
 
@@ -85,7 +85,7 @@ impl Tool for WalletTxStatusTool {
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let args = match parse_args(args) {
             Ok(a) => a,
-            Err(err) => return Ok(err),
+            Err(err) => return Ok(ToolResult::error(err)),
         };
         Ok(to_tool_result(
             self.engine
@@ -115,11 +115,11 @@ impl Tool for WalletTxReceiptTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "wallet_tx_receipt"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Fetch the receipt of a broadcast transaction (success flag, fee, block, gas used) by hash."
     }
 
@@ -130,7 +130,7 @@ impl Tool for WalletTxReceiptTool {
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let args = match parse_args(args) {
             Ok(a) => a,
-            Err(err) => return Ok(err),
+            Err(err) => return Ok(ToolResult::error(err)),
         };
         Ok(to_tool_result(
             self.engine
@@ -160,11 +160,11 @@ impl Tool for WalletLookupTxTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "wallet_lookup_tx"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Look up the raw transaction payload by hash on the target chain."
     }
 
@@ -175,7 +175,7 @@ impl Tool for WalletLookupTxTool {
     async fn execute(&self, args: Value) -> anyhow::Result<ToolResult> {
         let args = match parse_args(args) {
             Ok(a) => a,
-            Err(err) => return Ok(err),
+            Err(err) => return Ok(ToolResult::error(err)),
         };
         Ok(to_tool_result(
             self.engine

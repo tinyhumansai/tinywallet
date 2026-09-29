@@ -29,11 +29,11 @@ impl Tool for WalletStatusTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "wallet_status"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Check wallet configuration status — whether the wallet is set up, which chains are configured, and available accounts."
     }
 
