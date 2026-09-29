@@ -167,8 +167,8 @@ fn tool_results_are_pretty_json_or_the_error_text() {
     use super::to_tool_result;
     let ok = to_tool_result(Ok::<_, String>(serde_json::json!({"a": 1})));
     assert!(!ok.is_error, "{ok:?}");
-    assert!(ok.output.contains("\"a\": 1"), "{ok:?}");
+    assert!(ok.output().contains("\"a\": 1"), "{ok:?}");
     let err = to_tool_result::<()>(Err("boom".to_string()));
     assert!(err.is_error);
-    assert_eq!(err.output, "boom");
+    assert_eq!(err.output(), "boom");
 }
