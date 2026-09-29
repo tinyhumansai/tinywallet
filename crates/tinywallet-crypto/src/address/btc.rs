@@ -147,7 +147,7 @@ pub fn validate_sender(address: &str) -> Result<String> {
 
 /// Encode a 20-byte public key hash as a mainnet P2WPKH (`bc1q…`) address.
 ///
-/// The counterpart to parsing: `tinywallet_crypto::key` derives a public key and needs
+/// The counterpart to parsing: `tinywallet::key` derives a public key and needs
 /// its address, and doing that here keeps the bech32 encoding in the module
 /// that also decodes it. Public rather than crate-private because that caller
 /// is in the root crate now, on the far side of the contract split.
