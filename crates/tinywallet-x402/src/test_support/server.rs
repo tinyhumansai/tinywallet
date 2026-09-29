@@ -11,7 +11,7 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::any;
 
-use crate::wire::{HEADER_PAYMENT_RESPONSE, HEADER_PAYMENT_SIGNATURE, PaymentRequired};
+use crate::wire::{HEADER_PAYMENT_SIGNATURE, PaymentRequired};
 
 /// What the server does.
 #[derive(Debug, Clone)]
@@ -130,7 +130,6 @@ async fn handle(
                 HeaderName::from_static("payment-response"),
                 HeaderValue::from_str(receipt).unwrap(),
             );
-            debug_assert_eq!(HEADER_PAYMENT_RESPONSE, "PAYMENT-RESPONSE");
         }
         return response;
     }
