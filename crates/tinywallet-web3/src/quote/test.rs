@@ -178,3 +178,22 @@ fn tool_results_are_pretty_json_or_the_error_text() {
     assert!(err.is_error);
     assert_eq!(err.output(), "boom");
 }
+
+#[cfg(feature = "tools")]
+#[test]
+fn an_unserializable_result_becomes_an_error_result() {
+    use super::to_tool_result;
+    // JSON object keys must be strings, so a map keyed by a tuple cannot be
+    // serialized.
+    let mut unserializable = std::collections::HashMap::new();
+    unserializable.insert((1, 2), 3);
+    let result = to_tool_result(Ok::<_, String>(unserializable));
+    assert!(result.is_error);
+    assert!(
+        result
+            .output()
+            .starts_with("failed to serialize web3 result:"),
+        "{}",
+        result.output()
+    );
+}

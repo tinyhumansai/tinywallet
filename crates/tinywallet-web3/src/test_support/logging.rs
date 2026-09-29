@@ -36,3 +36,6 @@ pub(crate) fn init() {
         log::set_max_level(LevelFilter::Debug);
     });
 }
+
+#[cfg(test)]
+mod test;
