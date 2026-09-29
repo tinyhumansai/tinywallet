@@ -14,6 +14,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod backend;
+mod logging;
 mod rig;
 mod samples;
 mod seams;
@@ -21,6 +22,7 @@ mod signer;
 mod transport;
 
 pub(crate) use backend::FakeBackend;
+pub(crate) use logging::init as init_logging;
 pub(crate) use rig::{Rig, ServiceRig};
 pub(crate) use samples::{configured_status, owner_a, owner_b, prepared_quote, sample_address};
 pub(crate) use seams::{FakeQuoteScope, FakeRpcEndpoints, FakeWalletAccounts};

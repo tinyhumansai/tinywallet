@@ -3,9 +3,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use super::encode_erc20_transfer;
+use crate::test_support::init_logging;
 
 #[test]
 fn encode_erc20_transfer_matches_known_selector() {
+    init_logging();
     let calldata =
         encode_erc20_transfer("0x1111111111111111111111111111111111111111", "5").unwrap();
     assert!(calldata.starts_with("0xa9059cbb"));

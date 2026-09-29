@@ -26,6 +26,7 @@ pub(crate) struct Rig {
 impl Rig {
     /// A configured wallet, no chain answers scripted, no chat context.
     pub(crate) fn new() -> Self {
+        super::init_logging();
         let transport = Arc::new(FakeTransport::default());
         let signer = Arc::new(FakeSigner::new());
         let accounts = Arc::new(FakeWalletAccounts::configured());

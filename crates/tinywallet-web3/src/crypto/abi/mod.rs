@@ -4,7 +4,10 @@
 //! tool report failures as a plain `String` a model reads to correct itself, so
 //! the typed error is flattened into the wording the tool schema documents.
 
+use log::debug;
 use tinywallet_x402::abi::Error;
+
+const LOG_PREFIX: &str = "[wallet::abi]";
 
 /// ABI-encode an ERC-20 `transfer(address,uint256)` call.
 ///
