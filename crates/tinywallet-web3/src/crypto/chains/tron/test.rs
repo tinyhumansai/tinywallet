@@ -328,7 +328,8 @@ async fn a_trc20_transfer_pays_the_contract_and_carries_the_recipient_in_the_par
 #[tokio::test]
 async fn a_node_rejection_is_surfaced_with_its_code_and_message() {
     let rig = Rig::new();
-    script_native(&rig, 1_000_000);
+    let raw = native_raw(&tron_address_to_hex(RECIPIENT).unwrap(), 1_000_000);
+    rig.transport.on_post("wallet/createtransaction", &created(&raw).to_string());
     rig.transport.on_post(
         "wallet/broadcasttransaction",
         &json!({"result": false, "code": "BANDWIDTH_ERROR", "message": "not enough bandwidth"}).to_string(),
@@ -410,9 +411,11 @@ async fn balance_reads_sun_and_defaults_an_unfunded_account_to_zero() {
     let body: Value = serde_json::from_str(&rig.transport.posts_to("wallet/getaccount")[0]).unwrap();
     assert_eq!(body["address"], tron_address_to_hex(RECIPIENT).unwrap());
     assert_eq!(body["visible"], false);
-    rig.transport.on_post("wallet/getaccount", "{}");
-    assert_eq!(native_balance(&rig.engine, RECIPIENT).await.unwrap(), 0);
     assert!(native_balance(&rig.engine, "nope").await.is_err());
+
+    let unfunded = Rig::new();
+    unfunded.transport.on_post("wallet/getaccount", "{}");
+    assert_eq!(native_balance(&unfunded.engine, RECIPIENT).await.unwrap(), 0);
 }
 
 #[tokio::test]
@@ -440,9 +443,11 @@ async fn a_reverted_contract_call_is_failed_and_a_bare_transfer_is_a_success() {
     rig.transport.on_post("wallet/gettransactioninfobyid", &json!({"blockNumber": 1u64, "receipt": {"result": "REVERT"}}).to_string());
     assert_eq!(tx_status(&rig.engine, "x").await.unwrap().state, TxState::Failed);
     assert_eq!(tx_receipt(&rig.engine, "x").await.unwrap().success, Some(false));
-    rig.transport.on_post("wallet/gettransactioninfobyid", &json!({"blockNumber": 1u64}).to_string());
-    assert_eq!(tx_status(&rig.engine, "x").await.unwrap().state, TxState::Confirmed);
-    assert_eq!(tx_receipt(&rig.engine, "x").await.unwrap().success, Some(true));
+
+    let bare = Rig::new();
+    bare.transport.on_post("wallet/gettransactioninfobyid", &json!({"blockNumber": 1u64}).to_string());
+    assert_eq!(tx_status(&bare.engine, "x").await.unwrap().state, TxState::Confirmed);
+    assert_eq!(tx_receipt(&bare.engine, "x").await.unwrap().success, Some(true));
 }
 
 #[tokio::test]
@@ -455,7 +460,9 @@ async fn an_unmined_transaction_is_pending_when_the_node_knows_it_and_not_found_
     assert!(found.found);
     assert!(!tx_receipt(&rig.engine, "ab").await.unwrap().found);
 
-    rig.transport.on_post("wallet/gettransactionbyid", "{}");
-    assert_eq!(tx_status(&rig.engine, "ab").await.unwrap().state, TxState::NotFound);
-    assert!(!lookup_tx(&rig.engine, "ab").await.unwrap().found);
+    let unknown = Rig::new();
+    unknown.transport.on_post("wallet/gettransactioninfobyid", "{}");
+    unknown.transport.on_post("wallet/gettransactionbyid", "{}");
+    assert_eq!(tx_status(&unknown.engine, "ab").await.unwrap().state, TxState::NotFound);
+    assert!(!lookup_tx(&unknown.engine, "ab").await.unwrap().found);
 }
