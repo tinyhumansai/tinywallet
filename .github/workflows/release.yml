@@ -157,6 +157,8 @@ jobs:
           # inter-crate pin to rewrite alongside the version.
           bump crates/tinywallet-crypto/Cargo.toml
           bump crates/tinywallet-x402/Cargo.toml
+          # The wallet flows crate, a host-linked sibling like the two above.
+          bump crates/tinywallet-web3/Cargo.toml
           # Refreshes every workspace member in the lockfile. `cargo update -p`
           # cannot do this: these are path dependencies, and the later
           # `--locked` steps fail against a stale lock.
@@ -171,6 +173,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Cargo.toml Cargo.lock \
             crates/tinywallet-crypto/Cargo.toml crates/tinywallet-x402/Cargo.toml \
+            crates/tinywallet-web3/Cargo.toml \
             crates/tinywallet-bus/Cargo.toml crates/tinywallet-module/Cargo.toml
           git commit -m "Release ${RELEASE_TAG}"
           git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"

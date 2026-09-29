@@ -51,27 +51,44 @@ jobs:
 
       # The host-linked crates must stay free of every signing and key
       # derivation library, so a host that takes them links no native build.
-      # `cargo tree -i` exits non-zero when the package is not in the graph,
+      # `cargo tree -i` prints an inverse tree on stdout when the package is a
+      # normal (non-dev) dependency, and nothing otherwise. Its exit status is
+      # not a signal: it is non-zero for a package absent from the lockfile but
+      # zero ("nothing to print") for one that only a dev-dependency pulls in,
       # which is the passing case. The root crate is the positive control: if it
       # ever stopped reporting `bitcoin` the guard below would pass vacuously.
       - name: Host-linked crates pull no signing stack
         shell: bash
         run: |
           set -euo pipefail
-          if ! cargo tree -e normal -i bitcoin -p tinywallet --all-features >/dev/null 2>&1; then
+          if [ -z "$(cargo tree -e normal -i bitcoin -p tinywallet --all-features 2>/dev/null)" ]; then
             echo "control failed: tinywallet no longer depends on bitcoin, so this guard proves nothing" >&2
             exit 1
           fi
           status=0
-          for crate in tinywallet-crypto tinywallet-x402 tinywallet-bus; do
+          for crate in tinywallet-crypto tinywallet-x402 tinywallet-bus tinywallet-web3; do
             for dep in bitcoin k256 coins-bip32 coins-bip39; do
-              if cargo tree -e normal -i "$dep" -p "$crate" --all-features >/dev/null 2>&1; then
+              if [ -n "$(cargo tree -e normal -i "$dep" -p "$crate" --all-features 2>/dev/null)" ]; then
                 echo "$crate depends on $dep; it must stay signing-free" >&2
                 status=1
               fi
             done
           done
           exit "$status"
+
+      # The rail-neutral half of `tinywallet-web3` (the quote store and the
+      # scope seam) must not name a chain, so a card rail can reuse it without
+      # touching the crypto code. `grep` exits 1 when nothing matches, which is
+      # the passing case.
+      - name: Rail-neutral web3 modules name no chain
+        shell: bash
+        run: |
+          set -uo pipefail
+          if grep -rnE 'tinywallet_crypto|WalletChain|EvmNetwork' \
+            crates/tinywallet-web3/src/quote crates/tinywallet-web3/src/seams; then
+            echo "quote/ and seams/ must stay free of crypto vocabulary" >&2
+            exit 1
+          fi
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
@@ -184,13 +201,26 @@ jobs:
       #
       # The three sibling library crates are published-style dependencies of the
       # root crate and share its MSRV, so they are built here too.
+      #
+      # `tinywallet-x402` and `tinywallet-web3` are built below with the
+      # features that fit the declared MSRV, not with `--all-features`: their
+      # `tools` features pull in `tinytools`, which needs 1.88 (let-chains), and
+      # x402's `pay` feature pulls in `reqwest`, whose `yoke-derive` 0.8.3 does
+      # not compile on 1.85. The stable jobs above build every feature.
       - name: Build with the declared MSRV
         run: |
           cargo build --all-targets --all-features \
             --package tinywallet \
             --package tinywallet-crypto \
-            --package tinywallet-x402 \
             --package tinywallet-bus
+
+      - name: Build x402 with the declared MSRV (no `pay`, no `tools`)
+        run: |
+          cargo build --all-targets --package tinywallet-x402 \
+            --no-default-features --features wire,eip712,abi,ledger
+
+      - name: Build the wallet flows with the declared MSRV (no `tools`)
+        run: cargo build --all-targets --package tinywallet-web3
 
   supply-chain:
     name: Supply chain
