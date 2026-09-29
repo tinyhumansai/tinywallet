@@ -40,7 +40,7 @@
 //!
 //! | Feature | Default | Gates |
 //! | --- | --- | --- |
-//! | `tools` | off | the agent tools ([`tools`]) and `quote::to_tool_result` |
+//! | `tools` | off | the agent tools ([`tools`]) and `quote::to_tool_result`; needs Rust 1.88 (`tinytools`) |
 
 pub mod crypto;
 pub mod quote;

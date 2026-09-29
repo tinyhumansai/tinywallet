@@ -62,8 +62,9 @@ thread gets exactly the not-found text, so a leaked quote id gives no oracle.
 | --- | --- | --- |
 | `tools` | off | the agent tools, and `quote::to_tool_result` |
 
-`tools` pulls in `tinytools`, which needs a newer compiler than the rest of the
-crate, so the MSRV job builds without it.
+The crate declares `rust-version = "1.85"`, and everything but `tools` builds on
+it. `tools` pulls in `tinytools`, which needs **Rust 1.88** (it uses let-chains),
+so the MSRV job builds the crate without it and the stable jobs cover the tools.
 
 ## Testing
 

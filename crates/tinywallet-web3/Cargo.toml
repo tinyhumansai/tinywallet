@@ -78,7 +78,8 @@ ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 
 [features]
 default = []
-# Agent tools over the wallet engine and the swap/bridge/dapp service.
+# Agent tools over the wallet engine and the swap/bridge/dapp service. Needs
+# Rust 1.88, because `tinytools` does; the rest of the crate builds on 1.85.
 tools = ["dep:tinytools", "dep:anyhow"]
 
 [lints]
