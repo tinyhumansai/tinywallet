@@ -61,7 +61,7 @@ eip712 = ["dep:tinywallet-x402", "tinywallet-x402/eip712"]
 # ERC-20 `transfer` calldata (`tinywallet-x402/abi`).
 abi = ["eip712", "tinywallet-x402/abi"]
 # The Tron protobuf reader and verification half (`tinywallet_bus::tx`).
-tx-codec = ["tinywallet-crypto/tx-codec", "serde"]
+tx-codec = ["tinywallet-crypto/tx-codec", "wire"]
 
 [lints]
 workspace = true

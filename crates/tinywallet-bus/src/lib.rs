@@ -1,6 +1,6 @@
-//! Everything about `TinyWallet` that a host needs and a wallet backend does
-//! not: the wire contract that crosses the `TinyBus` boundary, the member names
-//! that carry it, and the pure rules a host still runs itself.
+//! The wire contract that crosses the `TinyBus` boundary for `TinyWallet`: the
+//! member names that carry it, the request and response types, and the
+//! compatibility rule for that vocabulary.
 //!
 //! A host loads the `tinywallet-module` dynamic library but cannot import Rust
 //! items from that binary. This crate is the ordinary library that supplies its
@@ -13,65 +13,71 @@
 //! links none of them — no `bitcoin`, no `secp256k1` C build, no `ethers-core`,
 //! no BIP-39 implementation.
 //!
-//! # Why this crate holds logic and not only types
+//! # Where the chain rules went
 //!
-//! A pure rule belongs here when the host genuinely runs it synchronously and
-//! paying a bus round trip for it would be absurd. Four do:
+//! This crate used to hold the pure rules a host runs itself. They now live in
+//! two focused crates, and the paths below are **compat re-exports that are
+//! removed in the next minor release**; depend on the new crates directly:
 //!
-//! - [`address`] — validating an address *before* a spec is sent. A bad address
-//!   caught here is a rejected input; caught in the module it is a failed call.
-//! - [`eip712`] — hashing typed data for the x402 payment path. Keccak over a
-//!   fixed byte layout, with no chain client and no bignum behind it.
-//! - [`abi`] — ERC-20 `transfer` calldata: keccak over 68 bytes, an *input* to
-//!   building a transaction rather than part of building one.
-//! - [`tx::tron`] — verifying the txid and contents of what a Tron node handed
-//!   back. Tron has the node build the transaction, so a client that signs
-//!   blind authorises whatever a compromised endpoint returned; the check has to
-//!   happen wherever the decision to sign is made.
+//! | Old path | Now in |
+//! | --- | --- |
+//! | `address`, `asset`, `chain`, `rpc`, `tx`, [`Chain`], [`Error`], [`Result`] | `tinywallet-crypto` |
+//! | `eip712`, `abi` | `tinywallet-x402` (features `eip712`, `abi`) |
+//! | `wire::TronTransfer` | `tinywallet-crypto` (`TronTransfer`) |
 //!
-//! This is the same carve-out `tinydocs-bus` makes, and it has the same rule
-//! behind it: **a crate owns what is the same for every host; the host owns what
-//! depends on its own runtime, config, or threat model.** [`rpc::Transport`] is
-//! here for that reason too — it models I/O and performs none, because endpoint
-//! selection and retry policy are the host's.
+//! The re-exports never enable more than the bus feature that names them, and
+//! `tinywallet-x402` is taken with default features off, so this crate cannot
+//! pull in the x402 wire types or anything heavier.
 //!
 //! # Feature flags
+//!
+//! Each flag forwards to the crate that owns the module now.
 //!
 //! | Feature | Gates |
 //! | --- | --- |
 //! | `btc` | Bitcoin addresses |
 //! | `evm` | EVM addresses |
 //! | `solana` | Solana addresses |
-//! | `tron` | Tron addresses, and [`tx`] with `tx-codec` |
+//! | `tron` | Tron addresses, and `tx` with `tx-codec` |
 //! | `keccak` | EIP-55 checksums for EVM addresses |
-//! | `net` | the [`rpc::Transport`] seam |
+//! | `net` | the `rpc::Transport` seam |
 //! | `asset` | network and token reference data |
 //! | `wire` | the host/module wire contract |
 //! | `eip712` | EIP-712 typed-data hashing |
 //! | `abi` | ERC-20 `transfer` calldata |
 //! | `tx-codec` | the Tron protobuf reader and verification half |
 
-mod error;
-
-#[cfg(feature = "abi")]
-pub mod abi;
-pub mod address;
-#[cfg(feature = "asset")]
-pub mod asset;
-pub mod chain;
-#[cfg(feature = "eip712")]
-pub mod eip712;
 pub mod names;
-#[cfg(feature = "net")]
-pub mod rpc;
-#[cfg(feature = "tx-codec")]
-pub mod tx;
 pub mod version;
 #[cfg(feature = "wire")]
 pub mod wire;
 
-pub use chain::Chain;
-pub use error::{Error, Result};
+// Compat re-exports, removed in the next minor release. Each is gated exactly as
+// the module it replaces was, so a `default-features = false` consumer sees the
+// same surface as before.
+/// Compat re-export of `tinywallet_x402::abi`, removed in the next minor release.
+#[cfg(feature = "abi")]
+pub use tinywallet_x402::abi;
+/// Compat re-export of `tinywallet_crypto::address`, removed in the next minor release.
+pub use tinywallet_crypto::address;
+/// Compat re-export of `tinywallet_crypto::asset`, removed in the next minor release.
+#[cfg(feature = "asset")]
+pub use tinywallet_crypto::asset;
+/// Compat re-export of `tinywallet_crypto::chain`, removed in the next minor release.
+pub use tinywallet_crypto::chain;
+/// Compat re-export of `tinywallet_x402::eip712`, removed in the next minor release.
+#[cfg(feature = "eip712")]
+pub use tinywallet_x402::eip712;
+/// Compat re-export of `tinywallet_crypto::rpc`, removed in the next minor release.
+#[cfg(feature = "net")]
+pub use tinywallet_crypto::rpc;
+/// Compat re-export of `tinywallet_crypto::tx`, removed in the next minor release.
+#[cfg(feature = "tx-codec")]
+pub use tinywallet_crypto::tx;
+
+/// Compat re-exports of `tinywallet_crypto::{Chain, Error, Result}`, removed in
+/// the next minor release.
+pub use tinywallet_crypto::{Chain, Error, Result};
 pub use names::{BUS_NAME, CONFIDENTIAL_METHODS, METHODS, OBJECT_PATH};
 pub use version::{CONTRACT_VERSION, is_compatible};
 
