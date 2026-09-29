@@ -25,7 +25,7 @@ pub(crate) fn validate_amount(raw: &str) -> Result<u128, String> {
 /// Every arm delegates to `tinywallet-crypto`, which owns the four address
 /// formats. For Bitcoin this is the **recipient** rule (any well-formed mainnet
 /// address); sender addresses go through
-/// [`chains::btc::validate_sender_address`](crate::crypto::chains), which also
+/// the Bitcoin chain module's sender check, which also
 /// requires P2WPKH.
 pub(crate) fn validate_address(chain: WalletChain, addr: &str) -> Result<String, String> {
     debug!("{LOG_PREFIX} validate_address chain={chain:?} role=recipient");
