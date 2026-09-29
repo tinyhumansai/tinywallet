@@ -108,7 +108,11 @@ async fn a_missing_url_is_reported() {
 
 #[tokio::test]
 async fn an_unsupported_method_is_reported() {
-    let result = run(&tool(), json!({"url": "http://127.0.0.1:1", "method": "GE T"})).await;
+    let result = run(
+        &tool(),
+        json!({"url": "http://127.0.0.1:1", "method": "GE T"}),
+    )
+    .await;
     assert!(result.is_error);
     assert_eq!(text(&result), "Unsupported HTTP method: GE T");
 }
@@ -121,7 +125,11 @@ async fn an_unreachable_endpoint_is_reported() {
     };
     let result = run(&tool(), json!({"url": format!("http://127.0.0.1:{port}")})).await;
     assert!(result.is_error);
-    assert!(text(&result).starts_with("Initial request failed: "), "{}", text(&result));
+    assert!(
+        text(&result).starts_with("Initial request failed: "),
+        "{}",
+        text(&result)
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +141,10 @@ async fn a_free_endpoint_is_returned_directly() {
     let server = TestServer::start(ServerConfig::default()).await;
     let result = run(&tool(), json!({"url": server.url})).await;
     assert!(!result.is_error);
-    assert_eq!(text(&result), format!("HTTP 200 from {}\n\ncontent", server.url));
+    assert_eq!(
+        text(&result),
+        format!("HTTP 200 from {}\n\ncontent", server.url)
+    );
     assert_eq!(server.seen().len(), 1);
 }
 
@@ -154,7 +165,9 @@ async fn a_402_without_a_challenge_header_is_not_an_x402_endpoint() {
 
 #[tokio::test]
 async fn the_v1_challenge_header_is_accepted() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let _dir = init_ledger();
     let server = TestServer::start(ServerConfig {
         challenge_header: "X-PAYMENT-REQUIRED",
@@ -186,7 +199,9 @@ async fn an_oversized_body_is_cut_on_a_character_boundary() {
 
 #[tokio::test]
 async fn an_evm_402_is_paid_recorded_and_reported() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let _dir = init_ledger();
     let proxy = Arc::new(FakeProxyPolicy::default());
     let server = TestServer::start(paid_config(evm_requirement())).await;
@@ -236,7 +251,9 @@ async fn an_evm_402_is_paid_recorded_and_reported() {
 
 #[tokio::test]
 async fn a_solana_402_is_labelled_solana() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let _dir = init_ledger();
     let server = TestServer::start(paid_config(solana_requirement())).await;
     let result = run(&tool(), json!({"url": server.url})).await;
@@ -246,7 +263,9 @@ async fn a_solana_402_is_labelled_solana() {
 
 #[tokio::test]
 async fn a_rejected_payment_is_recorded_as_failed() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let _dir = init_ledger();
     let server = TestServer::start(ServerConfig {
         paid_status: 500,
@@ -268,7 +287,9 @@ async fn a_rejected_payment_is_recorded_as_failed() {
 
 #[tokio::test]
 async fn a_missing_or_unreadable_receipt_leaves_the_transaction_blank() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     for receipt in [None, Some("***".to_string()), Some(B64.encode("{}"))] {
         let _dir = init_ledger();
         let server = TestServer::start(ServerConfig {
@@ -287,7 +308,9 @@ async fn a_missing_or_unreadable_receipt_leaves_the_transaction_blank() {
 
 #[tokio::test]
 async fn a_payment_the_budget_refuses_is_reported_and_not_sent() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let dir = tempfile::tempdir().unwrap();
     ledger::init_global(
         dir.path(),
@@ -311,7 +334,9 @@ async fn a_payment_the_budget_refuses_is_reported_and_not_sent() {
 
 #[tokio::test]
 async fn paying_without_a_ledger_is_reported() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     ledger::reset_global();
     let server = TestServer::start(paid_config(evm_requirement())).await;
     let result = run(&tool(), json!({"url": server.url})).await;
@@ -323,7 +348,9 @@ async fn paying_without_a_ledger_is_reported() {
 
 #[tokio::test]
 async fn a_wallet_that_cannot_sign_is_reported() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let _dir = init_ledger();
     let server = TestServer::start(paid_config(evm_requirement())).await;
     let tool = X402RequestTool::new(
@@ -346,7 +373,9 @@ async fn a_wallet_that_cannot_sign_is_reported() {
 async fn a_retry_that_never_answers_is_recorded_as_failed() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let _dir = init_ledger();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
@@ -373,7 +402,10 @@ async fn a_retry_that_never_answers_is_recorded_as_failed() {
         text(&result)
     );
     let statuses: Vec<_> = records().iter().map(|r| r.status).collect();
-    assert_eq!(statuses, vec![PaymentStatus::Pending, PaymentStatus::Failed]);
+    assert_eq!(
+        statuses,
+        vec![PaymentStatus::Pending, PaymentStatus::Failed]
+    );
     ledger::reset_global();
 }
 
@@ -402,7 +434,9 @@ async fn networks_are_labelled_for_people() {
         )
         .await;
         assert!(
-            text(&result).contains(&format!("x402 payment: 0.000001 USDC on {label}\nTransaction: sig")),
+            text(&result).contains(&format!(
+                "x402 payment: 0.000001 USDC on {label}\nTransaction: sig"
+            )),
             "{network}: {}",
             text(&result)
         );

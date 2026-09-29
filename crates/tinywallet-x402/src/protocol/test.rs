@@ -144,7 +144,9 @@ fn a_mislabelled_version_is_still_read() {
     let mut c = challenge(vec![evm_requirement()]);
     c.x402_version = 1;
     assert_eq!(
-        parse_402_headers(&challenge_headers(&c)).unwrap().x402_version,
+        parse_402_headers(&challenge_headers(&c))
+            .unwrap()
+            .x402_version,
         1
     );
 }
@@ -153,7 +155,10 @@ fn a_mislabelled_version_is_still_read() {
 fn a_missing_challenge_header_is_reported() {
     let err = parse_402_headers(&HeaderMap::new()).unwrap_err();
     assert!(matches!(err, X402Error::NoPaymentHeader));
-    assert_eq!(err.to_string(), "402 response missing PAYMENT-REQUIRED header");
+    assert_eq!(
+        err.to_string(),
+        "402 response missing PAYMENT-REQUIRED header"
+    );
 }
 
 #[test]
@@ -319,18 +324,25 @@ async fn the_chain_of_a_bare_requirement_follows_its_network_prefix() {
 
 #[tokio::test]
 async fn paying_needs_an_initialised_ledger() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     ledger::reset_global();
     let headers = challenge_headers(&challenge(vec![solana_requirement()]));
     let err = handle_402_and_pay(&StubBuilder::default(), &headers, "https://x")
         .await
         .unwrap_err();
-    assert_eq!(err.to_string(), "x402 wallet: x402 payment ledger not initialized");
+    assert_eq!(
+        err.to_string(),
+        "x402 wallet: x402 payment ledger not initialized"
+    );
 }
 
 #[tokio::test]
 async fn a_payment_within_budget_yields_the_header_and_ledger_metadata() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let _dir = init_ledger(SpendingBudget::default());
     let builder = StubBuilder::default();
     let headers = challenge_headers(&challenge(vec![evm_requirement(), solana_requirement()]));
@@ -352,7 +364,9 @@ async fn a_payment_within_budget_yields_the_header_and_ledger_metadata() {
 
 #[tokio::test]
 async fn an_unparseable_amount_is_a_protocol_error() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let _dir = init_ledger(SpendingBudget::default());
     let mut requirement = solana_requirement();
     requirement.amount = "lots".into();
@@ -360,13 +374,18 @@ async fn an_unparseable_amount_is_a_protocol_error() {
     let err = handle_402_and_pay(&StubBuilder::default(), &headers, "u")
         .await
         .unwrap_err();
-    assert!(err.to_string().starts_with("x402 protocol: invalid amount 'lots'"));
+    assert!(
+        err.to_string()
+            .starts_with("x402 protocol: invalid amount 'lots'")
+    );
     ledger::reset_global();
 }
 
 #[tokio::test]
 async fn each_budget_limit_refuses_with_its_own_error() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let headers = challenge_headers(&challenge(vec![solana_requirement()]));
     let builder = StubBuilder::default();
 
@@ -376,8 +395,13 @@ async fn each_budget_limit_refuses_with_its_own_error() {
         daily_max_atomic: 1_000_000,
         monthly_max_atomic: 1_000_000,
     });
-    let err = handle_402_and_pay(&builder, &headers, "u").await.unwrap_err();
-    assert_eq!(err.to_string(), "x402 amount 10000 exceeds per-request cap 9999");
+    let err = handle_402_and_pay(&builder, &headers, "u")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "x402 amount 10000 exceeds per-request cap 9999"
+    );
 
     // Daily: 995_000 settled today plus 10_000 is over 1_000_000.
     let _dir = init_ledger(SpendingBudget {
@@ -386,7 +410,9 @@ async fn each_budget_limit_refuses_with_its_own_error() {
         monthly_max_atomic: 100_000_000,
     });
     ledger::with_ledger_mut(|l| l.record_payment(settled(995_000))).unwrap();
-    let err = handle_402_and_pay(&builder, &headers, "u").await.unwrap_err();
+    let err = handle_402_and_pay(&builder, &headers, "u")
+        .await
+        .unwrap_err();
     assert_eq!(
         err.to_string(),
         "x402 daily budget exceeded: 995000/1000000 atomic units"
@@ -399,7 +425,9 @@ async fn each_budget_limit_refuses_with_its_own_error() {
         monthly_max_atomic: 1_000_000,
     });
     ledger::with_ledger_mut(|l| l.record_payment(settled(995_000))).unwrap();
-    let err = handle_402_and_pay(&builder, &headers, "u").await.unwrap_err();
+    let err = handle_402_and_pay(&builder, &headers, "u")
+        .await
+        .unwrap_err();
     assert_eq!(
         err.to_string(),
         "x402 monthly budget exceeded: 995000/1000000 atomic units"
@@ -413,14 +441,18 @@ async fn each_budget_limit_refuses_with_its_own_error() {
 
 #[tokio::test]
 async fn a_wallet_failure_is_passed_through() {
-    let _guard = ledger::TEST_LOCK.lock().unwrap_or_else(PoisonError::into_inner);
+    let _guard = ledger::TEST_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let _dir = init_ledger(SpendingBudget::default());
     let builder = StubBuilder {
         fail_with: Some("wallet secret: locked".into()),
         ..StubBuilder::default()
     };
     let headers = challenge_headers(&challenge(vec![solana_requirement()]));
-    let err = handle_402_and_pay(&builder, &headers, "u").await.unwrap_err();
+    let err = handle_402_and_pay(&builder, &headers, "u")
+        .await
+        .unwrap_err();
     assert_eq!(err.to_string(), "x402 wallet: wallet secret: locked");
     ledger::reset_global();
 }
@@ -503,7 +535,10 @@ async fn a_challenge_above_the_cap_is_refused_before_paying() {
         .try_paid_request(get(&client, &server.url), Some(9_999))
         .await
         .unwrap_err();
-    assert_eq!(err.to_string(), "x402 amount 10000 exceeds per-request cap 9999");
+    assert_eq!(
+        err.to_string(),
+        "x402 amount 10000 exceeds per-request cap 9999"
+    );
     assert!(builder.chains.lock().unwrap().is_empty());
     assert_eq!(server.seen().len(), 1, "no retry was sent");
 }

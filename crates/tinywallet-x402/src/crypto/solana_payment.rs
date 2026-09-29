@@ -151,9 +151,8 @@ pub(super) fn b58_to_32(addr: &str) -> Result<[u8; 32], X402Error> {
         .into_vec()
         .map_err(|e| X402Error::Protocol(format!("invalid base58 '{addr}': {e}")))?;
     let len = v.len();
-    <[u8; 32]>::try_from(v).map_err(|_| {
-        X402Error::Protocol(format!("expected 32-byte key, got {len} for '{addr}'"))
-    })
+    <[u8; 32]>::try_from(v)
+        .map_err(|_| X402Error::Protocol(format!("expected 32-byte key, got {len} for '{addr}'")))
 }
 
 /// The associated token account for `owner` and `mint`: the first bump, counting

@@ -272,7 +272,8 @@ pub async fn handle_402_and_pay(
 }
 
 fn parse_amount(requirement: &PaymentRequirements) -> Result<u64, X402Error> {
-    requirement.amount.parse().map_err(|e| {
-        X402Error::Protocol(format!("invalid amount '{}': {e}", requirement.amount))
-    })
+    requirement
+        .amount
+        .parse()
+        .map_err(|e| X402Error::Protocol(format!("invalid amount '{}': {e}", requirement.amount)))
 }

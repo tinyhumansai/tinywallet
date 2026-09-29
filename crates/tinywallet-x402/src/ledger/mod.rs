@@ -29,9 +29,9 @@ mod global;
 mod store;
 mod types;
 
-pub use global::{init_global, with_ledger, with_ledger_mut};
 #[cfg(test)]
 pub(crate) use global::{TEST_LOCK, reset_global};
+pub use global::{init_global, with_ledger, with_ledger_mut};
 pub use store::PaymentLedger;
 pub use types::{BudgetCheck, PaymentRecord, PaymentStatus, SpendingBudget, SpendingSummary};
 

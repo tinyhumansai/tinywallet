@@ -111,19 +111,17 @@ async fn an_evm_payment_is_signed_by_the_wallets_account() {
 
     // Rebuild the digest the wallet signed, and recover the signer from it.
     let raw = hex::decode(proof.signature.trim_start_matches("0x")).unwrap();
-    assert!(matches!(raw[64], 27 | 28), "the recovery byte is offset by 27");
+    assert!(
+        matches!(raw[64], 27 | 28),
+        "the recovery byte is offset by 27"
+    );
     let signature = Signature::from_slice(&raw[..64]).unwrap();
     let recovery_id = RecoveryId::try_from(raw[64] - 27).unwrap();
     let nonce: [u8; 32] = hex::decode(proof.authorization.nonce.trim_start_matches("0x"))
         .unwrap()
         .try_into()
         .unwrap();
-    let domain = eip712::domain_separator(
-        address_bytes(USDC_BASE_MAINNET),
-        8453,
-        "USD Coin",
-        "2",
-    );
+    let domain = eip712::domain_separator(address_bytes(USDC_BASE_MAINNET), 8453, "USD Coin", "2");
     let structure = eip712::transfer_with_authorization_hash(
         address_bytes(&proof.authorization.from),
         address_bytes(&proof.authorization.to),
@@ -178,8 +176,16 @@ async fn the_valid_before_time_is_now_plus_the_timeout() {
 #[tokio::test]
 async fn each_payment_gets_a_fresh_nonce() {
     let requirement = evm_requirement();
-    let first = evm_proof(build_evm(FakePaymentSigner::default(), &requirement).await.unwrap());
-    let second = evm_proof(build_evm(FakePaymentSigner::default(), &requirement).await.unwrap());
+    let first = evm_proof(
+        build_evm(FakePaymentSigner::default(), &requirement)
+            .await
+            .unwrap(),
+    );
+    let second = evm_proof(
+        build_evm(FakePaymentSigner::default(), &requirement)
+            .await
+            .unwrap(),
+    );
     assert_ne!(first.authorization.nonce, second.authorization.nonce);
     assert_ne!(fresh_nonce(), fresh_nonce());
 }
@@ -222,7 +228,8 @@ async fn an_evm_payment_rejects_an_unparseable_amount() {
         .await
         .unwrap_err();
     assert!(
-        err.to_string().starts_with("x402 protocol: invalid amount 'lots'"),
+        err.to_string()
+            .starts_with("x402 protocol: invalid amount 'lots'"),
         "{err}"
     );
 }
@@ -264,7 +271,10 @@ async fn an_evm_wallet_that_reports_a_bad_address_is_rejected() {
         .build(&challenge(vec![]), &requirement, PaymentChain::Evm)
         .await
         .unwrap_err();
-    assert!(err.to_string().contains("invalid EVM address '0xnope'"), "{err}");
+    assert!(
+        err.to_string().contains("invalid EVM address '0xnope'"),
+        "{err}"
+    );
 }
 
 #[tokio::test]
@@ -278,7 +288,10 @@ async fn evm_wallet_failures_carry_the_seams_own_text() {
     )
     .await
     .unwrap_err();
-    assert_eq!(err.to_string(), "x402 wallet: wallet secret: keyring locked");
+    assert_eq!(
+        err.to_string(),
+        "x402 wallet: wallet secret: keyring locked"
+    );
 
     let err = build_evm(
         FakePaymentSigner {
@@ -289,7 +302,10 @@ async fn evm_wallet_failures_carry_the_seams_own_text() {
     )
     .await
     .unwrap_err();
-    assert_eq!(err.to_string(), "x402 wallet: sign EIP-3009: module unavailable");
+    assert_eq!(
+        err.to_string(),
+        "x402 wallet: sign EIP-3009: module unavailable"
+    );
 }
 
 #[tokio::test]
@@ -365,16 +381,17 @@ async fn a_solana_payment_is_a_partially_signed_transaction() {
 
     let wire = solana_transaction(&payload);
     assert_eq!(wire[0], 2, "two signature slots");
-    assert_eq!(&wire[1..65], &[0u8; 64], "the fee payer's slot is left empty");
+    assert_eq!(
+        &wire[1..65],
+        &[0u8; 64],
+        "the fee payer's slot is left empty"
+    );
     let signature: [u8; 64] = wire[65..129].try_into().unwrap();
     let message = &wire[129..];
 
     // Our slot verifies against the wallet's key over exactly this message.
     FakePaymentSigner::solana_verifying_key()
-        .verify(
-            message,
-            &ed25519_dalek::Signature::from_bytes(&signature),
-        )
+        .verify(message, &ed25519_dalek::Signature::from_bytes(&signature))
         .unwrap();
 
     let parsed = parse_message(message);
@@ -384,9 +401,18 @@ async fn a_solana_payment_is_a_partially_signed_transaction() {
         FakePaymentSigner::solana_verifying_key().to_bytes()
     );
     assert_eq!(parsed.blockhash, b58_to_32(BLOCKHASH).unwrap());
-    assert_eq!(parsed.keys[5], b58_to_32(crate::wire::SPL_TOKEN_PROGRAM).unwrap());
-    assert_eq!(parsed.keys[6], b58_to_32(crate::wire::COMPUTE_BUDGET_PROGRAM).unwrap());
-    assert_eq!(parsed.keys[7], b58_to_32(crate::wire::SPL_MEMO_PROGRAM).unwrap());
+    assert_eq!(
+        parsed.keys[5],
+        b58_to_32(crate::wire::SPL_TOKEN_PROGRAM).unwrap()
+    );
+    assert_eq!(
+        parsed.keys[6],
+        b58_to_32(crate::wire::COMPUTE_BUDGET_PROGRAM).unwrap()
+    );
+    assert_eq!(
+        parsed.keys[7],
+        b58_to_32(crate::wire::SPL_MEMO_PROGRAM).unwrap()
+    );
     // The memo named by the server is used verbatim.
     assert!(message.ends_with(b"pi_3abc123"));
 }
@@ -407,7 +433,10 @@ async fn the_transfer_moves_the_asked_amount_to_the_recipients_token_account() {
 
     let mint = b58_to_32(&requirement.asset).unwrap();
     let token_program = keys[5];
-    assert_eq!(keys[2], derive_ata(&keys[1], &mint, &token_program).unwrap());
+    assert_eq!(
+        keys[2],
+        derive_ata(&keys[1], &mint, &token_program).unwrap()
+    );
     assert_eq!(
         keys[3],
         derive_ata(&b58_to_32(SOLANA_RECIPIENT).unwrap(), &mint, &token_program).unwrap()
@@ -511,7 +540,10 @@ async fn solana_requirements_with_bad_fields_are_protocol_errors() {
     let cases: [(Mutate, &str); 3] = [
         (|r| r.amount = "lots".into(), "invalid amount 'lots'"),
         (|r| r.pay_to = "0OIl".into(), "invalid base58 '0OIl'"),
-        (|r| r.asset = "abc".into(), "expected 32-byte key, got 3 for 'abc'"),
+        (
+            |r| r.asset = "abc".into(),
+            "expected 32-byte key, got 3 for 'abc'",
+        ),
     ];
     for (mutate, expected) in cases {
         let mut requirement = solana_requirement();
@@ -551,7 +583,10 @@ async fn solana_wallet_failures_carry_the_seams_own_text() {
     )
     .await
     .unwrap_err();
-    assert_eq!(err.to_string(), "x402 wallet: sign payment: module unavailable");
+    assert_eq!(
+        err.to_string(),
+        "x402 wallet: sign payment: module unavailable"
+    );
 
     let err = build_solana(
         FakePaymentSigner {
@@ -587,10 +622,17 @@ async fn a_wallet_address_that_is_not_base58_cannot_pay_on_solana() {
     }
     let payments = CryptoPayments::new(Arc::new(NotBase58), Arc::new(FakeTransport::default()));
     let err = payments
-        .build(&challenge(vec![]), &solana_requirement(), PaymentChain::Solana)
+        .build(
+            &challenge(vec![]),
+            &solana_requirement(),
+            PaymentChain::Solana,
+        )
         .await
         .unwrap_err();
-    assert!(err.to_string().contains("invalid base58 '0xdeadbeef'"), "{err}");
+    assert!(
+        err.to_string().contains("invalid base58 '0xdeadbeef'"),
+        "{err}"
+    );
 }
 
 #[tokio::test]
@@ -604,7 +646,10 @@ async fn the_blockhash_comes_from_the_transport_for_the_solana_network() {
         .unwrap();
     assert_eq!(
         *transport.calls.lock().unwrap(),
-        vec![(NetworkId::chain(Chain::Solana), "getLatestBlockhash".to_string())]
+        vec![(
+            NetworkId::chain(Chain::Solana),
+            "getLatestBlockhash".to_string()
+        )]
     );
 }
 
@@ -628,9 +673,13 @@ async fn blockhash_failures_are_wallet_errors() {
         ),
     ];
     for (transport, expected) in cases {
-        let err = build_solana(FakePaymentSigner::default(), transport, &solana_requirement())
-            .await
-            .unwrap_err();
+        let err = build_solana(
+            FakePaymentSigner::default(),
+            transport,
+            &solana_requirement(),
+        )
+        .await
+        .unwrap_err();
         assert!(err.to_string().starts_with(expected), "{err}");
     }
 }
@@ -651,7 +700,11 @@ fn a_token_account_address_is_off_the_curve_and_per_owner() {
     let mint = b58_to_32(crate::wire::USDC_MINT_MAINNET).unwrap();
     let token = b58_to_32(crate::wire::SPL_TOKEN_PROGRAM).unwrap();
     let a = derive_ata(&owner_a, &mint, &token).unwrap();
-    assert_eq!(a, derive_ata(&owner_a, &mint, &token).unwrap(), "deterministic");
+    assert_eq!(
+        a,
+        derive_ata(&owner_a, &mint, &token).unwrap(),
+        "deterministic"
+    );
     assert_ne!(a, derive_ata(&owner_b, &mint, &token).unwrap());
     assert!(
         curve25519_dalek::edwards::CompressedEdwardsY(a)
@@ -664,7 +717,10 @@ fn a_token_account_address_is_off_the_curve_and_per_owner() {
 #[test]
 fn base58_keys_must_be_exactly_32_bytes() {
     assert!(b58_to_32(FEE_PAYER).is_ok());
-    assert!(b58_to_32(&format!("  {FEE_PAYER}  ")).is_ok(), "whitespace is trimmed");
+    assert!(
+        b58_to_32(&format!("  {FEE_PAYER}  ")).is_ok(),
+        "whitespace is trimmed"
+    );
     assert!(b58_to_32("0OIl").is_err());
     assert!(b58_to_32("2wKu").is_err());
 }

@@ -90,10 +90,7 @@ fn settled_payments_today_count_against_the_daily_budget() {
         }
     );
     // Exactly reaching the cap is allowed; only exceeding it is not.
-    assert_eq!(
-        ledger.check_budget_at(now(), 200_000),
-        BudgetCheck::Allowed
-    );
+    assert_eq!(ledger.check_budget_at(now(), 200_000), BudgetCheck::Allowed);
 }
 
 #[test]
@@ -107,10 +104,7 @@ fn only_settled_payments_count_against_a_budget() {
     ] {
         ledger.record_payment(record(1_800_000, status, now(), SESSION));
     }
-    assert_eq!(
-        ledger.check_budget_at(now(), 400_000),
-        BudgetCheck::Allowed
-    );
+    assert_eq!(ledger.check_budget_at(now(), 400_000), BudgetCheck::Allowed);
     assert_eq!(ledger.summary_at(now()), SpendingSummary::default());
 }
 
@@ -120,13 +114,15 @@ fn yesterdays_payments_count_against_the_month_but_not_the_day() {
     let mut ledger = ledger_in(&dir);
     let yesterday = now() - Duration::days(1);
     for _ in 0..5 {
-        ledger.record_payment(record(1_900_000, PaymentStatus::Settled, yesterday, SESSION));
+        ledger.record_payment(record(
+            1_900_000,
+            PaymentStatus::Settled,
+            yesterday,
+            SESSION,
+        ));
     }
     // 9.5M settled this month; the daily total is still zero.
-    assert_eq!(
-        ledger.check_budget_at(now(), 400_000),
-        BudgetCheck::Allowed
-    );
+    assert_eq!(ledger.check_budget_at(now(), 400_000), BudgetCheck::Allowed);
     assert_eq!(
         ledger.check_budget_at(now(), 500_000),
         BudgetCheck::Allowed,
