@@ -49,6 +49,30 @@ jobs:
       - name: Test default features
         run: cargo test
 
+      # The host-linked crates must stay free of every signing and key
+      # derivation library, so a host that takes them links no native build.
+      # `cargo tree -i` exits non-zero when the package is not in the graph,
+      # which is the passing case. The root crate is the positive control: if it
+      # ever stopped reporting `bitcoin` the guard below would pass vacuously.
+      - name: Host-linked crates pull no signing stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! cargo tree -e normal -i bitcoin -p tinywallet --all-features >/dev/null 2>&1; then
+            echo "control failed: tinywallet no longer depends on bitcoin, so this guard proves nothing" >&2
+            exit 1
+          fi
+          status=0
+          for crate in tinywallet-crypto tinywallet-x402 tinywallet-bus; do
+            for dep in bitcoin k256 coins-bip32 coins-bip39; do
+              if cargo tree -e normal -i "$dep" -p "$crate" --all-features >/dev/null 2>&1; then
+                echo "$crate depends on $dep; it must stay signing-free" >&2
+                status=1
+              fi
+            done
+          done
+          exit "$status"
+
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
         with:
@@ -123,7 +147,7 @@ jobs:
       - name: Build documentation
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --no-deps --all-features
+        run: cargo doc --workspace --no-deps --all-features
 
   msrv:
     name: Minimum supported Rust version
@@ -157,8 +181,16 @@ jobs:
       # and so need a newer compiler than this crate promises its consumers.
       # Holding the module to the library's MSRV would either fail here or
       # force the library's MSRV up for a crate nobody depends on.
+      #
+      # The three sibling library crates are published-style dependencies of the
+      # root crate and share its MSRV, so they are built here too.
       - name: Build with the declared MSRV
-        run: cargo build --package tinywallet --all-targets --all-features
+        run: |
+          cargo build --all-targets --all-features \
+            --package tinywallet \
+            --package tinywallet-crypto \
+            --package tinywallet-x402 \
+            --package tinywallet-bus
 
   supply-chain:
     name: Supply chain
