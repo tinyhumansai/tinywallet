@@ -22,10 +22,7 @@ mod transport;
 
 pub(crate) use backend::FakeBackend;
 pub(crate) use rig::{Rig, ServiceRig};
-pub(crate) use samples::{
-    TEST_MNEMONIC, configured_status, owner_a, owner_b, prepared_quote, sample_account,
-    sample_address,
-};
+pub(crate) use samples::{configured_status, owner_a, owner_b, prepared_quote, sample_address};
 pub(crate) use seams::{FakeQuoteScope, FakeRpcEndpoints, FakeWalletAccounts};
 pub(crate) use signer::{FakeSigner, SignerCall};
 pub(crate) use transport::{Call, FakeTransport};

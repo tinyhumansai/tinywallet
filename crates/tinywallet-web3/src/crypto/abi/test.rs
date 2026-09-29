@@ -1,5 +1,7 @@
 //! Tests for the ERC-20 calldata wrapper.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::encode_erc20_transfer;
 
 #[test]

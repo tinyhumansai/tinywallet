@@ -10,7 +10,7 @@ use crate::crypto::service::{
     BridgeQuoteParams, ChainFamily, DappCallParams, SwapQuoteParams, UnsignedTx, Web3QuoteKind,
 };
 use crate::crypto::wallet::WalletChain;
-use crate::quote::WALLET_NOT_CONFIGURED_MESSAGE;
+use crate::quote::{Quoted as _, WALLET_NOT_CONFIGURED_MESSAGE};
 use crate::test_support::{FakeWalletAccounts, ServiceRig, configured_status, sample_address};
 
 const SOLANA: u64 = 7_565_164;
@@ -393,7 +393,6 @@ async fn stored_quotes_are_stamped_with_the_scopes_owner() {
         })
         .await
         .unwrap();
-    use crate::quote::Quoted as _;
     assert_eq!(
         rig.service.stored_quotes()[0].owner().cloned(),
         Some(crate::test_support::owner_a())

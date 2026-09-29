@@ -380,7 +380,7 @@ async fn a_v0_message_is_signed_with_its_version_prefix_included() {
     sign_and_broadcast_versioned(&rig.engine, &hex::encode(&wire))
         .await
         .unwrap();
-    let signed = rig.signer.calls().into_iter().find_map(|c| match c {
+    let message_signed = rig.signer.calls().into_iter().find_map(|c| match c {
         SignerCall::Message(_, m) => Some(m),
         _ => None,
     });
