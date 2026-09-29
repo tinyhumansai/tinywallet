@@ -3,7 +3,7 @@
 //! Everything about a Tron transaction that reads or checks bytes — the
 //! `raw_data` protobuf walk, the txid recomputation, the structural
 //! verification of what a node handed back, and the assembly of the 65-byte
-//! signature — lives in [`tinywallet_bus::tx::tron`] and is re-exported here,
+//! signature — lives in [`tinywallet_crypto::tx::tron`] and is re-exported here,
 //! so `tinywallet::tx::tron::verify_transfer` still resolves.
 //!
 //! What is left in this crate is the one thing that needs a secp256k1
@@ -25,7 +25,7 @@ use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
 
 use super::{Error, Result};
 
-pub use tinywallet_bus::tx::tron::{
+pub use tinywallet_crypto::tx::tron::{
     Signature, attach_signature, digest, recompute_txid, signature_hex, verify_contract,
     verify_transfer,
 };
