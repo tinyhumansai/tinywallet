@@ -58,3 +58,13 @@ where
     let ledger = guard.as_mut().ok_or_else(|| NOT_INITIALISED.to_string())?;
     Ok(f(ledger))
 }
+
+/// Serialises the tests that touch the process-wide ledger.
+#[cfg(test)]
+pub(crate) static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+/// Drop the process-wide ledger, as at process start.
+#[cfg(test)]
+pub(crate) fn reset_global() {
+    *lock() = None;
+}
