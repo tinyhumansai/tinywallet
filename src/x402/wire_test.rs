@@ -1,7 +1,7 @@
 //! Wire-shape tests for the x402 types: the fee-payer/memo accessors, the
 //! settlement response, and a full `PaymentPayload` for each chain.
 //!
-//! Ported from OpenHuman's x402 suite, which exercised these types before they
+//! Ported from the host application's x402 suite, which exercised these types before they
 //! were extracted here. The selection and CAIP-2 rules live in `types.rs`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
