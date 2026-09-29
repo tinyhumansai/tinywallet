@@ -202,7 +202,7 @@ impl Tool for X402RequestTool {
             network: payment_result.network.clone(),
             tx_signature,
             status,
-            timestamp: chrono_now(),
+            timestamp: chrono::Utc::now(),
             session_id: String::new(),
         };
         let _ = ledger::with_ledger_mut(|l| l.record_payment(record(PaymentStatus::Pending, None)));
@@ -266,10 +266,6 @@ impl Tool for X402RequestTool {
         )
         .await)
     }
-}
-
-fn chrono_now() -> chrono::DateTime<chrono::Utc> {
-    chrono::Utc::now()
 }
 
 /// `0.002500 USDC` for `2500`.
