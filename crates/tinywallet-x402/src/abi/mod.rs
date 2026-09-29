@@ -13,6 +13,7 @@
 //! the effort removing.
 
 use crate::eip712::u256_from_decimal;
+use tinywallet_crypto::Error as AddressError;
 
 /// `keccak256("transfer(address,uint256)")[..4]`.
 ///
