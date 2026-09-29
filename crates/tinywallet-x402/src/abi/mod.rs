@@ -13,7 +13,6 @@
 //! the effort removing.
 
 use crate::eip712::u256_from_decimal;
-use tinywallet_crypto::Error as AddressError;
 
 /// `keccak256("transfer(address,uint256)")[..4]`.
 ///
@@ -77,10 +76,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// // Selector plus two 32-byte words, hex-encoded, plus the `0x`.
 /// assert_eq!(data.len(), 2 + 8 + 128);
 /// # }
-/// # Ok::<(), tinywallet_bus::abi::Error>(())
+/// # Ok::<(), tinywallet_x402::abi::Error>(())
 /// ```
 pub fn encode_erc20_transfer(to: &str, amount: &str) -> Result<String> {
-    let recipient = crate::address::evm::validate(to).map_err(|e| Error::InvalidRecipient {
+    let recipient = tinywallet_crypto::address::evm::validate(to).map_err(|e| Error::InvalidRecipient {
         reason: e.to_string(),
     })?;
     let bytes = decode_evm_address(&recipient)?;
