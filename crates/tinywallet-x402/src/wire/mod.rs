@@ -31,6 +31,8 @@
 //!
 //! [CAIP-2]: https://chainagnostic.org/CAIPs/caip-2
 
+#[cfg(test)]
+mod test;
 mod types;
 
 pub use types::{

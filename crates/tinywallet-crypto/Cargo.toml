@@ -32,10 +32,9 @@ bech32 = { version = "0.12", optional = true }
 sha2 = { version = "0.11", optional = true }
 # Keccak-256 for EIP-55 checksums on EVM addresses.
 #
-# PINNED TO 0.10, and not by accident — do not let dependabot move it. The root
-# crate's `coins-bip32` line depends on `sha3` 0.10 and is not going to move, so
-# 0.10 is already in the graph of any consumer that also takes the root crate
-# with `key`. Asking for 0.12 here does not replace it, it ADDS a second copy.
+# Pinned to 0.12. The root crate's `coins-bip32` still depends on `sha3` 0.10,
+# so a consumer that also enables the root crate's `key` feature resolves both
+# 0.10 and 0.12; this pin does not remove that second copy.
 sha3 = { version = "0.12", optional = true }
 # Async trait methods for the `Transport` seam in `src/rpc/`. Rust cannot yet
 # express an object-safe async trait natively, and `Transport` must be
@@ -81,7 +80,7 @@ asset = ["btc", "evm", "solana", "tron"]
 # The half of transaction handling that reads and checks bytes rather than
 # producing signatures: `tx::proto` (the structural protobuf reader) and the
 # verification half of `tx::tron`.
-tx-codec = ["dep:sha2", "serde"]
+tx-codec = ["dep:sha2", "serde", "tron"]
 
 [lints]
 workspace = true
