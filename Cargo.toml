@@ -35,6 +35,7 @@ members = [
     "crates/tinywallet-crypto",
     "crates/tinywallet-x402",
     "crates/tinywallet-bus",
+    "crates/tinywallet-web3",
     "crates/tinywallet-module",
 ]
 default-members = [
@@ -42,12 +43,22 @@ default-members = [
     "crates/tinywallet-crypto",
     "crates/tinywallet-x402",
     "crates/tinywallet-bus",
+    "crates/tinywallet-web3",
     "crates/tinywallet-module",
 ]
 # The vendored bus is a submodule with its own workspace; it must not be pulled
 # into this one.
 exclude = ["vendor/tinybus"]
 resolver = "3"
+
+[workspace.dependencies]
+# The shared agent `Tool` trait, for the `tools` features of `tinywallet-x402`
+# and `tinywallet-web3`. A git source rather than a path on purpose, matching
+# tinymcp: a host that already links tinytools (OpenHuman, through
+# tinyagents) patches this exact URL to its own copy, so the two unify into
+# one package and `tinytools::Tool` stays one type. Keep the rev equal to the
+# tinytools gitlink tinyagents pins.
+tinytools = { git = "https://github.com/tinyhumansai/tinytools", rev = "82c0d975e2667e1c525afe525006134431641785" }
 
 [dependencies]
 # The wire contract. Split out so a host that has moved signing into the

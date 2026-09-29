@@ -44,6 +44,12 @@ eip712 = ["dep:sha3", "dep:thiserror"]
 # ERC-20 `transfer` calldata. Needs EVM address validation and EIP-55 checksums
 # from the crypto crate, and the uint256 helpers from `eip712`.
 abi = ["eip712", "dep:tinywallet-crypto", "tinywallet-crypto/evm", "tinywallet-crypto/keccak"]
+# Paying a 402 challenge: header codec, client, and EVM/Solana payment builders.
+pay = []
+# The rail-neutral spending ledger.
+ledger = []
+# The `x402_request` agent tool.
+tools = []
 
 [lints]
 workspace = true
