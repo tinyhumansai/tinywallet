@@ -272,3 +272,6 @@ pub(crate) fn challenge(accepts: Vec<PaymentRequirements>) -> PaymentRequired {
 pub(crate) fn challenge_header(challenge: &PaymentRequired) -> String {
     B64.encode(serde_json::to_vec(challenge).unwrap())
 }
+
+mod server;
+pub(crate) use server::{RecordedRequest, ServerConfig, TestServer};
