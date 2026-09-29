@@ -8,7 +8,7 @@
 //! The tool owns no wallet and no proxy configuration. It is built from the
 //! same seams the rest of the crate uses: a [`PaymentSigner`] and a
 //! [`Transport`] for the crypto rail (or any [`PaymentBuilder`]), and a
-//! [`ProxyPolicy`] for its outbound HTTP.
+//! [`ProxyPolicy`](crate::protocol::ProxyPolicy) for its outbound HTTP.
 //!
 //! [`PaymentSigner`]: crate::crypto::PaymentSigner
 //! [`Transport`]: tinywallet_crypto::rpc::Transport
