@@ -51,21 +51,24 @@ jobs:
 
       # The host-linked crates must stay free of every signing and key
       # derivation library, so a host that takes them links no native build.
-      # `cargo tree -i` exits non-zero when the package is not in the graph,
+      # `cargo tree -i` prints an inverse tree on stdout when the package is a
+      # normal (non-dev) dependency, and nothing otherwise. Its exit status is
+      # not a signal: it is non-zero for a package absent from the lockfile but
+      # zero ("nothing to print") for one that only a dev-dependency pulls in,
       # which is the passing case. The root crate is the positive control: if it
       # ever stopped reporting `bitcoin` the guard below would pass vacuously.
       - name: Host-linked crates pull no signing stack
         shell: bash
         run: |
           set -euo pipefail
-          if ! cargo tree -e normal -i bitcoin -p tinywallet --all-features >/dev/null 2>&1; then
+          if [ -z "$(cargo tree -e normal -i bitcoin -p tinywallet --all-features 2>/dev/null)" ]; then
             echo "control failed: tinywallet no longer depends on bitcoin, so this guard proves nothing" >&2
             exit 1
           fi
           status=0
           for crate in tinywallet-crypto tinywallet-x402 tinywallet-bus tinywallet-web3; do
             for dep in bitcoin k256 coins-bip32 coins-bip39; do
-              if cargo tree -e normal -i "$dep" -p "$crate" --all-features >/dev/null 2>&1; then
+              if [ -n "$(cargo tree -e normal -i "$dep" -p "$crate" --all-features 2>/dev/null)" ]; then
                 echo "$crate depends on $dep; it must stay signing-free" >&2
                 status=1
               fi
