@@ -54,7 +54,7 @@ bs58 = "0.5"
 base64 = "0.22"
 # SHA-256 for the Solana program-derived-address search that names an
 # Associated Token Account.
-sha2 = "0.10"
+sha2 = "0.11"
 # Ed25519 point decompression: a program-derived address must be *off* the
 # curve, and this is the only place that check is needed. Default features off
 # and only `alloc`, so no signing code comes with it.
