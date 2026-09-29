@@ -37,7 +37,7 @@ pub use types::{
 };
 pub use validate::{hex_to_bytes, hex_to_u128, u128_to_hex};
 
-pub(crate) use validate::{format_amount, validate_address, validate_amount, validate_calldata};
+pub(crate) use validate::validate_calldata;
 
 /// Log prefix shared by the execution modules.
 const LOG_PREFIX: &str = "[wallet]";

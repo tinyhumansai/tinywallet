@@ -6,18 +6,20 @@ use serde_json::{Value, json};
 use crate::crypto::execution::{TxLookupInfo, TxReceiptInfo, TxState, TxStatusInfo};
 use crate::crypto::wallet::{WalletChain, WalletEngine};
 
+#[derive(Deserialize)]
+struct StatusResp {
+    value: Vec<Option<SigStatus>>,
+}
+
+#[derive(Deserialize)]
+struct SigStatus {
+    slot: u64,
+    confirmations: Option<u64>,
+    err: Option<Value>,
+}
+
 /// `getSignatureStatuses` to a normalized status.
 pub(crate) async fn tx_status(engine: &WalletEngine, hash: &str) -> Result<TxStatusInfo, String> {
-    #[derive(Deserialize)]
-    struct StatusResp {
-        value: Vec<Option<SigStatus>>,
-    }
-    #[derive(Deserialize)]
-    struct SigStatus {
-        slot: u64,
-        confirmations: Option<u64>,
-        err: Option<Value>,
-    }
     let resp: StatusResp = engine
         .rpc_call(
             WalletChain::Solana,

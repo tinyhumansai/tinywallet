@@ -65,7 +65,7 @@ pub enum EvmNetwork {
     ArbitrumOne,
     /// Optimism.
     OptimismMainnet,
-    /// Polygon PoS.
+    /// Polygon `PoS`.
     PolygonMainnet,
     /// BNB Smart Chain.
     BscMainnet,
@@ -82,7 +82,7 @@ impl EvmNetwork {
         Self::BscMainnet,
     ];
 
-    /// The snake_case machine name, matching the serde representation.
+    /// The `snake_case` machine name, matching the serde representation.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {

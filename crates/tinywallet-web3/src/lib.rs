@@ -1,6 +1,6 @@
 //! Wallet, swap, bridge and dapp flows for `TinyWallet`, behind host seams.
 //!
-//! This crate is the logic that used to live in the OpenHuman host: balances,
+//! This crate is the logic that used to live in the `OpenHuman` host: balances,
 //! transfers, transaction lookups, swaps, bridges and generic contract calls,
 //! each as a prepare-then-confirm flow. It holds no key, no HTTP client and no
 //! configuration. A host implements the seams and hands over an engine.

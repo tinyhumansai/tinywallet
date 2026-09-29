@@ -38,6 +38,16 @@ use wire::{
 const LOG_PREFIX: &str = "[wallet::sol]";
 
 #[derive(Debug, Deserialize)]
+struct BalanceResult {
+    value: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct AccountInfoResponse {
+    value: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
 struct BlockhashResponse {
     value: BlockhashValue,
 }
@@ -60,10 +70,6 @@ pub(crate) fn validate_solana_address(addr: &str) -> Result<String, String> {
 /// Native balance of `address`, in lamports.
 pub(crate) async fn native_balance(engine: &WalletEngine, address: &str) -> Result<u128, String> {
     validate_solana_address(address)?;
-    #[derive(Deserialize)]
-    struct BalanceResult {
-        value: u64,
-    }
     let result: BalanceResult = engine
         .rpc_call(WalletChain::Solana, "getBalance", json!([address]))
         .await?;
@@ -111,10 +117,6 @@ async fn solana_sign(engine: &WalletEngine, message: &[u8]) -> Result<[u8; 64], 
 /// Best-effort `getAccountInfo` check: `Ok(true)` when the account exists,
 /// `Ok(false)` when the RPC reports `value: null`, or the transport error.
 async fn account_exists(engine: &WalletEngine, address_b58: &str) -> Result<bool, String> {
-    #[derive(Deserialize)]
-    struct AccountInfoResponse {
-        value: serde_json::Value,
-    }
     let resp: AccountInfoResponse = engine
         .rpc_call(
             WalletChain::Solana,

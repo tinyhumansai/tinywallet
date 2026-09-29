@@ -24,7 +24,7 @@ use crate::crypto::execution::{
 use crate::crypto::wallet::{WalletChain, WalletEngine};
 
 const LOG_PREFIX: &str = "[wallet::tron]";
-/// Fixed TRC20 `fee_limit` (15 TRX = 15_000_000 SUN). A safe upper bound.
+/// Fixed `TRC20` `fee_limit` (15 TRX = `15_000_000` SUN). A safe upper bound.
 const TRC20_FEE_LIMIT_SUN: u64 = 15_000_000;
 
 fn accepted(result: &Result<String, String>) -> &'static str {

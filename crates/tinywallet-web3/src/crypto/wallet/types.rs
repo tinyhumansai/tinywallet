@@ -72,6 +72,9 @@ pub struct WalletAccount {
 
 /// What a host reports about the wallet: whether it is set up, and its
 /// accounts.
+// The four flags are the wire shape hosts already serialize to the frontend;
+// folding them into an enum would change the JSON.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WalletStatus {

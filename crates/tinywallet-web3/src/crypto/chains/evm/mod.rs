@@ -243,7 +243,7 @@ fn receipt_success(receipt: &Value) -> Option<bool> {
     receipt
         .get("status")
         .and_then(Value::as_str)
-        .map(|s| hex_to_u128(s).is_ok_and(|v| v != 0) || hex_to_u128(s).is_err())
+        .map(|s| !matches!(hex_to_u128(s), Ok(0)))
 }
 
 fn block_number_of(receipt: &Value) -> Option<u64> {
