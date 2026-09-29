@@ -107,7 +107,7 @@ pub(super) async fn build_solana_payment(
     ];
 
     let blockhash = fetch_recent_blockhash(transport).await?;
-    let message = encode_legacy_message(&header, &account_keys, &blockhash, &instructions);
+    let message = encode_legacy_message(header, &account_keys, &blockhash, &instructions);
 
     // Wire format: 2 signature slots; slot 0 (the fee payer) is left zeroed for
     // the facilitator and only ours (slot 1) is filled.
@@ -263,7 +263,7 @@ fn encode_instruction(ins: &Instruction) -> Vec<u8> {
 }
 
 fn encode_legacy_message(
-    header: &[u8; 3],
+    header: [u8; 3],
     account_keys: &[[u8; 32]],
     recent_blockhash: &[u8; 32],
     instructions: &[Instruction],

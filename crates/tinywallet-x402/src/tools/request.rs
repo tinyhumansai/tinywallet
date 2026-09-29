@@ -72,11 +72,11 @@ impl Tool for X402RequestTool {
         ToolExposure::Deferred
     }
 
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "x402_request"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Make an HTTP request to an x402-payable API endpoint. Automatically handles the \
          HTTP 402 payment challenge by signing a payment (EVM EIP-3009 on Base/Ethereum, or \
          Solana SPL transfer) with the wallet and retrying with the payment proof. \
@@ -126,43 +126,76 @@ impl Tool for X402RequestTool {
         args: serde_json::Value,
         _options: ToolCallOptions,
     ) -> anyhow::Result<ToolResult> {
-        let Some(url) = args.get("url").and_then(|v| v.as_str()).map(String::from) else {
-            return Ok(ToolResult::error("Missing required 'url' parameter"));
-        };
+        Ok(match Call::parse(&args) {
+            Ok(call) => self.run(&call).await,
+            Err(refusal) => ToolResult::error(refusal),
+        })
+    }
+}
 
+/// One parsed `x402_request` invocation.
+struct Call {
+    url: String,
+    method: reqwest::Method,
+    headers: Vec<(String, String)>,
+    body: Option<String>,
+}
+
+impl Call {
+    /// Read the arguments, or the refusal message to hand back to the model.
+    fn parse(args: &serde_json::Value) -> Result<Self, String> {
+        let Some(url) = args.get("url").and_then(|v| v.as_str()).map(String::from) else {
+            return Err("Missing required 'url' parameter".to_string());
+        };
         let method_str = args.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
         let Ok(method) = method_str.parse::<reqwest::Method>() else {
-            return Ok(ToolResult::error(format!(
-                "Unsupported HTTP method: {method_str}"
-            )));
+            return Err(format!("Unsupported HTTP method: {method_str}"));
         };
+        Ok(Self {
+            url,
+            method,
+            headers: parse_header_args(args.get("headers")),
+            body: args.get("body").and_then(|v| v.as_str()).map(String::from),
+        })
+    }
 
-        let headers = parse_header_args(args.get("headers"));
-        let body = args.get("body").and_then(|v| v.as_str()).map(String::from);
+    async fn send(
+        &self,
+        client: &reqwest::Client,
+        extra_headers: Option<(&str, &str)>,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        send_request(
+            client,
+            &self.method,
+            &self.url,
+            &self.headers,
+            extra_headers,
+            self.body.as_deref(),
+        )
+        .await
+    }
+}
 
-        debug!("{LOG_PREFIX} requesting {method} {url}");
+impl X402RequestTool {
+    /// The whole loop: ask, and if the answer is a 402, pay and ask again.
+    async fn run(&self, call: &Call) -> ToolResult {
+        debug!("{LOG_PREFIX} requesting {} {}", call.method, call.url);
 
         // Step 1: initial request to get the 402 challenge.
         let client = match self.build_client() {
             Ok(c) => c,
-            Err(e) => {
-                return Ok(ToolResult::error(format!(
-                    "Failed to build HTTP client: {e}"
-                )));
-            }
+            Err(e) => return ToolResult::error(format!("Failed to build HTTP client: {e}")),
         };
-
-        let initial_response =
-            match send_request(&client, &method, &url, &headers, body.as_deref()).await {
-                Ok(r) => r,
-                Err(e) => return Ok(ToolResult::error(format!("Initial request failed: {e}"))),
-            };
+        let initial_response = match call.send(&client, None).await {
+            Ok(r) => r,
+            Err(e) => return ToolResult::error(format!("Initial request failed: {e}")),
+        };
 
         // Not a 402: return it directly.
         if initial_response.status() != reqwest::StatusCode::PAYMENT_REQUIRED {
             let status = initial_response.status().as_u16();
             debug!("{LOG_PREFIX} got {status} (not 402), returning directly");
-            return Ok(format_response(initial_response, &url).await);
+            return format_response(initial_response, &call.url).await;
         }
 
         // Step 2: the challenge must be there.
@@ -170,36 +203,48 @@ impl Tool for X402RequestTool {
         if initial_headers.get(HEADER_PAYMENT_REQUIRED).is_none()
             && initial_headers.get(HEADER_PAYMENT_REQUIRED_V1).is_none()
         {
-            return Ok(ToolResult::error(
+            return ToolResult::error(
                 "Server returned 402 but without a PAYMENT-REQUIRED header — not an x402 endpoint",
-            ));
+            );
         }
-
         debug!("{LOG_PREFIX} got 402 with PAYMENT-REQUIRED header, processing payment");
 
-        // Step 3: build and sign the payment.
-        let payment_result =
-            match handle_402_and_pay(self.payments.as_ref(), &initial_headers, &url).await {
-                Ok(r) => r,
-                Err(e) => return Ok(ToolResult::error(format!("x402 payment failed: {e}"))),
-            };
+        self.pay_and_retry(call, &client, &initial_headers).await
+    }
 
-        let amount_display = format_usdc(payment_result.amount_atomic);
+    /// Steps 3 to 6: build and sign the payment, record it, retry with the
+    /// proof, settle the record and format the answer.
+    async fn pay_and_retry(
+        &self,
+        call: &Call,
+        client: &reqwest::Client,
+        challenge_headers: &reqwest::header::HeaderMap,
+    ) -> ToolResult {
+        let url = &call.url;
+
+        // Step 3: build and sign the payment.
+        let payment = match handle_402_and_pay(self.payments.as_ref(), challenge_headers, url).await
+        {
+            Ok(r) => r,
+            Err(e) => return ToolResult::error(format!("x402 payment failed: {e}")),
+        };
+        let amount_display = format_usdc(payment.amount_atomic);
         debug!(
-            "{LOG_PREFIX} payment built: {} to {} on {} for {}",
-            amount_display, payment_result.recipient, payment_result.network, url
+            "{LOG_PREFIX} payment built: {amount_display} to {} on {} for {url}",
+            payment.recipient, payment.network
         );
 
-        // Record the pending payment.
+        // Record the pending payment. Every later state is a new line with the
+        // same id.
         let record_id = uuid::Uuid::new_v4().to_string();
         let record = |status: PaymentStatus, tx_signature: Option<String>| PaymentRecord {
             id: record_id.clone(),
             url: url.clone(),
-            asset: payment_result.asset.clone(),
-            amount_atomic: payment_result.amount_atomic,
+            asset: payment.asset.clone(),
+            amount_atomic: payment.amount_atomic,
             amount_display: amount_display.clone(),
-            recipient: payment_result.recipient.clone(),
-            network: payment_result.network.clone(),
+            recipient: payment.recipient.clone(),
+            network: payment.network.clone(),
             tx_signature,
             status,
             timestamp: chrono::Utc::now(),
@@ -208,22 +253,21 @@ impl Tool for X402RequestTool {
         let _ = ledger::with_ledger_mut(|l| l.record_payment(record(PaymentStatus::Pending, None)));
 
         // Step 4: retry with the payment signature.
-        let mut retry_headers = headers.clone();
-        retry_headers.push((
-            HEADER_PAYMENT_SIGNATURE.to_string(),
-            payment_result.header_value.clone(),
-        ));
-
-        let paid_response =
-            match send_request(&client, &method, &url, &retry_headers, body.as_deref()).await {
-                Ok(r) => r,
-                Err(e) => {
-                    let _ = ledger::with_ledger_mut(|l| {
-                        l.record_payment(record(PaymentStatus::Failed, None));
-                    });
-                    return Ok(ToolResult::error(format!("x402 retry request failed: {e}")));
-                }
-            };
+        let paid_response = match call
+            .send(
+                client,
+                Some((HEADER_PAYMENT_SIGNATURE, payment.header_value.as_str())),
+            )
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = ledger::with_ledger_mut(|l| {
+                    l.record_payment(record(PaymentStatus::Failed, None));
+                });
+                return ToolResult::error(format!("x402 retry request failed: {e}"));
+            }
+        };
 
         // Step 5: read the settlement response and update the ledger.
         let settled_status = if paid_response.status().is_success() {
@@ -231,7 +275,6 @@ impl Tool for X402RequestTool {
         } else {
             PaymentStatus::Failed
         };
-
         let tx_sig = paid_response
             .headers()
             .get(HEADER_PAYMENT_RESPONSE)
@@ -239,16 +282,12 @@ impl Tool for X402RequestTool {
             .and_then(|b64| B64.decode(b64).ok())
             .and_then(|bytes| serde_json::from_slice::<SettlementResponse>(&bytes).ok())
             .and_then(|r| (r.success && !r.transaction.is_empty()).then_some(r.transaction));
-
         let _ = ledger::with_ledger_mut(|l| {
             l.record_payment(record(settled_status, tx_sig.clone()));
         });
 
         if settled_status == PaymentStatus::Settled {
-            debug!(
-                "{LOG_PREFIX} payment settled for {url} tx={:?} amount={}",
-                tx_sig, amount_display
-            );
+            debug!("{LOG_PREFIX} payment settled for {url} tx={tx_sig:?} amount={amount_display}");
         } else {
             log::warn!(
                 "{LOG_PREFIX} payment failed for {url} status={}",
@@ -257,14 +296,14 @@ impl Tool for X402RequestTool {
         }
 
         // Step 6: format and return the response with the payment metadata.
-        Ok(format_response_with_payment(
+        format_response_with_payment(
             paid_response,
-            &url,
+            url,
             &amount_display,
-            &payment_result.network,
+            &payment.network,
             tx_sig.as_deref(),
         )
-        .await)
+        .await
     }
 }
 
@@ -290,10 +329,14 @@ async fn send_request(
     method: &reqwest::Method,
     url: &str,
     headers: &[(String, String)],
+    extra_header: Option<(&str, &str)>,
     body: Option<&str>,
 ) -> Result<reqwest::Response, reqwest::Error> {
     let mut request = client.request(method.clone(), url);
     for (key, value) in headers {
+        request = request.header(key, value);
+    }
+    if let Some((key, value)) = extra_header {
         request = request.header(key, value);
     }
     if let Some(body_str) = body {
