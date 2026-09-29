@@ -66,8 +66,8 @@ pub(super) fn decode_shortvec(bytes: &[u8]) -> Result<(u16, usize), String> {
         }
         value |= u32::from(byte & 0x7f) << shift;
         if byte & 0x80 == 0 {
-            let decoded = u16::try_from(value)
-                .map_err(|_| "shortvec exceeds u16 range".to_string())?;
+            let decoded =
+                u16::try_from(value).map_err(|_| "shortvec exceeds u16 range".to_string())?;
             return Ok((decoded, i + 1));
         }
         shift += 7;
@@ -194,7 +194,12 @@ pub(super) fn build_spl_transfer_message(
         accounts: vec![1, 2, 0], // src, dst, owner(signer)
         data,
     };
-    Ok(encode_message(header, &account_keys, &recent_blockhash, &[ins]))
+    Ok(encode_message(
+        header,
+        &account_keys,
+        &recent_blockhash,
+        &[ins],
+    ))
 }
 
 #[cfg(test)]

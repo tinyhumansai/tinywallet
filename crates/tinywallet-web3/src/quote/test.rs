@@ -151,13 +151,19 @@ fn restore_refreshes_the_lifetime() {
     nearly_gone.expires_at_ms = now_ms() + 1;
     store.restore(nearly_gone);
     let taken = store.take_for("q", None).unwrap();
-    assert!(taken.expires_at_ms > now_ms() + 200_000, "lifetime refreshed");
+    assert!(
+        taken.expires_at_ms > now_ms() + 200_000,
+        "lifetime refreshed"
+    );
 }
 
 #[test]
 fn the_execute_schema_requires_the_quote_id_and_confirmation() {
     let schema = execute_tool_schema();
-    assert_eq!(schema["required"], serde_json::json!(["quoteId", "confirmed"]));
+    assert_eq!(
+        schema["required"],
+        serde_json::json!(["quoteId", "confirmed"])
+    );
     assert_eq!(schema["additionalProperties"], false);
 }
 

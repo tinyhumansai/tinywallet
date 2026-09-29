@@ -13,7 +13,10 @@ impl WalletEngine {
     }
 
     /// Resolve the derived account for `chain`.
-    pub(crate) async fn require_account(&self, chain: WalletChain) -> Result<WalletAccount, String> {
+    pub(crate) async fn require_account(
+        &self,
+        chain: WalletChain,
+    ) -> Result<WalletAccount, String> {
         let status = self.accounts.status().await?;
         if !status.configured {
             return Err(WALLET_NOT_CONFIGURED_MESSAGE.to_string());

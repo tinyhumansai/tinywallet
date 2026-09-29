@@ -37,7 +37,11 @@ fn push_bytes_field(out: &mut Vec<u8>, number: u64, value: &[u8]) {
 
 fn tron_raw_contract(kind: u64, type_name: &str, payload: &[u8]) -> String {
     let mut any = Vec::new();
-    push_bytes_field(&mut any, 1, format!("type.googleapis.com/protocol.{type_name}").as_bytes());
+    push_bytes_field(
+        &mut any,
+        1,
+        format!("type.googleapis.com/protocol.{type_name}").as_bytes(),
+    );
     push_bytes_field(&mut any, 2, payload);
     let mut contract = Vec::new();
     push_varint_field(&mut contract, 1, kind);
@@ -76,7 +80,12 @@ fn trc20_raw_with_values(
 }
 
 fn trc20_raw(contract_hex: &str, parameter_hex: &str) -> String {
-    trc20_raw_with_values(contract_hex, parameter_hex, Some(0), Some(TRC20_FEE_LIMIT_SUN))
+    trc20_raw_with_values(
+        contract_hex,
+        parameter_hex,
+        Some(0),
+        Some(TRC20_FEE_LIMIT_SUN),
+    )
 }
 
 fn created(raw: &str) -> Value {
@@ -98,8 +107,12 @@ fn tron_quote(kind: PreparedKind) -> crate::crypto::execution::PreparedTransacti
 /// succeeds.
 fn script_native(rig: &Rig, amount: u64) {
     let raw = native_raw(&tron_address_to_hex(RECIPIENT).unwrap(), amount);
-    rig.transport.on_post("wallet/createtransaction", &created(&raw).to_string());
-    rig.transport.on_post("wallet/broadcasttransaction", &json!({"result": true, "txid": "ab".repeat(32)}).to_string());
+    rig.transport
+        .on_post("wallet/createtransaction", &created(&raw).to_string());
+    rig.transport.on_post(
+        "wallet/broadcasttransaction",
+        &json!({"result": true, "txid": "ab".repeat(32)}).to_string(),
+    );
 }
 
 // ── addresses and encoding ───────────────────────────────────────────────
@@ -130,9 +143,16 @@ fn the_trc20_parameter_pads_the_address_and_the_amount() {
     let to_hex = tron_address_to_hex(RECIPIENT).unwrap();
     let param = encode_trc20_transfer_param(&to_hex, 12345).unwrap();
     assert_eq!(param.len(), 128, "two 32-byte words, hex-encoded");
-    assert!(param.starts_with("000000000000000000000000"), "12-byte zero padding: {param}");
+    assert!(
+        param.starts_with("000000000000000000000000"),
+        "12-byte zero padding: {param}"
+    );
     assert!(param.ends_with("00003039"), "12345 = 0x3039: {param}");
-    assert!(encode_trc20_transfer_param("zz", 1).unwrap_err().starts_with("invalid hex addr"));
+    assert!(
+        encode_trc20_transfer_param("zz", 1)
+            .unwrap_err()
+            .starts_with("invalid hex addr")
+    );
     assert_eq!(
         encode_trc20_transfer_param("41aa", 1).unwrap_err(),
         "expected 21-byte Tron address, got 2"
@@ -166,7 +186,9 @@ fn specs_bind_native_and_trc20_verification_fields() {
     let native = tron_transaction_spec(
         &native_tx,
         RECIPIENT.to_string(),
-        &TronTransfer::Native { amount_sun: 1_000_000 },
+        &TronTransfer::Native {
+            amount_sun: 1_000_000,
+        },
     )
     .unwrap();
     assert_eq!(
@@ -177,7 +199,9 @@ fn specs_bind_native_and_trc20_verification_fields() {
             expected_txid: native_txid,
             // Carried through so the signer re-verifies it against the bytes
             // rather than trusting this side's check.
-            transfer: TronTransfer::Native { amount_sun: 1_000_000 },
+            transfer: TronTransfer::Native {
+                amount_sun: 1_000_000
+            },
         }
     );
 
@@ -189,7 +213,9 @@ fn specs_bind_native_and_trc20_verification_fields() {
         raw_data: json!({}),
         raw_data_hex: token_raw.clone(),
     };
-    let transfer = TronTransfer::Trc20 { parameter_hex: parameter.clone() };
+    let transfer = TronTransfer::Trc20 {
+        parameter_hex: parameter.clone(),
+    };
     let token = tron_transaction_spec(&token_tx, CONTRACT.to_string(), &transfer).unwrap();
     assert_eq!(
         token,
@@ -201,16 +227,26 @@ fn specs_bind_native_and_trc20_verification_fields() {
         }
     );
 
-    assert!(tron_transaction_spec(&native_tx, RECIPIENT.to_string(), &TronTransfer::Native { amount_sun: 2 })
+    assert!(
+        tron_transaction_spec(
+            &native_tx,
+            RECIPIENT.to_string(),
+            &TronTransfer::Native { amount_sun: 2 }
+        )
         .unwrap_err()
-        .contains("different native amount"));
-    assert!(tron_transaction_spec(
-        &token_tx,
-        CONTRACT.to_string(),
-        &TronTransfer::Trc20 { parameter_hex: "02".repeat(64) },
-    )
-    .unwrap_err()
-    .contains("different TRC20 transfer data"));
+        .contains("different native amount")
+    );
+    assert!(
+        tron_transaction_spec(
+            &token_tx,
+            CONTRACT.to_string(),
+            &TronTransfer::Trc20 {
+                parameter_hex: "02".repeat(64)
+            },
+        )
+        .unwrap_err()
+        .contains("different TRC20 transfer data")
+    );
 }
 
 #[test]
@@ -219,11 +255,21 @@ fn a_node_that_alters_call_value_or_fee_limit_is_rejected() {
     let parameter = "01".repeat(64);
     for (raw_data_hex, expected_error) in [
         (
-            trc20_raw_with_values(&contract_hex, &parameter, Some(1), Some(TRC20_FEE_LIMIT_SUN)),
+            trc20_raw_with_values(
+                &contract_hex,
+                &parameter,
+                Some(1),
+                Some(TRC20_FEE_LIMIT_SUN),
+            ),
             "non-zero TRC20 call_value",
         ),
         (
-            trc20_raw_with_values(&contract_hex, &parameter, Some(0), Some(TRC20_FEE_LIMIT_SUN + 1)),
+            trc20_raw_with_values(
+                &contract_hex,
+                &parameter,
+                Some(0),
+                Some(TRC20_FEE_LIMIT_SUN + 1),
+            ),
             "different fee_limit",
         ),
     ] {
@@ -235,7 +281,9 @@ fn a_node_that_alters_call_value_or_fee_limit_is_rejected() {
         let error = tron_transaction_spec(
             &altered,
             CONTRACT.to_string(),
-            &TronTransfer::Trc20 { parameter_hex: parameter.clone() },
+            &TronTransfer::Trc20 {
+                parameter_hex: parameter.clone(),
+            },
         )
         .unwrap_err();
         assert!(error.contains(expected_error), "{error}");
@@ -261,7 +309,9 @@ fn a_matching_value_hidden_in_an_unrelated_field_does_not_satisfy_verification()
     let error = tron_transaction_spec(
         &spoofed,
         RECIPIENT.to_string(),
-        &TronTransfer::Native { amount_sun: 1_000_000 },
+        &TronTransfer::Native {
+            amount_sun: 1_000_000,
+        },
     )
     .unwrap_err();
     assert!(error.contains("requested recipient"), "{error}");
@@ -269,8 +319,17 @@ fn a_matching_value_hidden_in_an_unrelated_field_does_not_satisfy_verification()
 
 #[test]
 fn undecodable_raw_data_is_reported() {
-    let tx = CreateTransactionResponse { tx_id: "x".into(), raw_data: json!({}), raw_data_hex: "zz".into() };
-    let error = tron_transaction_spec(&tx, RECIPIENT.to_string(), &TronTransfer::Native { amount_sun: 1 }).unwrap_err();
+    let tx = CreateTransactionResponse {
+        tx_id: "x".into(),
+        raw_data: json!({}),
+        raw_data_hex: "zz".into(),
+    };
+    let error = tron_transaction_spec(
+        &tx,
+        RECIPIENT.to_string(),
+        &TronTransfer::Native { amount_sun: 1 },
+    )
+    .unwrap_err();
     assert!(error.starts_with("invalid Tron raw_data_hex:"), "{error}");
 }
 
@@ -281,7 +340,9 @@ async fn a_native_transfer_is_built_verified_signed_and_broadcast() {
     let rig = Rig::new();
     script_native(&rig, 1_000_000);
     rig.signer.set_raw(&"11".repeat(65));
-    let result = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer)).await.unwrap();
+    let result = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer))
+        .await
+        .unwrap();
     assert_eq!(result.status, PreparedStatus::Broadcasted);
     assert_eq!(result.transaction_hash, "ab".repeat(32));
     assert_eq!(
@@ -290,18 +351,34 @@ async fn a_native_transfer_is_built_verified_signed_and_broadcast() {
     );
 
     // The node was asked to build it with hex addresses.
-    let create: Value = serde_json::from_str(&rig.transport.posts_to("wallet/createtransaction")[0]).unwrap();
-    assert_eq!(create["owner_address"], tron_address_to_hex(sample_address(WalletChain::Tron)).unwrap());
-    assert_eq!(create["to_address"], tron_address_to_hex(RECIPIENT).unwrap());
+    let create: Value =
+        serde_json::from_str(&rig.transport.posts_to("wallet/createtransaction")[0]).unwrap();
+    assert_eq!(
+        create["owner_address"],
+        tron_address_to_hex(sample_address(WalletChain::Tron)).unwrap()
+    );
+    assert_eq!(
+        create["to_address"],
+        tron_address_to_hex(RECIPIENT).unwrap()
+    );
     assert_eq!(create["amount"], 1_000_000);
-    assert!(rig.transport.posts_to("wallet/triggersmartcontract").is_empty());
+    assert!(
+        rig.transport
+            .posts_to("wallet/triggersmartcontract")
+            .is_empty()
+    );
 
     // The signer got a verified spec, and its signature is what was broadcast.
-    assert!(matches!(&rig.signer.transactions()[0], TransactionSpec::Tron { expected_to, .. } if expected_to == RECIPIENT));
-    let broadcast: Value = serde_json::from_str(&rig.transport.posts_to("wallet/broadcasttransaction")[0]).unwrap();
+    assert!(
+        matches!(&rig.signer.transactions()[0], TransactionSpec::Tron { expected_to, .. } if expected_to == RECIPIENT)
+    );
+    let broadcast: Value =
+        serde_json::from_str(&rig.transport.posts_to("wallet/broadcasttransaction")[0]).unwrap();
     assert_eq!(broadcast["signature"], json!(["11".repeat(65)]));
     assert_eq!(broadcast["visible"], false);
-    assert!(rig.transport.calls().iter().any(|c| matches!(c, Call::RestPost { content_type, .. } if content_type == "application/json")));
+    assert!(rig.transport.calls().iter().any(
+        |c| matches!(c, Call::RestPost { content_type, .. } if content_type == "application/json")
+    ));
 }
 
 #[tokio::test]
@@ -310,17 +387,30 @@ async fn a_trc20_transfer_pays_the_contract_and_carries_the_recipient_in_the_par
     let to_hex = tron_address_to_hex(RECIPIENT).unwrap();
     let parameter = encode_trc20_transfer_param(&to_hex, 5_000_000).unwrap();
     let raw = trc20_raw(&tron_address_to_hex(RECIPIENT).unwrap(), &parameter);
-    rig.transport.on_post("wallet/triggersmartcontract", &json!({"transaction": created(&raw)}).to_string());
-    rig.transport.on_post("wallet/broadcasttransaction", &json!({"result": true}).to_string());
+    rig.transport.on_post(
+        "wallet/triggersmartcontract",
+        &json!({"transaction": created(&raw)}).to_string(),
+    );
+    rig.transport.on_post(
+        "wallet/broadcasttransaction",
+        &json!({"result": true}).to_string(),
+    );
 
-    let result = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::TokenTransfer)).await.unwrap();
+    let result = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::TokenTransfer))
+        .await
+        .unwrap();
 
-    let trigger: Value = serde_json::from_str(&rig.transport.posts_to("wallet/triggersmartcontract")[0]).unwrap();
+    let trigger: Value =
+        serde_json::from_str(&rig.transport.posts_to("wallet/triggersmartcontract")[0]).unwrap();
     assert_eq!(trigger["function_selector"], "transfer(address,uint256)");
     assert_eq!(trigger["parameter"].as_str().unwrap().len(), 128);
     assert_eq!(trigger["fee_limit"], TRC20_FEE_LIMIT_SUN);
     assert_eq!(trigger["call_value"], 0);
-    assert!(rig.transport.posts_to("wallet/createtransaction").is_empty());
+    assert!(
+        rig.transport
+            .posts_to("wallet/createtransaction")
+            .is_empty()
+    );
     // Without a `txid` in the reply, the node-built transaction's id is used.
     assert_eq!(result.transaction_hash, recompute_txid(&raw).unwrap());
 }
@@ -329,13 +419,20 @@ async fn a_trc20_transfer_pays_the_contract_and_carries_the_recipient_in_the_par
 async fn a_node_rejection_is_surfaced_with_its_code_and_message() {
     let rig = Rig::new();
     let raw = native_raw(&tron_address_to_hex(RECIPIENT).unwrap(), 1_000_000);
-    rig.transport.on_post("wallet/createtransaction", &created(&raw).to_string());
+    rig.transport
+        .on_post("wallet/createtransaction", &created(&raw).to_string());
     rig.transport.on_post(
         "wallet/broadcasttransaction",
-        &json!({"result": false, "code": "BANDWIDTH_ERROR", "message": "not enough bandwidth"}).to_string(),
+        &json!({"result": false, "code": "BANDWIDTH_ERROR", "message": "not enough bandwidth"})
+            .to_string(),
     );
-    let err = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer)).await.unwrap_err();
-    assert_eq!(err, "Tron broadcast rejected: code=BANDWIDTH_ERROR message=not enough bandwidth");
+    let err = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer))
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err,
+        "Tron broadcast rejected: code=BANDWIDTH_ERROR message=not enough bandwidth"
+    );
 }
 
 #[tokio::test]
@@ -343,23 +440,41 @@ async fn a_tampering_node_is_caught_before_the_signer_sees_anything() {
     let rig = Rig::new();
     // The node returns a transaction paying 2 sun instead of the requested 1_000_000.
     script_native(&rig, 2);
-    let err = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer)).await.unwrap_err();
+    let err = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer))
+        .await
+        .unwrap_err();
     assert!(err.starts_with("Tron node response rejected:"), "{err}");
-    assert!(rig.signer.transactions().is_empty(), "the signer never saw the decoy");
-    assert!(rig.transport.posts_to("wallet/broadcasttransaction").is_empty());
+    assert!(
+        rig.signer.transactions().is_empty(),
+        "the signer never saw the decoy"
+    );
+    assert!(
+        rig.transport
+            .posts_to("wallet/broadcasttransaction")
+            .is_empty()
+    );
 }
 
 #[tokio::test]
 async fn the_account_the_signer_derives_must_match_the_quote() {
     let rig = Rig::new();
     rig.signer.derive_as(RECIPIENT);
-    let err = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer)).await.unwrap_err();
+    let err = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer))
+        .await
+        .unwrap_err();
     assert_eq!(
         err,
-        format!("Tron key derivation mismatch: derived {RECIPIENT} but expected {}", sample_address(WalletChain::Tron))
+        format!(
+            "Tron key derivation mismatch: derived {RECIPIENT} but expected {}",
+            sample_address(WalletChain::Tron)
+        )
     );
     assert!(rig.transport.calls().is_empty());
-    assert!(rig.signer.calls().contains(&SignerCall::Derive(WalletChain::Tron)));
+    assert!(
+        rig.signer
+            .calls()
+            .contains(&SignerCall::Derive(WalletChain::Tron))
+    );
 }
 
 #[tokio::test]
@@ -367,15 +482,27 @@ async fn quote_input_is_validated_before_any_network_call() {
     let rig = Rig::new();
     let mut bad_amount = tron_quote(PreparedKind::NativeTransfer);
     bad_amount.amount_raw = "many".into();
-    assert!(execute_tron_quote(&rig.engine, bad_amount).await.unwrap_err().starts_with("invalid Tron amount 'many'"));
+    assert!(
+        execute_tron_quote(&rig.engine, bad_amount)
+            .await
+            .unwrap_err()
+            .starts_with("invalid Tron amount 'many'")
+    );
     let mut too_big = tron_quote(PreparedKind::NativeTransfer);
     too_big.amount_raw = u128::MAX.to_string();
     script_native(&rig, 1);
-    assert!(execute_tron_quote(&rig.engine, too_big).await.unwrap_err().contains("exceeds u64"));
+    assert!(
+        execute_tron_quote(&rig.engine, too_big)
+            .await
+            .unwrap_err()
+            .contains("exceeds u64")
+    );
     let mut no_contract = tron_quote(PreparedKind::TokenTransfer);
     no_contract.token_address = None;
     assert_eq!(
-        execute_tron_quote(&rig.engine, no_contract).await.unwrap_err(),
+        execute_tron_quote(&rig.engine, no_contract)
+            .await
+            .unwrap_err(),
         "TRC20 transfer missing token_address"
     );
     let mut bad_contract = tron_quote(PreparedKind::TokenTransfer);
@@ -392,12 +519,20 @@ async fn quote_input_is_validated_before_any_network_call() {
 #[tokio::test]
 async fn transport_failures_are_passed_through() {
     let rig = Rig::new();
-    rig.transport.on_post_unreachable("wallet/createtransaction", "wallet REST POST transport failed: refused");
-    let err = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer)).await.unwrap_err();
+    rig.transport.on_post_unreachable(
+        "wallet/createtransaction",
+        "wallet REST POST transport failed: refused",
+    );
+    let err = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer))
+        .await
+        .unwrap_err();
     assert_eq!(err, "wallet REST POST transport failed: refused");
     let rig = Rig::new();
-    rig.transport.on_post("wallet/createtransaction", "not json");
-    let err = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer)).await.unwrap_err();
+    rig.transport
+        .on_post("wallet/createtransaction", "not json");
+    let err = execute_tron_quote(&rig.engine, tron_quote(PreparedKind::NativeTransfer))
+        .await
+        .unwrap_err();
     assert!(err.starts_with("wallet REST POST decode failed:"), "{err}");
 }
 
@@ -406,16 +541,26 @@ async fn transport_failures_are_passed_through() {
 #[tokio::test]
 async fn balance_reads_sun_and_defaults_an_unfunded_account_to_zero() {
     let rig = Rig::new();
-    rig.transport.on_post("wallet/getaccount", &json!({"balance": 3_000_000u64}).to_string());
-    assert_eq!(native_balance(&rig.engine, RECIPIENT).await.unwrap(), 3_000_000);
-    let body: Value = serde_json::from_str(&rig.transport.posts_to("wallet/getaccount")[0]).unwrap();
+    rig.transport.on_post(
+        "wallet/getaccount",
+        &json!({"balance": 3_000_000u64}).to_string(),
+    );
+    assert_eq!(
+        native_balance(&rig.engine, RECIPIENT).await.unwrap(),
+        3_000_000
+    );
+    let body: Value =
+        serde_json::from_str(&rig.transport.posts_to("wallet/getaccount")[0]).unwrap();
     assert_eq!(body["address"], tron_address_to_hex(RECIPIENT).unwrap());
     assert_eq!(body["visible"], false);
     assert!(native_balance(&rig.engine, "nope").await.is_err());
 
     let unfunded = Rig::new();
     unfunded.transport.on_post("wallet/getaccount", "{}");
-    assert_eq!(native_balance(&unfunded.engine, RECIPIENT).await.unwrap(), 0);
+    assert_eq!(
+        native_balance(&unfunded.engine, RECIPIENT).await.unwrap(),
+        0
+    );
 }
 
 #[tokio::test]
@@ -426,43 +571,76 @@ async fn a_mined_transaction_reports_its_result_and_block() {
         &json!({"id": "ab", "blockNumber": 555u64, "receipt": {"result": "SUCCESS", "energy_usage_total": 77u64}, "fee": 1100u64}).to_string(),
     );
     let status = tx_status(&rig.engine, "ab").await.unwrap();
-    assert_eq!((status.state, status.block_number), (TxState::Confirmed, Some(555)));
+    assert_eq!(
+        (status.state, status.block_number),
+        (TxState::Confirmed, Some(555))
+    );
     let receipt = tx_receipt(&rig.engine, "ab").await.unwrap();
     assert!(receipt.found);
     assert_eq!(receipt.success, Some(true));
     assert_eq!(receipt.fee_raw.as_deref(), Some("1100"));
     assert_eq!(receipt.gas_used.as_deref(), Some("77"));
     assert_eq!(receipt.block_number, Some(555));
-    let body: Value = serde_json::from_str(&rig.transport.posts_to("wallet/gettransactioninfobyid")[0]).unwrap();
+    let body: Value =
+        serde_json::from_str(&rig.transport.posts_to("wallet/gettransactioninfobyid")[0]).unwrap();
     assert_eq!(body, json!({"value": "ab"}));
 }
 
 #[tokio::test]
 async fn a_reverted_contract_call_is_failed_and_a_bare_transfer_is_a_success() {
     let rig = Rig::new();
-    rig.transport.on_post("wallet/gettransactioninfobyid", &json!({"blockNumber": 1u64, "receipt": {"result": "REVERT"}}).to_string());
-    assert_eq!(tx_status(&rig.engine, "x").await.unwrap().state, TxState::Failed);
-    assert_eq!(tx_receipt(&rig.engine, "x").await.unwrap().success, Some(false));
+    rig.transport.on_post(
+        "wallet/gettransactioninfobyid",
+        &json!({"blockNumber": 1u64, "receipt": {"result": "REVERT"}}).to_string(),
+    );
+    assert_eq!(
+        tx_status(&rig.engine, "x").await.unwrap().state,
+        TxState::Failed
+    );
+    assert_eq!(
+        tx_receipt(&rig.engine, "x").await.unwrap().success,
+        Some(false)
+    );
 
     let bare = Rig::new();
-    bare.transport.on_post("wallet/gettransactioninfobyid", &json!({"blockNumber": 1u64}).to_string());
-    assert_eq!(tx_status(&bare.engine, "x").await.unwrap().state, TxState::Confirmed);
-    assert_eq!(tx_receipt(&bare.engine, "x").await.unwrap().success, Some(true));
+    bare.transport.on_post(
+        "wallet/gettransactioninfobyid",
+        &json!({"blockNumber": 1u64}).to_string(),
+    );
+    assert_eq!(
+        tx_status(&bare.engine, "x").await.unwrap().state,
+        TxState::Confirmed
+    );
+    assert_eq!(
+        tx_receipt(&bare.engine, "x").await.unwrap().success,
+        Some(true)
+    );
 }
 
 #[tokio::test]
 async fn an_unmined_transaction_is_pending_when_the_node_knows_it_and_not_found_otherwise() {
     let rig = Rig::new();
     rig.transport.on_post("wallet/gettransactioninfobyid", "{}");
-    rig.transport.on_post("wallet/gettransactionbyid", &json!({"txID": "ab", "raw_data": {}}).to_string());
-    assert_eq!(tx_status(&rig.engine, "ab").await.unwrap().state, TxState::Pending);
+    rig.transport.on_post(
+        "wallet/gettransactionbyid",
+        &json!({"txID": "ab", "raw_data": {}}).to_string(),
+    );
+    assert_eq!(
+        tx_status(&rig.engine, "ab").await.unwrap().state,
+        TxState::Pending
+    );
     let found = lookup_tx(&rig.engine, "ab").await.unwrap();
     assert!(found.found);
     assert!(!tx_receipt(&rig.engine, "ab").await.unwrap().found);
 
     let unknown = Rig::new();
-    unknown.transport.on_post("wallet/gettransactioninfobyid", "{}");
+    unknown
+        .transport
+        .on_post("wallet/gettransactioninfobyid", "{}");
     unknown.transport.on_post("wallet/gettransactionbyid", "{}");
-    assert_eq!(tx_status(&unknown.engine, "ab").await.unwrap().state, TxState::NotFound);
+    assert_eq!(
+        tx_status(&unknown.engine, "ab").await.unwrap().state,
+        TxState::NotFound
+    );
     assert!(!lookup_tx(&unknown.engine, "ab").await.unwrap().found);
 }

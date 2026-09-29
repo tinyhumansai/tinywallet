@@ -9,7 +9,9 @@ use crate::crypto::service::Web3Service;
 use crate::crypto::wallet::{WalletEngine, WalletSeams};
 use crate::seams::QuoteScope;
 
-use super::{FakeBackend, FakeQuoteScope, FakeRpcEndpoints, FakeSigner, FakeTransport, FakeWalletAccounts};
+use super::{
+    FakeBackend, FakeQuoteScope, FakeRpcEndpoints, FakeSigner, FakeTransport, FakeWalletAccounts,
+};
 
 /// A [`WalletEngine`] with a handle on every fake behind it.
 pub(crate) struct Rig {

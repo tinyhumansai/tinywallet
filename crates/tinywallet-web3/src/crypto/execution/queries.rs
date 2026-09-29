@@ -60,10 +60,18 @@ impl WalletEngine {
         let cluster = self.endpoints.solana_cluster();
         let mut assets: Vec<SupportedAsset> = Vec::new();
         for network in EvmNetwork::ALL {
-            assets.extend(evm_asset_catalog(network).into_iter().map(asset_to_supported));
+            assets.extend(
+                evm_asset_catalog(network)
+                    .into_iter()
+                    .map(asset_to_supported),
+            );
         }
         for chain in [WalletChain::Btc, WalletChain::Solana, WalletChain::Tron] {
-            assets.extend(asset_catalog(chain, cluster).into_iter().map(asset_to_supported));
+            assets.extend(
+                asset_catalog(chain, cluster)
+                    .into_iter()
+                    .map(asset_to_supported),
+            );
         }
         debug!("{LOG_PREFIX} supported_assets count={}", assets.len());
         assets
@@ -107,9 +115,7 @@ impl WalletEngine {
         asset_catalog(chain, self.endpoints.solana_cluster())
             .into_iter()
             .find(|value| value.native)
-            .ok_or_else(|| {
-                format!("native asset metadata missing for '{}'", chain.as_str())
-            })
+            .ok_or_else(|| format!("native asset metadata missing for '{}'", chain.as_str()))
     }
 
     /// Live native balances: one row per displayed EVM network plus one each
@@ -164,8 +170,12 @@ impl WalletEngine {
         let chain = account.chain;
         let read = match chain {
             WalletChain::Evm => {
-                evm::evm_balance(self, network.unwrap_or(EvmNetwork::EthereumMainnet), &account.address)
-                    .await
+                evm::evm_balance(
+                    self,
+                    network.unwrap_or(EvmNetwork::EthereumMainnet),
+                    &account.address,
+                )
+                .await
             }
             WalletChain::Btc => btc::native_balance(self, &account.address).await,
             WalletChain::Solana => solana::native_balance(self, &account.address).await,

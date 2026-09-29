@@ -22,9 +22,18 @@ fn amounts_reject_empty_and_non_numeric() {
 
 #[test]
 fn calldata_must_be_prefixed_aligned_hex() {
-    assert_eq!(validate_calldata("deadbeef").unwrap_err(), "calldata must be 0x-prefixed hex");
-    assert_eq!(validate_calldata("0xabc").unwrap_err(), "calldata hex must be byte-aligned");
-    assert_eq!(validate_calldata("0xZZ").unwrap_err(), "calldata contains non-hex characters");
+    assert_eq!(
+        validate_calldata("deadbeef").unwrap_err(),
+        "calldata must be 0x-prefixed hex"
+    );
+    assert_eq!(
+        validate_calldata("0xabc").unwrap_err(),
+        "calldata hex must be byte-aligned"
+    );
+    assert_eq!(
+        validate_calldata("0xZZ").unwrap_err(),
+        "calldata contains non-hex characters"
+    );
     assert_eq!(validate_calldata(" 0xdeadbeef ").unwrap(), "0xdeadbeef");
     assert_eq!(validate_calldata("0x").unwrap(), "0x");
 }
@@ -44,10 +53,22 @@ fn fees_are_a_flat_estimate_per_chain_and_kind() {
     let evm_token = estimated_fee_raw(WalletChain::Evm, PreparedKind::TokenTransfer);
     assert_eq!(evm_native, "630000000000000");
     assert_eq!(evm_token, "1950000000000000");
-    assert_eq!(estimated_fee_raw(WalletChain::Btc, PreparedKind::NativeTransfer), "5000");
-    assert_eq!(estimated_fee_raw(WalletChain::Solana, PreparedKind::TokenTransfer), "5000");
-    assert_eq!(estimated_fee_raw(WalletChain::Tron, PreparedKind::NativeTransfer), "1000000");
-    assert_eq!(estimated_fee_raw(WalletChain::Tron, PreparedKind::TokenTransfer), "15000000");
+    assert_eq!(
+        estimated_fee_raw(WalletChain::Btc, PreparedKind::NativeTransfer),
+        "5000"
+    );
+    assert_eq!(
+        estimated_fee_raw(WalletChain::Solana, PreparedKind::TokenTransfer),
+        "5000"
+    );
+    assert_eq!(
+        estimated_fee_raw(WalletChain::Tron, PreparedKind::NativeTransfer),
+        "1000000"
+    );
+    assert_eq!(
+        estimated_fee_raw(WalletChain::Tron, PreparedKind::TokenTransfer),
+        "15000000"
+    );
 }
 
 #[test]
@@ -64,13 +85,20 @@ fn hex_quantities_round_trip_and_report_the_offending_value() {
 fn hex_bytes_accept_an_optional_prefix() {
     assert_eq!(hex_to_bytes("0xdead").unwrap(), vec![0xde, 0xad]);
     assert_eq!(hex_to_bytes("dead").unwrap(), vec![0xde, 0xad]);
-    assert!(hex_to_bytes("0xd").unwrap_err().contains("invalid hex bytes"));
+    assert!(
+        hex_to_bytes("0xd")
+            .unwrap_err()
+            .contains("invalid hex bytes")
+    );
 }
 
 #[test]
 fn addresses_are_checked_per_chain_and_returned_trimmed() {
     let evm = "0x1111111111111111111111111111111111111111";
-    assert_eq!(validate_address(WalletChain::Evm, &format!(" {evm} ")).unwrap(), evm);
+    assert_eq!(
+        validate_address(WalletChain::Evm, &format!(" {evm} ")).unwrap(),
+        evm
+    );
     assert!(validate_address(WalletChain::Evm, "nope").is_err());
     // Bitcoin uses the recipient rule: any mainnet type is accepted.
     let p2tr = "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr";

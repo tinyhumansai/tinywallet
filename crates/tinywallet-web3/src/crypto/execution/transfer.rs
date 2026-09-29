@@ -4,7 +4,9 @@
 
 use log::debug;
 
-use crate::crypto::defaults::{EvmNetwork, asset_catalog, evm_asset_catalog, find_asset_for_network};
+use crate::crypto::defaults::{
+    EvmNetwork, asset_catalog, evm_asset_catalog, find_asset_for_network,
+};
 use crate::crypto::wallet::{WalletChain, WalletEngine};
 use crate::quote::now_ms;
 

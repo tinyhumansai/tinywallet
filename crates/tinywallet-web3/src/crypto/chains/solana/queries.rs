@@ -63,10 +63,7 @@ async fn get_transaction(engine: &WalletEngine, hash: &str) -> Result<Value, Str
 }
 
 /// `getTransaction` to a normalized receipt with raw passthrough.
-pub(crate) async fn tx_receipt(
-    engine: &WalletEngine,
-    hash: &str,
-) -> Result<TxReceiptInfo, String> {
+pub(crate) async fn tx_receipt(engine: &WalletEngine, hash: &str) -> Result<TxReceiptInfo, String> {
     let tx = get_transaction(engine, hash).await?;
     if tx.is_null() {
         return Ok(TxReceiptInfo {

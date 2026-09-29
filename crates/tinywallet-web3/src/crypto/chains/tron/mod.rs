@@ -28,16 +28,17 @@ const LOG_PREFIX: &str = "[wallet::tron]";
 const TRC20_FEE_LIMIT_SUN: u64 = 15_000_000;
 
 fn accepted(result: &Result<String, String>) -> &'static str {
-    if result.is_ok() { "accepted" } else { "rejected" }
+    if result.is_ok() {
+        "accepted"
+    } else {
+        "rejected"
+    }
 }
 
 /// Validate a Tron mainnet base58check address.
 pub(crate) fn validate_tron_address(addr: &str) -> Result<String, String> {
     let result = tinywallet_crypto::address::tron::validate(addr).map_err(|e| e.to_string());
-    debug!(
-        "{LOG_PREFIX} validate_address result={}",
-        accepted(&result)
-    );
+    debug!("{LOG_PREFIX} validate_address result={}", accepted(&result));
     result
 }
 
@@ -217,8 +218,7 @@ async fn build_transaction(
             validate_tron_address(contract)?;
             let contract_hex = tron_address_to_hex(contract)?;
             let parameter = encode_trc20_transfer_param(to_hex, amount)?;
-            let raw =
-                trigger_trc20_transfer(engine, owner_hex, &contract_hex, &parameter).await?;
+            let raw = trigger_trc20_transfer(engine, owner_hex, &contract_hex, &parameter).await?;
             Ok((
                 contract.to_string(),
                 TronTransfer::Trc20 {
@@ -235,7 +235,10 @@ fn signed_broadcast_body(raw_tx: CreateTransactionResponse, signature_hex: Strin
     let mut body = Map::new();
     body.insert("txID".to_string(), Value::String(raw_tx.tx_id));
     body.insert("raw_data".to_string(), raw_tx.raw_data);
-    body.insert("raw_data_hex".to_string(), Value::String(raw_tx.raw_data_hex));
+    body.insert(
+        "raw_data_hex".to_string(),
+        Value::String(raw_tx.raw_data_hex),
+    );
     body.insert(
         "signature".to_string(),
         Value::Array(vec![Value::String(signature_hex)]),
@@ -407,10 +410,7 @@ pub(crate) async fn tx_status(engine: &WalletEngine, hash: &str) -> Result<TxSta
 }
 
 /// `TronGrid` `/wallet/gettransactioninfobyid` to a normalized receipt.
-pub(crate) async fn tx_receipt(
-    engine: &WalletEngine,
-    hash: &str,
-) -> Result<TxReceiptInfo, String> {
+pub(crate) async fn tx_receipt(engine: &WalletEngine, hash: &str) -> Result<TxReceiptInfo, String> {
     let info = tron_post(
         engine,
         "wallet/gettransactioninfobyid",
@@ -431,7 +431,10 @@ pub(crate) async fn tx_receipt(
         });
     };
     let success = Some(matches!(receipt_result(&info), Some("SUCCESS") | None));
-    let fee_raw = info.get("fee").and_then(Value::as_u64).map(|f| f.to_string());
+    let fee_raw = info
+        .get("fee")
+        .and_then(Value::as_u64)
+        .map(|f| f.to_string());
     let gas_used = info
         .get("receipt")
         .and_then(|r| r.get("energy_usage_total"))

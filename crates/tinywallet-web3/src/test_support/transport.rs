@@ -53,46 +53,70 @@ fn next<T: Clone>(map: &Mutex<HashMap<String, Vec<T>>>, key: &str) -> Option<T> 
 impl FakeTransport {
     /// Answer JSON-RPC `method` with `result`.
     pub(crate) fn on_rpc(&self, method: &str, result: Value) -> &Self {
-        self.rpc.lock().entry(method.to_string()).or_default().push(Ok(result));
+        self.rpc
+            .lock()
+            .entry(method.to_string())
+            .or_default()
+            .push(Ok(result));
         self
     }
 
     /// Answer JSON-RPC `method` with a node error.
     pub(crate) fn on_rpc_error(&self, method: &str, message: &str) -> &Self {
-        self.rpc.lock().entry(method.to_string()).or_default().push(Err(TransportError::Rpc {
-            network: NetworkId::chain(tinywallet_crypto::Chain::Evm),
-            message: message.to_string(),
-        }));
+        self.rpc
+            .lock()
+            .entry(method.to_string())
+            .or_default()
+            .push(Err(TransportError::Rpc {
+                network: NetworkId::chain(tinywallet_crypto::Chain::Evm),
+                message: message.to_string(),
+            }));
         self
     }
 
     /// Answer REST GET `path` with `body`.
     pub(crate) fn on_get(&self, path: &str, body: &str) -> &Self {
-        self.get.lock().entry(path.to_string()).or_default().push(Ok(body.to_string()));
+        self.get
+            .lock()
+            .entry(path.to_string())
+            .or_default()
+            .push(Ok(body.to_string()));
         self
     }
 
     /// Answer REST GET `path` with an error whose message is `message`.
     pub(crate) fn on_get_error(&self, path: &str, message: &str) -> &Self {
-        self.get.lock().entry(path.to_string()).or_default().push(Err(TransportError::Rpc {
-            network: NetworkId::chain(tinywallet_crypto::Chain::Btc),
-            message: message.to_string(),
-        }));
+        self.get
+            .lock()
+            .entry(path.to_string())
+            .or_default()
+            .push(Err(TransportError::Rpc {
+                network: NetworkId::chain(tinywallet_crypto::Chain::Btc),
+                message: message.to_string(),
+            }));
         self
     }
 
     /// Answer REST POST `path` with `body`.
     pub(crate) fn on_post(&self, path: &str, body: &str) -> &Self {
-        self.post.lock().entry(path.to_string()).or_default().push(Ok(body.to_string()));
+        self.post
+            .lock()
+            .entry(path.to_string())
+            .or_default()
+            .push(Ok(body.to_string()));
         self
     }
 
     /// Answer REST POST `path` with an unreachable-endpoint error.
     pub(crate) fn on_post_unreachable(&self, path: &str, message: &str) -> &Self {
-        self.post.lock().entry(path.to_string()).or_default().push(Err(TransportError::Unreachable {
-            network: NetworkId::chain(tinywallet_crypto::Chain::Tron),
-            message: message.to_string(),
-        }));
+        self.post
+            .lock()
+            .entry(path.to_string())
+            .or_default()
+            .push(Err(TransportError::Unreachable {
+                network: NetworkId::chain(tinywallet_crypto::Chain::Tron),
+                message: message.to_string(),
+            }));
         self
     }
 
@@ -114,7 +138,10 @@ impl FakeTransport {
 
     /// The params of the first JSON-RPC call to `method`.
     pub(crate) fn first_rpc(&self, method: &str) -> Option<Value> {
-        self.rpc_calls().into_iter().find(|(m, _)| m == method).map(|(_, p)| p)
+        self.rpc_calls()
+            .into_iter()
+            .find(|(m, _)| m == method)
+            .map(|(_, p)| p)
     }
 
     /// The REST POST bodies sent to `path`.

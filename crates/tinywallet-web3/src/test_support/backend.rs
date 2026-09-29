@@ -46,17 +46,23 @@ impl FakeBackend {
 #[async_trait]
 impl Web3Backend for FakeBackend {
     async fn routes(&self) -> Result<Value, String> {
-        self.requests.lock().push(("routes".to_string(), Value::Null));
+        self.requests
+            .lock()
+            .push(("routes".to_string(), Value::Null));
         Self::answer(&self.routes)
     }
 
     async fn swap_tx(&self, body: &Value) -> Result<Value, String> {
-        self.requests.lock().push(("swap".to_string(), body.clone()));
+        self.requests
+            .lock()
+            .push(("swap".to_string(), body.clone()));
         Self::answer(&self.swap)
     }
 
     async fn bridge_tx(&self, body: &Value) -> Result<Value, String> {
-        self.requests.lock().push(("bridge".to_string(), body.clone()));
+        self.requests
+            .lock()
+            .push(("bridge".to_string(), body.clone()));
         Self::answer(&self.bridge)
     }
 }

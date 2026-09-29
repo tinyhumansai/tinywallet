@@ -62,7 +62,11 @@ pub(crate) fn validate_solana_address(addr: &str) -> Result<String, String> {
     let result = tinywallet_crypto::address::solana::validate(addr).map_err(|e| e.to_string());
     debug!(
         "{LOG_PREFIX} validate_address result={}",
-        if result.is_ok() { "accepted" } else { "rejected" }
+        if result.is_ok() {
+            "accepted"
+        } else {
+            "rejected"
+        }
     );
     result
 }

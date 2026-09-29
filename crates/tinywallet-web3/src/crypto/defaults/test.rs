@@ -16,7 +16,10 @@ const MAINNET: SolanaCluster = SolanaCluster::Mainnet;
 fn asset_catalog_includes_default_erc20s() {
     let evm = asset_catalog(WalletChain::Evm, MAINNET);
     assert!(evm.iter().any(|asset| asset.symbol == "USDC"));
-    assert!(evm.iter().any(|asset| asset.symbol == "ETH" && asset.native));
+    assert!(
+        evm.iter()
+            .any(|asset| asset.symbol == "ETH" && asset.native)
+    );
 }
 
 #[test]
@@ -25,7 +28,11 @@ fn every_native_asset_is_the_only_one_without_a_contract() {
         let catalog = asset_catalog(chain, MAINNET);
         let natives = catalog.iter().filter(|a| a.native).count();
         assert_eq!(natives, 1, "{chain:?} has exactly one native asset");
-        assert!(catalog.iter().all(|a| a.native == a.contract_address.is_none()));
+        assert!(
+            catalog
+                .iter()
+                .all(|a| a.native == a.contract_address.is_none())
+        );
     }
 }
 
@@ -80,9 +87,13 @@ fn every_network_has_distinct_ids_labels_and_explorers() {
     assert_eq!(ids.len(), EvmNetwork::ALL.len());
     for network in EvmNetwork::ALL {
         assert!(network.default_rpc_url().starts_with("https://"));
-        assert!(network.explorer_tx_base().ends_with("/tx/") || network.explorer_tx_base().contains("tx"));
+        assert!(
+            network.explorer_tx_base().ends_with("/tx/")
+                || network.explorer_tx_base().contains("tx")
+        );
         assert_eq!(network.network_label().replace('-', "_"), network.as_str());
-        let round: EvmNetwork = serde_json::from_value(serde_json::json!(network.as_str())).unwrap();
+        let round: EvmNetwork =
+            serde_json::from_value(serde_json::json!(network.as_str())).unwrap();
         assert_eq!(round, network);
     }
 }
@@ -92,17 +103,29 @@ fn network_defaults_lists_all_evm_networks_and_three_other_chains() {
     let endpoints = FakeRpcEndpoints::new();
     endpoints.override_endpoint(WalletChain::Btc, None);
     let defaults = network_defaults(&endpoints);
-    let evm = defaults.iter().filter(|d| d.chain == WalletChain::Evm).count();
+    let evm = defaults
+        .iter()
+        .filter(|d| d.chain == WalletChain::Evm)
+        .count();
     assert_eq!(evm, EvmNetwork::ALL.len());
     for chain in [WalletChain::Btc, WalletChain::Solana, WalletChain::Tron] {
-        assert!(defaults.iter().any(|d| d.chain == chain), "missing {chain:?}");
+        assert!(
+            defaults.iter().any(|d| d.chain == chain),
+            "missing {chain:?}"
+        );
     }
-    let btc = defaults.iter().find(|d| d.chain == WalletChain::Btc).unwrap();
+    let btc = defaults
+        .iter()
+        .find(|d| d.chain == WalletChain::Btc)
+        .unwrap();
     assert_eq!(btc.rpc_source, RpcSource::EnvOverride);
     assert_eq!(btc.rpc_url, "https://rpc.test/btc");
     assert!(!btc.supports_token_transfers);
     assert!(!btc.supports_contract_calls);
-    let tron = defaults.iter().find(|d| d.chain == WalletChain::Tron).unwrap();
+    let tron = defaults
+        .iter()
+        .find(|d| d.chain == WalletChain::Tron)
+        .unwrap();
     assert_eq!(tron.rpc_source, RpcSource::Default);
     assert!(tron.supports_token_transfers);
     let base = defaults
@@ -115,9 +138,13 @@ fn network_defaults_lists_all_evm_networks_and_three_other_chains() {
 
 #[test]
 fn find_asset_for_network_finds_base_usdc() {
-    let usdc =
-        find_asset_for_network(WalletChain::Evm, Some(EvmNetwork::BaseMainnet), "usdc", MAINNET)
-            .unwrap();
+    let usdc = find_asset_for_network(
+        WalletChain::Evm,
+        Some(EvmNetwork::BaseMainnet),
+        "usdc",
+        MAINNET,
+    )
+    .unwrap();
     assert_eq!(usdc.decimals, 6);
     assert_eq!(usdc.evm_network, Some(EvmNetwork::BaseMainnet));
     let eth = find_asset(WalletChain::Evm, " eth ", MAINNET).unwrap();
@@ -128,13 +155,25 @@ fn find_asset_for_network_finds_base_usdc() {
 #[test]
 fn the_solana_cluster_drives_both_the_endpoint_and_the_mint() {
     assert_eq!(MAINNET.rpc_url(), "https://api.mainnet-beta.solana.com");
-    assert_eq!(default_rpc_url(WalletChain::Solana, MAINNET), MAINNET.rpc_url());
+    assert_eq!(
+        default_rpc_url(WalletChain::Solana, MAINNET),
+        MAINNET.rpc_url()
+    );
     let devnet = SolanaCluster::Devnet;
-    assert_eq!(default_rpc_url(WalletChain::Solana, devnet), "https://api.devnet.solana.com");
+    assert_eq!(
+        default_rpc_url(WalletChain::Solana, devnet),
+        "https://api.devnet.solana.com"
+    );
     let main_usdc = find_asset(WalletChain::Solana, "USDC", MAINNET).unwrap();
     let dev_usdc = find_asset(WalletChain::Solana, "USDC", devnet).unwrap();
-    assert_eq!(main_usdc.contract_address.as_deref(), Some(MAINNET.usdc_mint()));
-    assert_eq!(dev_usdc.contract_address.as_deref(), Some(devnet.usdc_mint()));
+    assert_eq!(
+        main_usdc.contract_address.as_deref(),
+        Some(MAINNET.usdc_mint())
+    );
+    assert_eq!(
+        dev_usdc.contract_address.as_deref(),
+        Some(devnet.usdc_mint())
+    );
     assert_ne!(main_usdc.contract_address, dev_usdc.contract_address);
 }
 

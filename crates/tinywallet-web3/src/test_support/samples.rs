@@ -70,7 +70,11 @@ pub(crate) fn owner_b() -> QuoteOwner {
 }
 
 /// A prepared quote with the given id, chain and kind, expiring in a minute.
-pub(crate) fn prepared_quote(quote_id: &str, chain: WalletChain, kind: PreparedKind) -> PreparedTransaction {
+pub(crate) fn prepared_quote(
+    quote_id: &str,
+    chain: WalletChain,
+    kind: PreparedKind,
+) -> PreparedTransaction {
     let now = now_ms();
     PreparedTransaction {
         quote_id: quote_id.to_string(),

@@ -45,7 +45,7 @@
 pub mod crypto;
 pub mod quote;
 pub mod seams;
-#[cfg(feature = "tools")]
-pub mod tools;
 #[cfg(test)]
 mod test_support;
+#[cfg(feature = "tools")]
+pub mod tools;

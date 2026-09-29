@@ -12,7 +12,10 @@ use crate::test_support::{Rig, configured_status};
 
 #[test]
 fn chains_serialize_as_snake_case_and_map_onto_the_crypto_chain() {
-    assert_eq!(serde_json::to_value(WalletChain::Solana).unwrap(), json!("solana"));
+    assert_eq!(
+        serde_json::to_value(WalletChain::Solana).unwrap(),
+        json!("solana")
+    );
     let parsed: WalletChain = serde_json::from_value(json!("tron")).unwrap();
     assert_eq!(parsed, WalletChain::Tron);
     for chain in WalletChain::ALL {
@@ -63,8 +66,14 @@ fn transport_messages_pass_through_without_the_network_prefix() {
         network,
         message: "wallet REST GET HTTP failure: status=404 body=nope".to_string(),
     };
-    assert_eq!(transport_message(unreachable), "wallet REST GET transport failed: refused");
-    assert_eq!(transport_message(rpc), "wallet REST GET HTTP failure: status=404 body=nope");
+    assert_eq!(
+        transport_message(unreachable),
+        "wallet REST GET transport failed: refused"
+    );
+    assert_eq!(
+        transport_message(rpc),
+        "wallet REST GET HTTP failure: status=404 body=nope"
+    );
 }
 
 #[test]

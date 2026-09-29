@@ -53,7 +53,11 @@ pub(crate) const fn estimated_btc_fee_sats() -> u64 {
 }
 
 fn accepted(result: &Result<String, String>) -> &'static str {
-    if result.is_ok() { "accepted" } else { "rejected" }
+    if result.is_ok() {
+        "accepted"
+    } else {
+        "rejected"
+    }
 }
 
 /// Generic BTC address validation: any well-formed mainnet address is fine.
@@ -71,8 +75,7 @@ pub(crate) fn validate_btc_address(addr: &str) -> Result<String, String> {
 /// derive and sign for native segwit (`bc1q…`). Using the recipient rule for a
 /// sender would accept an address that only fails later, at signing time.
 pub(crate) fn validate_btc_sender_address(addr: &str) -> Result<String, String> {
-    let result =
-        tinywallet_crypto::address::btc::validate_sender(addr).map_err(|e| e.to_string());
+    let result = tinywallet_crypto::address::btc::validate_sender(addr).map_err(|e| e.to_string());
     debug!(
         "{LOG_PREFIX} validate_address role=sender result={}",
         accepted(&result)
@@ -214,7 +217,12 @@ fn is_not_found(error: &str) -> bool {
     error.contains("status=404")
 }
 
-fn status_row(hash: &str, state: TxState, confirmations: Option<u64>, block: Option<u64>) -> TxStatusInfo {
+fn status_row(
+    hash: &str,
+    state: TxState,
+    confirmations: Option<u64>,
+    block: Option<u64>,
+) -> TxStatusInfo {
     TxStatusInfo {
         chain: WalletChain::Btc,
         evm_network: None,
@@ -237,7 +245,10 @@ pub(crate) async fn tx_status(engine: &WalletEngine, hash: &str) -> Result<TxSta
         Err(e) if is_not_found(&e) => return Ok(status_row(hash, TxState::NotFound, None, None)),
         Err(e) => return Err(e),
     };
-    let confirmed = status.get("confirmed").and_then(Value::as_bool).unwrap_or(false);
+    let confirmed = status
+        .get("confirmed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     if !confirmed {
         return Ok(status_row(hash, TxState::Pending, Some(0), None));
     }
@@ -253,7 +264,12 @@ pub(crate) async fn tx_status(engine: &WalletEngine, hash: &str) -> Result<TxSta
         }
         None => None,
     };
-    Ok(status_row(hash, TxState::Confirmed, confirmations, block_number))
+    Ok(status_row(
+        hash,
+        TxState::Confirmed,
+        confirmations,
+        block_number,
+    ))
 }
 
 /// Esplora `/tx/:txid` to a normalized receipt (fee and confirmed height).

@@ -43,22 +43,34 @@ fn network_defaults_come_from_the_host_endpoints() {
 fn supported_assets_lists_default_erc20s_and_l2() {
     let rig = Rig::new();
     let assets = rig.engine.supported_assets();
-    assert!(assets.iter().any(|a| a.symbol == "USDC" && a.evm_network == Some(EvmNetwork::BaseMainnet)));
+    assert!(
+        assets
+            .iter()
+            .any(|a| a.symbol == "USDC" && a.evm_network == Some(EvmNetwork::BaseMainnet))
+    );
     assert!(assets.iter().any(|a| a.symbol == "ETH" && a.native));
-    assert!(assets.iter().any(|a| a.symbol == "USDT" && a.chain == WalletChain::Tron));
+    assert!(
+        assets
+            .iter()
+            .any(|a| a.symbol == "USDT" && a.chain == WalletChain::Tron)
+    );
 }
 
 #[test]
 fn the_supported_solana_usdc_follows_the_cluster() {
     let rig = Rig::new();
-    rig.endpoints.set_cluster(crate::crypto::defaults::SolanaCluster::Devnet);
+    rig.endpoints
+        .set_cluster(crate::crypto::defaults::SolanaCluster::Devnet);
     let usdc = rig
         .engine
         .supported_assets()
         .into_iter()
         .find(|a| a.chain == WalletChain::Solana && a.symbol == "USDC")
         .unwrap();
-    assert_eq!(usdc.contract_address.as_deref(), Some("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"));
+    assert_eq!(
+        usdc.contract_address.as_deref(),
+        Some("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU")
+    );
 }
 
 #[tokio::test]
@@ -72,10 +84,16 @@ async fn chain_status_reports_missing_providers_without_accounts() {
     let btc = rows.iter().find(|r| r.chain == WalletChain::Btc).unwrap();
     assert!(!btc.configured);
     assert_eq!(btc.provider_status, ProviderStatus::Missing);
-    let base = rows.iter().find(|r| r.evm_network == Some(EvmNetwork::BaseMainnet)).unwrap();
+    let base = rows
+        .iter()
+        .find(|r| r.evm_network == Some(EvmNetwork::BaseMainnet))
+        .unwrap();
     assert!(base.configured);
     assert_eq!(base.rpc_url, "https://rpc.test/base_mainnet");
-    let sol = rows.iter().find(|r| r.chain == WalletChain::Solana).unwrap();
+    let sol = rows
+        .iter()
+        .find(|r| r.chain == WalletChain::Solana)
+        .unwrap();
     assert_eq!(sol.provider_status, ProviderStatus::Ready);
 }
 
@@ -83,14 +101,18 @@ async fn chain_status_reports_missing_providers_without_accounts() {
 async fn chain_status_surfaces_a_host_failure() {
     let rig = Rig::new();
     rig.accounts.set(Err("keyring locked".to_string()));
-    assert_eq!(rig.engine.chain_status().await.unwrap_err(), "keyring locked");
+    assert_eq!(
+        rig.engine.chain_status().await.unwrap_err(),
+        "keyring locked"
+    );
 }
 
 #[tokio::test]
 async fn balances_fan_the_evm_account_into_eth_base_and_bsc_rows() {
     let rig = Rig::new();
     // 1e18 wei on every displayed network.
-    rig.transport.on_rpc("eth_getBalance", json!("0xde0b6b3a7640000"));
+    rig.transport
+        .on_rpc("eth_getBalance", json!("0xde0b6b3a7640000"));
     rig.transport.on_get(
         &format!("address/{}", sample_address(WalletChain::Btc)),
         &json!({
@@ -99,19 +121,35 @@ async fn balances_fan_the_evm_account_into_eth_base_and_bsc_rows() {
         })
         .to_string(),
     );
-    rig.transport.on_rpc("getBalance", json!({"context": {"slot": 1}, "value": 2_500_000_000u64}));
-    rig.transport.on_post("wallet/getaccount", &json!({"balance": 3_000_000u64}).to_string());
+    rig.transport.on_rpc(
+        "getBalance",
+        json!({"context": {"slot": 1}, "value": 2_500_000_000u64}),
+    );
+    rig.transport.on_post(
+        "wallet/getaccount",
+        &json!({"balance": 3_000_000u64}).to_string(),
+    );
 
     let rows = rig.engine.balances().await.unwrap();
 
-    let evm: Vec<_> = rows.iter().filter(|r| r.chain == WalletChain::Evm).collect();
+    let evm: Vec<_> = rows
+        .iter()
+        .filter(|r| r.chain == WalletChain::Evm)
+        .collect();
     assert_eq!(evm.len(), 3, "{evm:?}");
     let networks: Vec<_> = evm.iter().filter_map(|r| r.evm_network).collect();
     assert_eq!(
         networks,
-        vec![EvmNetwork::EthereumMainnet, EvmNetwork::BaseMainnet, EvmNetwork::BscMainnet]
+        vec![
+            EvmNetwork::EthereumMainnet,
+            EvmNetwork::BaseMainnet,
+            EvmNetwork::BscMainnet
+        ]
     );
-    let bnb = evm.iter().find(|r| r.evm_network == Some(EvmNetwork::BscMainnet)).unwrap();
+    let bnb = evm
+        .iter()
+        .find(|r| r.evm_network == Some(EvmNetwork::BscMainnet))
+        .unwrap();
     assert_eq!(bnb.asset_symbol, "BNB");
     assert_eq!(bnb.raw, "1000000000000000000");
     assert_eq!(bnb.formatted, "1.000000000000000000");
@@ -142,59 +180,123 @@ async fn a_failing_provider_yields_a_zero_missing_row_not_an_error() {
 async fn balances_need_a_configured_wallet() {
     let rig = Rig::new();
     rig.accounts.set(Ok(FakeWalletAccounts::unconfigured()));
-    assert_eq!(rig.engine.balances().await.unwrap_err(), WALLET_NOT_CONFIGURED_MESSAGE);
+    assert_eq!(
+        rig.engine.balances().await.unwrap_err(),
+        WALLET_NOT_CONFIGURED_MESSAGE
+    );
 }
 
 #[tokio::test]
 async fn tx_reads_reject_an_empty_hash_and_dispatch_per_chain() {
     let rig = Rig::new();
     for result in [
-        rig.engine.tx_status(WalletChain::Evm, None, "   ").await.map(|_| ()),
-        rig.engine.tx_receipt(WalletChain::Evm, None, "").await.map(|_| ()),
-        rig.engine.lookup_tx(WalletChain::Evm, None, " ").await.map(|_| ()),
+        rig.engine
+            .tx_status(WalletChain::Evm, None, "   ")
+            .await
+            .map(|_| ()),
+        rig.engine
+            .tx_receipt(WalletChain::Evm, None, "")
+            .await
+            .map(|_| ()),
+        rig.engine
+            .lookup_tx(WalletChain::Evm, None, " ")
+            .await
+            .map(|_| ()),
     ] {
         assert_eq!(result.unwrap_err(), "tx hash is empty");
     }
 
-    rig.transport.on_rpc("eth_getTransactionReceipt", Value::Null);
-    rig.transport.on_rpc("eth_getTransactionByHash", json!({"hash": "0xabc"}));
-    let evm = rig.engine.tx_status(WalletChain::Evm, Some(EvmNetwork::BaseMainnet), " 0xabc ").await.unwrap();
+    rig.transport
+        .on_rpc("eth_getTransactionReceipt", Value::Null);
+    rig.transport
+        .on_rpc("eth_getTransactionByHash", json!({"hash": "0xabc"}));
+    let evm = rig
+        .engine
+        .tx_status(WalletChain::Evm, Some(EvmNetwork::BaseMainnet), " 0xabc ")
+        .await
+        .unwrap();
     assert_eq!(evm.hash, "0xabc", "the hash is trimmed");
     assert_eq!(evm.evm_network, Some(EvmNetwork::BaseMainnet));
 
-    rig.transport.on_get("tx/deadbeef/status", &json!({"confirmed": false}).to_string());
-    let btc = rig.engine.tx_status(WalletChain::Btc, None, "deadbeef").await.unwrap();
+    rig.transport.on_get(
+        "tx/deadbeef/status",
+        &json!({"confirmed": false}).to_string(),
+    );
+    let btc = rig
+        .engine
+        .tx_status(WalletChain::Btc, None, "deadbeef")
+        .await
+        .unwrap();
     assert_eq!(btc.chain, WalletChain::Btc);
 
     rig.transport.on_rpc(
         "getSignatureStatuses",
         json!({"context": {"slot": 0}, "value": [null]}),
     );
-    let sol = rig.engine.tx_status(WalletChain::Solana, None, "sig").await.unwrap();
+    let sol = rig
+        .engine
+        .tx_status(WalletChain::Solana, None, "sig")
+        .await
+        .unwrap();
     assert_eq!(sol.chain, WalletChain::Solana);
 
-    rig.transport.on_post("wallet/gettransactioninfobyid", &json!({}).to_string());
-    rig.transport.on_post("wallet/gettransactionbyid", &json!({}).to_string());
-    let tron = rig.engine.tx_receipt(WalletChain::Tron, None, "id").await.unwrap();
+    rig.transport
+        .on_post("wallet/gettransactioninfobyid", &json!({}).to_string());
+    rig.transport
+        .on_post("wallet/gettransactionbyid", &json!({}).to_string());
+    let tron = rig
+        .engine
+        .tx_receipt(WalletChain::Tron, None, "id")
+        .await
+        .unwrap();
     assert!(!tron.found);
-    let looked = rig.engine.lookup_tx(WalletChain::Tron, None, "id").await.unwrap();
+    let looked = rig
+        .engine
+        .lookup_tx(WalletChain::Tron, None, "id")
+        .await
+        .unwrap();
     assert!(!looked.found);
 
     rig.transport.on_rpc("getTransaction", Value::Null);
-    let receipt = rig.engine.tx_receipt(WalletChain::Solana, None, "sig").await.unwrap();
+    let receipt = rig
+        .engine
+        .tx_receipt(WalletChain::Solana, None, "sig")
+        .await
+        .unwrap();
     assert!(!receipt.found);
-    let raw = rig.engine.lookup_tx(WalletChain::Solana, None, "sig").await.unwrap();
+    let raw = rig
+        .engine
+        .lookup_tx(WalletChain::Solana, None, "sig")
+        .await
+        .unwrap();
     assert!(!raw.found);
 
-    rig.transport.on_get("tx/deadbeef", &json!({"txid": "deadbeef"}).to_string());
-    let btc_lookup = rig.engine.lookup_tx(WalletChain::Btc, None, "deadbeef").await.unwrap();
+    rig.transport
+        .on_get("tx/deadbeef", &json!({"txid": "deadbeef"}).to_string());
+    let btc_lookup = rig
+        .engine
+        .lookup_tx(WalletChain::Btc, None, "deadbeef")
+        .await
+        .unwrap();
     assert!(btc_lookup.found);
-    let btc_receipt = rig.engine.tx_receipt(WalletChain::Btc, None, "deadbeef").await.unwrap();
+    let btc_receipt = rig
+        .engine
+        .tx_receipt(WalletChain::Btc, None, "deadbeef")
+        .await
+        .unwrap();
     assert!(btc_receipt.found);
 
-    let evm_receipt = rig.engine.tx_receipt(WalletChain::Evm, None, "0xabc").await.unwrap();
+    let evm_receipt = rig
+        .engine
+        .tx_receipt(WalletChain::Evm, None, "0xabc")
+        .await
+        .unwrap();
     assert!(evm_receipt.found);
-    let evm_lookup = rig.engine.lookup_tx(WalletChain::Evm, None, "0xabc").await.unwrap();
+    let evm_lookup = rig
+        .engine
+        .lookup_tx(WalletChain::Evm, None, "0xabc")
+        .await
+        .unwrap();
     assert!(evm_lookup.found);
 }
 
@@ -203,7 +305,11 @@ async fn tx_reads_reject_an_empty_hash_and_dispatch_per_chain() {
 #[tokio::test]
 async fn prepare_transfer_stamps_a_quote_from_the_wallet_account() {
     let rig = Rig::new();
-    let quote = rig.engine.prepare_transfer(transfer(WalletChain::Evm, "1000")).await.unwrap();
+    let quote = rig
+        .engine
+        .prepare_transfer(transfer(WalletChain::Evm, "1000"))
+        .await
+        .unwrap();
     assert_eq!(quote.kind, PreparedKind::NativeTransfer);
     assert_eq!(quote.from_address, sample_address(WalletChain::Evm));
     assert_eq!(quote.to_address, TO_EVM);
@@ -213,7 +319,11 @@ async fn prepare_transfer_stamps_a_quote_from_the_wallet_account() {
     assert_eq!(quote.status, PreparedStatus::AwaitingConfirmation);
     assert!(quote.quote_id.starts_with("q_"));
     assert!(quote.expires_at_ms > quote.created_at_ms);
-    assert!(quote.notes[0].contains("ethereum-mainnet"), "{:?}", quote.notes);
+    assert!(
+        quote.notes[0].contains("ethereum-mainnet"),
+        "{:?}",
+        quote.notes
+    );
     assert_eq!(rig.engine.prepared_quotes().len(), 1);
     // The owner gate data never leaves the process.
     let wire = serde_json::to_value(&quote).unwrap();
@@ -229,7 +339,10 @@ async fn prepare_transfer_picks_token_assets_and_networks() {
     params.evm_network = Some(EvmNetwork::BaseMainnet);
     let quote = rig.engine.prepare_transfer(params).await.unwrap();
     assert_eq!(quote.kind, PreparedKind::TokenTransfer);
-    assert_eq!(quote.token_address.as_deref(), Some("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"));
+    assert_eq!(
+        quote.token_address.as_deref(),
+        Some("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
+    );
     assert_eq!(quote.evm_network, Some(EvmNetwork::BaseMainnet));
     assert_eq!(quote.estimated_fee_raw, "1950000000000000");
 }
@@ -244,10 +357,18 @@ async fn prepare_transfer_rejects_bad_input() {
         "unsupported asset_symbol 'NOPE' for chain 'evm'"
     );
     assert_eq!(
-        rig.engine.prepare_transfer(transfer(WalletChain::Evm, "0")).await.unwrap_err(),
+        rig.engine
+            .prepare_transfer(transfer(WalletChain::Evm, "0"))
+            .await
+            .unwrap_err(),
         "transfer amount must be greater than zero"
     );
-    assert!(rig.engine.prepare_transfer(transfer(WalletChain::Evm, "x")).await.is_err());
+    assert!(
+        rig.engine
+            .prepare_transfer(transfer(WalletChain::Evm, "x"))
+            .await
+            .is_err()
+    );
     let mut bad_address = transfer(WalletChain::Evm, "1");
     bad_address.to_address = "nope".to_string();
     assert!(rig.engine.prepare_transfer(bad_address).await.is_err());
@@ -259,14 +380,20 @@ async fn prepare_transfer_needs_an_account_for_the_chain() {
     let rig = Rig::new();
     rig.accounts.set(Ok(FakeWalletAccounts::unconfigured()));
     assert_eq!(
-        rig.engine.prepare_transfer(transfer(WalletChain::Evm, "1")).await.unwrap_err(),
+        rig.engine
+            .prepare_transfer(transfer(WalletChain::Evm, "1"))
+            .await
+            .unwrap_err(),
         WALLET_NOT_CONFIGURED_MESSAGE
     );
     let mut status = configured_status();
     status.accounts.retain(|a| a.chain != WalletChain::Evm);
     rig.accounts.set(Ok(status));
     assert_eq!(
-        rig.engine.prepare_transfer(transfer(WalletChain::Evm, "1")).await.unwrap_err(),
+        rig.engine
+            .prepare_transfer(transfer(WalletChain::Evm, "1"))
+            .await
+            .unwrap_err(),
         "no wallet account derived for chain 'evm'"
     );
 }
@@ -279,7 +406,13 @@ async fn prepare_transfer_rejects_token_transfers_on_bitcoin() {
     let mut params = transfer(WalletChain::Btc, "1");
     params.to_address = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string();
     params.asset_symbol = Some("USDT".to_string());
-    assert!(rig.engine.prepare_transfer(params).await.unwrap_err().contains("unsupported asset_symbol"));
+    assert!(
+        rig.engine
+            .prepare_transfer(params)
+            .await
+            .unwrap_err()
+            .contains("unsupported asset_symbol")
+    );
     let mut native = transfer(WalletChain::Btc, "5000");
     native.to_address = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string();
     let quote = rig.engine.prepare_transfer(native).await.unwrap();
@@ -291,7 +424,11 @@ async fn prepare_transfer_rejects_token_transfers_on_bitcoin() {
 async fn prepare_stamps_the_owner_the_scope_reports() {
     let rig = Rig::new();
     rig.scope.set(Some(owner_a()));
-    let quote = rig.engine.prepare_transfer(transfer(WalletChain::Evm, "1000")).await.unwrap();
+    let quote = rig
+        .engine
+        .prepare_transfer(transfer(WalletChain::Evm, "1000"))
+        .await
+        .unwrap();
     assert_eq!(quote.owner, Some(owner_a()));
 }
 
@@ -302,7 +439,10 @@ async fn execute_requires_the_confirmed_flag() {
     let rig = Rig::new();
     let err = rig
         .engine
-        .execute_prepared(ExecutePreparedParams { quote_id: "missing".into(), confirmed: false })
+        .execute_prepared(ExecutePreparedParams {
+            quote_id: "missing".into(),
+            confirmed: false,
+        })
         .await
         .unwrap_err();
     assert!(err.contains("confirmed: true"), "{err}");
@@ -312,10 +452,17 @@ async fn execute_requires_the_confirmed_flag() {
 async fn execute_broadcasts_a_native_evm_transfer_through_the_signer() {
     let rig = Rig::new();
     rig.script_evm_node("0x1");
-    let quote = rig.engine.prepare_transfer(transfer(WalletChain::Evm, "1000")).await.unwrap();
+    let quote = rig
+        .engine
+        .prepare_transfer(transfer(WalletChain::Evm, "1000"))
+        .await
+        .unwrap();
     let executed = rig
         .engine
-        .execute_prepared(ExecutePreparedParams { quote_id: quote.quote_id.clone(), confirmed: true })
+        .execute_prepared(ExecutePreparedParams {
+            quote_id: quote.quote_id.clone(),
+            confirmed: true,
+        })
         .await
         .unwrap();
     assert_eq!(executed.status, PreparedStatus::Broadcasted);
@@ -328,8 +475,13 @@ async fn execute_broadcasts_a_native_evm_transfer_through_the_signer() {
     assert_eq!(estimate[0]["to"], TO_EVM);
     let specs = rig.signer.transactions();
     assert_eq!(specs.len(), 1);
-    assert!(matches!(&specs[0], TransactionSpec::Evm { to, value_wei, chain_id: 1, .. } if to == TO_EVM && value_wei == "1000"));
-    assert!(rig.engine.prepared_quotes().is_empty(), "the quote is consumed");
+    assert!(
+        matches!(&specs[0], TransactionSpec::Evm { to, value_wei, chain_id: 1, .. } if to == TO_EVM && value_wei == "1000")
+    );
+    assert!(
+        rig.engine.prepared_quotes().is_empty(),
+        "the quote is consumed"
+    );
 }
 
 #[tokio::test]
@@ -337,13 +489,26 @@ async fn a_failed_execute_restores_the_quote_so_it_can_be_retried() {
     let rig = Rig::new();
     rig.script_evm_node("0x1");
     rig.signer.fail_transaction("module unavailable");
-    let quote = rig.engine.prepare_transfer(transfer(WalletChain::Evm, "1000")).await.unwrap();
-    let params = || ExecutePreparedParams { quote_id: quote.quote_id.clone(), confirmed: true };
-    assert_eq!(rig.engine.execute_prepared(params()).await.unwrap_err(), "module unavailable");
+    let quote = rig
+        .engine
+        .prepare_transfer(transfer(WalletChain::Evm, "1000"))
+        .await
+        .unwrap();
+    let params = || ExecutePreparedParams {
+        quote_id: quote.quote_id.clone(),
+        confirmed: true,
+    };
+    assert_eq!(
+        rig.engine.execute_prepared(params()).await.unwrap_err(),
+        "module unavailable"
+    );
     assert_eq!(rig.engine.prepared_quotes().len(), 1, "restored");
     // The restored quote is retryable, and fails again for the same cause.
     rig.signer.fail_transaction("still down");
-    assert_eq!(rig.engine.execute_prepared(params()).await.unwrap_err(), "still down");
+    assert_eq!(
+        rig.engine.execute_prepared(params()).await.unwrap_err(),
+        "still down"
+    );
     assert_eq!(rig.engine.prepared_quotes().len(), 1);
 }
 
@@ -351,14 +516,20 @@ async fn a_failed_execute_restores_the_quote_so_it_can_be_retried() {
 async fn execute_dispatches_each_chain_to_its_executor() {
     // BTC with no UTXOs: the executor ran, and said so.
     let rig = Rig::new();
-    rig.transport.on_get(&format!("address/{}/utxo", sample_address(WalletChain::Btc)), "[]");
+    rig.transport.on_get(
+        &format!("address/{}/utxo", sample_address(WalletChain::Btc)),
+        "[]",
+    );
     let mut btc = prepared_quote("q_btc", WalletChain::Btc, PreparedKind::NativeTransfer);
     btc.to_address = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string();
     btc.amount_raw = "50000".to_string();
     rig.engine.quotes.insert(btc);
     let err = rig
         .engine
-        .execute_prepared(ExecutePreparedParams { quote_id: "q_btc".into(), confirmed: true })
+        .execute_prepared(ExecutePreparedParams {
+            quote_id: "q_btc".into(),
+            confirmed: true,
+        })
         .await
         .unwrap_err();
     assert!(err.contains("no spendable UTXOs"), "{err}");
@@ -367,23 +538,39 @@ async fn execute_dispatches_each_chain_to_its_executor() {
     let mut sol = prepared_quote("q_sol", WalletChain::Solana, PreparedKind::NativeTransfer);
     sol.to_address = "Vote111111111111111111111111111111111111111".to_string();
     rig.engine.quotes.insert(sol);
-    assert!(rig
-        .engine
-        .execute_prepared(ExecutePreparedParams { quote_id: "q_sol".into(), confirmed: true })
-        .await
-        .is_err());
-    assert!(rig.signer.calls().contains(&SignerCall::Derive(WalletChain::Solana)));
+    assert!(
+        rig.engine
+            .execute_prepared(ExecutePreparedParams {
+                quote_id: "q_sol".into(),
+                confirmed: true
+            })
+            .await
+            .is_err()
+    );
+    assert!(
+        rig.signer
+            .calls()
+            .contains(&SignerCall::Derive(WalletChain::Solana))
+    );
 
     // Tron: the signer derives the account first.
     let mut tron = prepared_quote("q_tron", WalletChain::Tron, PreparedKind::NativeTransfer);
     tron.to_address = "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH".to_string();
     rig.engine.quotes.insert(tron);
-    assert!(rig
-        .engine
-        .execute_prepared(ExecutePreparedParams { quote_id: "q_tron".into(), confirmed: true })
-        .await
-        .is_err());
-    assert!(rig.signer.calls().contains(&SignerCall::Derive(WalletChain::Tron)));
+    assert!(
+        rig.engine
+            .execute_prepared(ExecutePreparedParams {
+                quote_id: "q_tron".into(),
+                confirmed: true
+            })
+            .await
+            .is_err()
+    );
+    assert!(
+        rig.signer
+            .calls()
+            .contains(&SignerCall::Derive(WalletChain::Tron))
+    );
 }
 
 #[tokio::test]
@@ -394,32 +581,64 @@ async fn cross_owner_execution_is_indistinguishable_from_not_found() {
         q.owner = Some(owner_a());
         q
     });
-    let params = |id: &str| ExecutePreparedParams { quote_id: id.to_string(), confirmed: true };
+    let params = |id: &str| ExecutePreparedParams {
+        quote_id: id.to_string(),
+        confirmed: true,
+    };
 
     rig.scope.set(Some(owner_b()));
-    let mismatch = rig.engine.execute_prepared(params("q_x")).await.unwrap_err();
-    let missing = rig.engine.execute_prepared(params("q_nope")).await.unwrap_err();
+    let mismatch = rig
+        .engine
+        .execute_prepared(params("q_x"))
+        .await
+        .unwrap_err();
+    let missing = rig
+        .engine
+        .execute_prepared(params("q_nope"))
+        .await
+        .unwrap_err();
     assert_eq!(mismatch, "quote 'q_x' not found");
     assert_eq!(missing, "quote 'q_nope' not found");
-    assert_eq!(rig.engine.prepared_quotes().len(), 1, "a mismatched caller cannot poison the store");
+    assert_eq!(
+        rig.engine.prepared_quotes().len(),
+        1,
+        "a mismatched caller cannot poison the store"
+    );
 
     // A caller with no chat context cannot pick up a chat quote either.
     rig.scope.set(None);
-    assert_eq!(rig.engine.execute_prepared(params("q_x")).await.unwrap_err(), "quote 'q_x' not found");
+    assert_eq!(
+        rig.engine
+            .execute_prepared(params("q_x"))
+            .await
+            .unwrap_err(),
+        "quote 'q_x' not found"
+    );
 
     // The owner gets past the gate; what fails afterwards is the chain, not the oracle.
     rig.scope.set(Some(owner_a()));
-    let err = rig.engine.execute_prepared(params("q_x")).await.unwrap_err();
+    let err = rig
+        .engine
+        .execute_prepared(params("q_x"))
+        .await
+        .unwrap_err();
     assert_ne!(err, "quote 'q_x' not found");
 }
 
 #[tokio::test]
 async fn a_no_context_flow_executes_a_no_context_quote() {
     let rig = Rig::new();
-    rig.engine.quotes.insert(prepared_quote("q_bg", WalletChain::Evm, PreparedKind::NativeTransfer));
+    rig.engine.quotes.insert(prepared_quote(
+        "q_bg",
+        WalletChain::Evm,
+        PreparedKind::NativeTransfer,
+    ));
     let err = rig
         .engine
-        .execute_prepared(ExecutePreparedParams { quote_id: "q_bg".into(), confirmed: true })
+        .execute_prepared(ExecutePreparedParams {
+            quote_id: "q_bg".into(),
+            confirmed: true,
+        })
         .await
         .unwrap_err();
     assert_ne!(err, "quote 'q_bg' not found", "the owner gate passed");
@@ -435,11 +654,17 @@ async fn the_evm_chain_id_must_match_the_quoted_network() {
     let quote = rig.engine.prepare_transfer(params).await.unwrap();
     let err = rig
         .engine
-        .execute_prepared(ExecutePreparedParams { quote_id: quote.quote_id, confirmed: true })
+        .execute_prepared(ExecutePreparedParams {
+            quote_id: quote.quote_id,
+            confirmed: true,
+        })
         .await
         .unwrap_err();
     assert!(err.contains("chain_id mismatch"), "{err}");
-    assert!(rig.signer.transactions().is_empty(), "nothing was signed for the wrong chain");
+    assert!(
+        rig.signer.transactions().is_empty(),
+        "nothing was signed for the wrong chain"
+    );
 }
 
 #[tokio::test]
@@ -450,14 +675,29 @@ async fn an_erc20_transfer_pays_the_contract_zero_with_the_recipient_in_calldata
     params.asset_symbol = Some("USDC".to_string());
     let quote = rig.engine.prepare_transfer(params).await.unwrap();
     rig.engine
-        .execute_prepared(ExecutePreparedParams { quote_id: quote.quote_id, confirmed: true })
+        .execute_prepared(ExecutePreparedParams {
+            quote_id: quote.quote_id,
+            confirmed: true,
+        })
         .await
         .unwrap();
     let estimate = rig.transport.first_rpc("eth_estimateGas").unwrap();
-    assert_eq!(estimate[0]["to"].as_str().unwrap().to_lowercase(), "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
-    assert!(estimate[0]["data"].as_str().unwrap().starts_with("0xa9059cbb"));
+    assert_eq!(
+        estimate[0]["to"].as_str().unwrap().to_lowercase(),
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    );
+    assert!(
+        estimate[0]["data"]
+            .as_str()
+            .unwrap()
+            .starts_with("0xa9059cbb")
+    );
     match &rig.signer.transactions()[0] {
-        TransactionSpec::Evm { value_wei, data_hex, .. } => {
+        TransactionSpec::Evm {
+            value_wei,
+            data_hex,
+            ..
+        } => {
             assert_eq!(value_wei, "0");
             assert!(data_hex.starts_with("0xa9059cbb"));
         }
