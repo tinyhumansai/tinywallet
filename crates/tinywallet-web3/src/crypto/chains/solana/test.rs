@@ -385,7 +385,7 @@ async fn a_v0_message_is_signed_with_its_version_prefix_included() {
         _ => None,
     });
     assert_eq!(
-        signed.unwrap(),
+        message_signed.unwrap(),
         wire[65..].to_vec(),
         "the version prefix is part of what is signed"
     );

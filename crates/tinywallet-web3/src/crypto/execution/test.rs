@@ -249,6 +249,10 @@ async fn tx_reads_dispatch_to_the_evm_btc_and_solana_clients() {
 async fn tx_reads_dispatch_to_the_tron_and_receipt_clients() {
     let rig = Rig::new();
     rig.transport
+        .on_rpc("eth_getTransactionReceipt", Value::Null);
+    rig.transport
+        .on_rpc("eth_getTransactionByHash", json!({"hash": "0xabc"}));
+    rig.transport
         .on_post("wallet/gettransactioninfobyid", &json!({}).to_string());
     rig.transport
         .on_post("wallet/gettransactionbyid", &json!({}).to_string());
