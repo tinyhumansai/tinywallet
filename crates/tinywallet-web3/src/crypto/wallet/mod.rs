@@ -8,6 +8,7 @@
 mod engine;
 mod types;
 
+pub(crate) use engine::transport_message;
 pub use engine::{WalletEngine, WalletSeams};
 pub use types::{WalletAccount, WalletChain, WalletSetupSource, WalletStatus};
 
