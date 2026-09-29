@@ -204,12 +204,14 @@ impl Transport for FakeTransport {
 }
 
 /// A proxy policy that records the services it was applied for.
+#[cfg(feature = "tools")]
 #[derive(Debug, Default)]
 pub(crate) struct FakeProxyPolicy {
     /// Every `service` label `apply` saw.
     pub(crate) services: Mutex<Vec<String>>,
 }
 
+#[cfg(feature = "tools")]
 impl crate::protocol::ProxyPolicy for FakeProxyPolicy {
     fn apply(&self, builder: reqwest::ClientBuilder, service: &str) -> reqwest::ClientBuilder {
         self.services.lock().unwrap().push(service.to_string());
