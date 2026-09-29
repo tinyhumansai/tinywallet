@@ -13,8 +13,8 @@
 //! The operations are methods on
 //! [`WalletEngine`](crate::crypto::wallet::WalletEngine), split by concern:
 //!
-//! - [`types`] — wire types: snapshots, the quote lifecycle, lookups, params.
-//! - [`validate`] — address/amount/calldata validation, formatting, hex.
+//! - `types` — wire types: snapshots, the quote lifecycle, lookups, params.
+//! - `validate` — address/amount/calldata validation, formatting, hex.
 //! - `accounts` — resolving a derived account for a chain.
 //! - `queries` — the read-only surface.
 //! - `transfer` — preparing a transfer quote.

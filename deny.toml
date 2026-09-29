@@ -51,3 +51,7 @@ deny = []
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# `tinytools` is a git dependency of `tinywallet-x402` and `tinywallet-web3` (the
+# `tools` features), by rev, so a host that already links it can patch this exact
+# URL to its own copy. Nothing else may come from git.
+allow-git = ["https://github.com/tinyhumansai/tinytools"]

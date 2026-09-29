@@ -7,7 +7,7 @@
 //!
 //! - [`wallet`] — [`WalletEngine`](wallet::WalletEngine) and its vocabulary.
 //! - [`execution`] — balances, transfers and lookups on the engine.
-//! - [`chains`] — the per-chain choreography (private).
+//! - `chains` — the per-chain choreography (private).
 //! - [`defaults`] — static reference data.
 //! - [`abi`] — ERC-20 calldata.
 //! - [`service`] — swap, bridge and dapp calls.

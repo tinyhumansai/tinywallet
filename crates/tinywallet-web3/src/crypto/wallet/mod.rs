@@ -3,7 +3,7 @@
 //! [`WalletEngine`] is the instance-owned state of the wallet flows: the
 //! transport, the seams a host implements, and the prepared-transfer quote
 //! store. Its operations are spread over [`crate::crypto::execution`]; the
-//! per-chain work is in [`crate::crypto::chains`].
+//! per-chain work is in the private `chains` module.
 
 mod engine;
 mod types;
