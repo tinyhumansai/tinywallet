@@ -92,10 +92,8 @@ fn tron_transaction_spec(
     // The fee limit is ours, not the crate's: it is what this client pinned in
     // the `createtransaction` request, and only a TRC-20 trigger carries one.
     let fee_limit_sun = match transfer {
+        TronTransfer::Native { .. } => None,
         TronTransfer::Trc20 { .. } => Some(TRC20_FEE_LIMIT_SUN),
-        // `TronTransfer` is `#[non_exhaustive]`; a native transfer (and any
-        // future kind) carries no fee limit.
-        _ => None,
     };
 
     tinywallet_crypto::tx::tron::verify_contract(
@@ -282,8 +280,8 @@ pub(crate) async fn execute_tron_quote(
     // rechecks the locally recomputed txid and recipient; the host additionally
     // binds the native amount or full TRC20 parameter.
     let transfer_kind = match &transfer {
+        TronTransfer::Native { .. } => "native",
         TronTransfer::Trc20 { .. } => "trc20",
-        _ => "native",
     };
     let transaction = match tron_transaction_spec(&raw_tx, verified_recipient, &transfer) {
         Ok(transaction) => {
