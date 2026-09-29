@@ -26,7 +26,7 @@ pub const ADDRESS_BYTES: usize = 32;
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::solana;
+/// use tinywallet_crypto::address::solana;
 ///
 /// // The system program id — 32 zero bytes.
 /// assert!(solana::validate("11111111111111111111111111111111").is_ok());
@@ -52,11 +52,11 @@ pub fn validate(address: &str) -> Result<String> {
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::solana;
+/// use tinywallet_crypto::address::solana;
 ///
 /// let bytes = solana::decode("11111111111111111111111111111111")?;
 /// assert_eq!(bytes, [0u8; 32]);
-/// # Ok::<(), tinywallet_bus::Error>(())
+/// # Ok::<(), tinywallet_crypto::Error>(())
 /// ```
 pub fn decode(address: &str) -> Result<[u8; ADDRESS_BYTES]> {
     let trimmed = address.trim();
@@ -91,7 +91,7 @@ pub fn decode(address: &str) -> Result<[u8; ADDRESS_BYTES]> {
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::solana;
+/// use tinywallet_crypto::address::solana;
 ///
 /// assert_eq!(solana::encode(&[0u8; 32]), "11111111111111111111111111111111");
 /// ```

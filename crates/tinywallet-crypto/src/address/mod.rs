@@ -61,12 +61,12 @@ pub mod tron;
 ///
 /// ```
 /// # #[cfg(feature = "solana")] {
-/// use tinywallet_bus::{address, chain::Chain};
+/// use tinywallet_crypto::{address, chain::Chain};
 ///
 /// let addr = address::validate(Chain::Solana, "11111111111111111111111111111111")?;
 /// assert_eq!(addr, "11111111111111111111111111111111");
 /// # }
-/// # Ok::<(), tinywallet_bus::Error>(())
+/// # Ok::<(), tinywallet_crypto::Error>(())
 /// ```
 // With every chain gate off, only the `ChainNotCompiled` arm survives and
 // `address` goes unread. That build is legal (a host may depend on this crate

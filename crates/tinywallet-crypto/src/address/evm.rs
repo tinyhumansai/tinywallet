@@ -43,7 +43,7 @@ const ADDRESS_HEX_LEN: usize = 40;
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::evm;
+/// use tinywallet_crypto::address::evm;
 ///
 /// let addr = evm::validate("  0x52908400098527886E0F7030069857D2E4169EE7  ")?;
 /// assert_eq!(addr, "0x52908400098527886E0F7030069857D2E4169EE7");
@@ -53,7 +53,7 @@ const ADDRESS_HEX_LEN: usize = 40;
 ///
 /// // But an uppercase `0X` prefix is not accepted.
 /// assert!(evm::validate("0X52908400098527886E0F7030069857D2E4169EE7").is_err());
-/// # Ok::<(), tinywallet_bus::Error>(())
+/// # Ok::<(), tinywallet_crypto::Error>(())
 /// ```
 pub fn validate(address: &str) -> Result<String> {
     let trimmed = address.trim();
@@ -110,13 +110,13 @@ fn strip_prefix(address: &str) -> &str {
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::evm;
+/// use tinywallet_crypto::address::evm;
 ///
 /// // A correctly checksummed address.
 /// assert!(evm::is_checksum_valid("0x52908400098527886E0F7030069857D2E4169EE7")?);
 /// // Valid, but carries no checksum information.
 /// assert!(!evm::is_checksum_valid("0x52908400098527886e0f7030069857d2e4169ee7")?);
-/// # Ok::<(), tinywallet_bus::Error>(())
+/// # Ok::<(), tinywallet_crypto::Error>(())
 /// ```
 #[cfg(feature = "keccak")]
 pub fn is_checksum_valid(address: &str) -> Result<bool> {
@@ -133,11 +133,11 @@ pub fn is_checksum_valid(address: &str) -> Result<bool> {
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::evm;
+/// use tinywallet_crypto::address::evm;
 ///
 /// let canonical = evm::to_checksummed("0x52908400098527886e0f7030069857d2e4169ee7")?;
 /// assert_eq!(canonical, "0x52908400098527886E0F7030069857D2E4169EE7");
-/// # Ok::<(), tinywallet_bus::Error>(())
+/// # Ok::<(), tinywallet_crypto::Error>(())
 /// ```
 #[cfg(feature = "keccak")]
 pub fn to_checksummed(address: &str) -> Result<String> {

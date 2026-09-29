@@ -19,7 +19,7 @@
 //! # Nothing here signs
 //!
 //! [`signing_digest`] returns the 32 bytes to sign and stops. That is the same
-//! split the rest of this crate makes — see [`crate::wire`] — and it is what
+//! split the rest of this crate makes — see `tinywallet_bus::wire` — and it is what
 //! lets the payload be built somewhere the signing key is not.
 
 use sha3::{Digest, Keccak256};

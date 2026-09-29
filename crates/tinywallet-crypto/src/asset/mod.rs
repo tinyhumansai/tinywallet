@@ -284,7 +284,7 @@ impl Asset {
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::asset::{self, EvmNetwork, Network, SolanaCluster};
+/// use tinywallet_crypto::asset::{self, EvmNetwork, Network, SolanaCluster};
 ///
 /// // The same symbol, a different scale, on the same chain family.
 /// let ethereum = asset::find(Network::Evm(EvmNetwork::Ethereum), "USDC").unwrap();

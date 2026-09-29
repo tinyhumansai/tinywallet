@@ -66,7 +66,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// ```
 /// # #[cfg(all(feature = "evm", feature = "keccak", feature = "eip712"))] {
-/// use tinywallet_bus::abi;
+/// use tinywallet_x402::abi;
 ///
 /// let data = abi::encode_erc20_transfer(
 ///     "0x1111111111111111111111111111111111111111",

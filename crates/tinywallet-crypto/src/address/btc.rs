@@ -92,7 +92,7 @@ enum Kind {
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::btc;
+/// use tinywallet_crypto::address::btc;
 ///
 /// // Native segwit, wrapped segwit, legacy, and taproot are all accepted.
 /// assert!(btc::validate("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4").is_ok());
@@ -122,7 +122,7 @@ pub fn validate(address: &str) -> Result<String> {
 /// # Examples
 ///
 /// ```
-/// use tinywallet_bus::address::btc;
+/// use tinywallet_crypto::address::btc;
 ///
 /// // Native segwit: usable as a sender.
 /// assert!(btc::validate_sender("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4").is_ok());
@@ -147,7 +147,7 @@ pub fn validate_sender(address: &str) -> Result<String> {
 
 /// Encode a 20-byte public key hash as a mainnet P2WPKH (`bc1q…`) address.
 ///
-/// The counterpart to parsing: `tinywallet_bus::key` derives a public key and needs
+/// The counterpart to parsing: `tinywallet_crypto::key` derives a public key and needs
 /// its address, and doing that here keeps the bech32 encoding in the module
 /// that also decodes it. Public rather than crate-private because that caller
 /// is in the root crate now, on the far side of the contract split.
