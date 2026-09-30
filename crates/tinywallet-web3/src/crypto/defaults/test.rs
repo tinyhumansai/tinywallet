@@ -190,23 +190,108 @@ fn default_endpoints_exist_for_every_chain() {
 #[test]
 fn explorer_links_append_the_hash() {
     assert_eq!(
-        explorer_tx_url(WalletChain::Evm, "0xabc").as_deref(),
+        explorer_tx_url(WalletChain::Evm, MAINNET, "0xabc").as_deref(),
         Some("https://etherscan.io/tx/0xabc")
     );
     assert_eq!(
-        explorer_tx_url(WalletChain::Solana, "sig").as_deref(),
+        explorer_tx_url(WalletChain::Solana, MAINNET, "sig").as_deref(),
         Some("https://solscan.io/tx/sig")
     );
     assert_eq!(
-        explorer_tx_url(WalletChain::Tron, "id").as_deref(),
+        explorer_tx_url(WalletChain::Tron, MAINNET, "id").as_deref(),
         Some("https://tronscan.org/#/transaction/id")
     );
     assert_eq!(
-        explorer_tx_url(WalletChain::Btc, "id").as_deref(),
+        explorer_tx_url(WalletChain::Btc, MAINNET, "id").as_deref(),
         Some("https://blockstream.info/tx/id")
     );
     assert_eq!(
         explorer_tx_url_for_evm_network(EvmNetwork::BaseMainnet, "0x1").as_deref(),
         Some("https://basescan.org/tx/0x1")
     );
+}
+
+#[test]
+fn a_devnet_solana_link_names_the_cluster() {
+    let devnet = SolanaCluster::Devnet;
+    assert_eq!(
+        explorer_tx_url(WalletChain::Solana, devnet, "sig").as_deref(),
+        Some("https://solscan.io/tx/sig?cluster=devnet")
+    );
+    // The cluster is a Solana matter: every other chain's link is unchanged.
+    for chain in [WalletChain::Evm, WalletChain::Btc, WalletChain::Tron] {
+        assert_eq!(
+            explorer_tx_url(chain, devnet, "h"),
+            explorer_tx_url(chain, MAINNET, "h"),
+            "{chain:?}"
+        );
+    }
+}
+
+fn solana_row(cluster: SolanaCluster) -> super::WalletNetworkDefaults {
+    let endpoints = FakeRpcEndpoints::new();
+    endpoints.set_cluster(cluster);
+    network_defaults(&endpoints)
+        .into_iter()
+        .find(|d| d.chain == WalletChain::Solana)
+        .unwrap()
+}
+
+#[test]
+fn mainnet_network_defaults_describe_mainnet_beta() {
+    let row = solana_row(MAINNET);
+    assert_eq!(row.network, "solana-mainnet-beta");
+    assert_eq!(row.chain_id, None);
+    assert_eq!(row.explorer_tx_url_base, "https://solscan.io/tx/");
+    assert_eq!(row.explorer_tx_url_suffix, None);
+    let usdc = row.assets.iter().find(|a| a.symbol == "USDC").unwrap();
+    assert_eq!(usdc.contract_address.as_deref(), Some(MAINNET.usdc_mint()));
+    let json = serde_json::to_value(&row).unwrap();
+    assert!(
+        json.get("explorerTxUrlSuffix").is_none(),
+        "the mainnet row serializes as it always has: {json}"
+    );
+}
+
+#[test]
+fn devnet_network_defaults_describe_devnet() {
+    let devnet = SolanaCluster::Devnet;
+    let row = solana_row(devnet);
+    assert_eq!(row.network, "solana-devnet");
+    assert_eq!(row.explorer_tx_url_base, "https://solscan.io/tx/");
+    assert_eq!(
+        row.explorer_tx_url_suffix.as_deref(),
+        Some("?cluster=devnet")
+    );
+    let usdc = row.assets.iter().find(|a| a.symbol == "USDC").unwrap();
+    assert_eq!(usdc.contract_address.as_deref(), Some(devnet.usdc_mint()));
+    assert_ne!(usdc.contract_address.as_deref(), Some(MAINNET.usdc_mint()));
+    // Base plus hash plus suffix is the same link `explorer_tx_url` builds.
+    assert_eq!(
+        format!(
+            "{}sig{}",
+            row.explorer_tx_url_base,
+            row.explorer_tx_url_suffix.as_deref().unwrap()
+        ),
+        explorer_tx_url(WalletChain::Solana, devnet, "sig").unwrap()
+    );
+    let json = serde_json::to_value(&row).unwrap();
+    assert_eq!(json["explorerTxUrlSuffix"], "?cluster=devnet");
+}
+
+#[test]
+fn the_cluster_only_changes_the_solana_row() {
+    let endpoints = FakeRpcEndpoints::new();
+    let main = network_defaults(&endpoints);
+    endpoints.set_cluster(SolanaCluster::Devnet);
+    let dev = network_defaults(&endpoints);
+    for (a, b) in main.iter().zip(&dev) {
+        if a.chain == WalletChain::Solana {
+            assert_ne!(a.network, b.network);
+        } else {
+            assert_eq!(a.network, b.network);
+            assert_eq!(a.explorer_tx_url_suffix, None);
+            assert_eq!(b.explorer_tx_url_suffix, None);
+        }
+    }
 }

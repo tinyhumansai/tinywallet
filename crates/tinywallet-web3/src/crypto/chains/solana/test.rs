@@ -14,6 +14,7 @@ use super::{
     execute_solana_quote, lookup_tx, native_balance, sign_and_broadcast_versioned, tx_receipt,
     tx_status, validate_solana_address,
 };
+use crate::crypto::defaults::SolanaCluster;
 use crate::crypto::execution::{PreparedKind, PreparedStatus, TxState};
 use crate::crypto::wallet::WalletChain;
 use crate::test_support::{FakeSigner, Rig, SignerCall, prepared_quote, sample_address};
@@ -124,6 +125,20 @@ async fn a_native_transfer_is_signed_by_the_wallet_and_broadcast() {
         rig.signer
             .calls()
             .contains(&SignerCall::Derive(WalletChain::Solana))
+    );
+}
+
+#[tokio::test]
+async fn a_devnet_transfer_links_to_the_devnet_explorer() {
+    let rig = Rig::new();
+    rig.endpoints.set_cluster(SolanaCluster::Devnet);
+    script_node(&rig);
+    let result = execute_solana_quote(&rig.engine, sol_quote(PreparedKind::NativeTransfer))
+        .await
+        .unwrap();
+    assert_eq!(
+        result.explorer_url.as_deref(),
+        Some(format!("https://solscan.io/tx/{SIG}?cluster=devnet").as_str())
     );
 }
 
@@ -351,6 +366,22 @@ async fn a_versioned_transaction_gets_our_signature_in_our_slot() {
         .verify(&wire[65..], &signature)
         .expect("the message bytes were signed");
     assert_eq!(&sent[65..], &wire[65..], "the message is untouched");
+}
+
+#[tokio::test]
+async fn a_devnet_versioned_transaction_links_to_the_devnet_explorer() {
+    let rig = Rig::new();
+    rig.endpoints.set_cluster(SolanaCluster::Devnet);
+    script_node(&rig);
+    let signer = b58_to_pubkey(sample_address(WalletChain::Solana)).unwrap();
+    let wire = unsigned_legacy(&signer);
+    let result = sign_and_broadcast_versioned(&rig.engine, &format!("0x{}", hex::encode(&wire)))
+        .await
+        .unwrap();
+    assert_eq!(
+        result.explorer_url.as_deref(),
+        Some(format!("https://solscan.io/tx/{SIG}?cluster=devnet").as_str())
+    );
 }
 
 #[tokio::test]
