@@ -298,7 +298,7 @@ async fn a_tool_payment_counts_toward_the_session_total_with_or_without_a_thread
         vec![None, None, Some("thread-7")]
     );
     assert!(records.iter().all(|r| r.session_id == "tool-test"));
-    let summary = ledger::with_ledger(|l| l.summary()).unwrap();
+    let summary = ledger::with_ledger(ledger::PaymentLedger::summary).unwrap();
     assert_eq!(summary.session_total_atomic, 7_500);
     assert_eq!(summary.session_count, 3);
     ledger::reset_global();
