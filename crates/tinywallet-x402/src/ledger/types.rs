@@ -120,3 +120,51 @@ pub enum BudgetCheck {
 /// [`PaymentLedger::reserve`](super::PaymentLedger::reserve).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ReservationId(pub(super) u64);
+
+/// Why [`PaymentLedger::reserve`](super::PaymentLedger::reserve) refused: the
+/// refusing cases of [`BudgetCheck`], for callers that have no use for
+/// "allowed".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BudgetRefusal {
+    /// The request alone is over the per-request cap.
+    PerRequest {
+        /// The amount asked for.
+        requested: u64,
+        /// The cap it exceeded.
+        cap: u64,
+    },
+    /// Held and settled today plus this request is over the daily cap.
+    Daily {
+        /// Settled and held so far today.
+        current: u64,
+        /// The daily cap.
+        cap: u64,
+    },
+    /// Held and settled this month plus this request is over the monthly cap.
+    Monthly {
+        /// Settled and held so far this month.
+        current: u64,
+        /// The monthly cap.
+        cap: u64,
+    },
+}
+
+impl BudgetCheck {
+    /// The refusal this verdict amounts to, or `None` when it is
+    /// [`Allowed`](Self::Allowed).
+    #[must_use]
+    pub fn refusal(self) -> Option<BudgetRefusal> {
+        match self {
+            Self::Allowed => None,
+            Self::ExceedsPerRequest { requested, cap } => {
+                Some(BudgetRefusal::PerRequest { requested, cap })
+            }
+            Self::ExceedsDailyBudget { current, cap } => {
+                Some(BudgetRefusal::Daily { current, cap })
+            }
+            Self::ExceedsMonthlyBudget { current, cap } => {
+                Some(BudgetRefusal::Monthly { current, cap })
+            }
+        }
+    }
+}

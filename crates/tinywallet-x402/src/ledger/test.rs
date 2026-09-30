@@ -346,7 +346,7 @@ fn a_reservation_counts_against_the_daily_budget_until_released() {
     assert_eq!(ledger.reserved_atomic(), 2_000_000);
     assert_eq!(
         ledger.reserve_at(now(), 1).unwrap_err(),
-        BudgetCheck::ExceedsDailyBudget {
+        BudgetRefusal::Daily {
             current: 2_000_000,
             cap: 2_000_000
         }
@@ -372,7 +372,7 @@ fn a_reservation_counts_against_the_monthly_budget() {
     ledger.reserve_at(now(), 500_000).unwrap();
     assert_eq!(
         ledger.reserve_at(now(), 500_000).unwrap_err(),
-        BudgetCheck::ExceedsMonthlyBudget {
+        BudgetRefusal::Monthly {
             current: 500_000,
             cap: 600_000
         }
@@ -385,7 +385,7 @@ fn a_refused_reservation_holds_nothing() {
     let mut ledger = ledger_in(&dir);
     assert_eq!(
         ledger.reserve_at(now(), 600_000).unwrap_err(),
-        BudgetCheck::ExceedsPerRequest {
+        BudgetRefusal::PerRequest {
             requested: 600_000,
             cap: 500_000
         }
@@ -479,7 +479,7 @@ fn a_global_reservation_is_refused_over_budget_and_needs_a_ledger() {
     init_global(dir.path(), SESSION, budget());
     assert_eq!(
         reserve(600_000).unwrap().unwrap_err(),
-        BudgetCheck::ExceedsPerRequest {
+        BudgetRefusal::PerRequest {
             requested: 600_000,
             cap: 500_000
         }
@@ -500,4 +500,20 @@ fn dropping_a_reservation_after_the_ledger_is_gone_is_harmless() {
     init_global(dir.path(), SESSION, budget());
     assert_eq!(with_ledger(PaymentLedger::reserved_atomic).unwrap(), 0);
     reset_global();
+}
+
+#[test]
+fn a_verdict_converts_to_its_refusal() {
+    assert_eq!(BudgetCheck::Allowed.refusal(), None);
+    assert_eq!(
+        BudgetCheck::ExceedsPerRequest {
+            requested: 2,
+            cap: 1
+        }
+        .refusal(),
+        Some(BudgetRefusal::PerRequest {
+            requested: 2,
+            cap: 1
+        })
+    );
 }

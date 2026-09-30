@@ -10,7 +10,7 @@ use chrono::{DateTime, Datelike, Utc};
 use log::{debug, warn};
 
 use super::types::{
-    BudgetCheck, PaymentRecord, PaymentStatus, ReservationId, SpendingBudget, SpendingSummary,
+    BudgetCheck, BudgetRefusal, PaymentRecord, PaymentStatus, ReservationId, SpendingBudget, SpendingSummary,
 };
 
 const LOG_PREFIX: &str = "[x402::store]";
@@ -130,8 +130,8 @@ impl PaymentLedger {
     ///
     /// # Errors
     ///
-    /// The [`BudgetCheck`] verdict that refused `amount`; nothing is held then.
-    pub fn reserve(&mut self, amount: u64) -> Result<ReservationId, BudgetCheck> {
+    /// The [`BudgetRefusal`] that stopped `amount`; nothing is held then.
+    pub fn reserve(&mut self, amount: u64) -> Result<ReservationId, BudgetRefusal> {
         self.reserve_at(Utc::now(), amount)
     }
 
@@ -140,10 +140,9 @@ impl PaymentLedger {
         &mut self,
         now: DateTime<Utc>,
         amount: u64,
-    ) -> Result<ReservationId, BudgetCheck> {
-        match self.check_budget_at(now, amount) {
-            BudgetCheck::Allowed => {}
-            refused => return Err(refused),
+    ) -> Result<ReservationId, BudgetRefusal> {
+        if let Some(refusal) = self.check_budget_at(now, amount).refusal() {
+            return Err(refusal);
         }
         let id = ReservationId(NEXT_RESERVATION.fetch_add(1, Ordering::Relaxed));
         self.reservations.insert(id, amount);

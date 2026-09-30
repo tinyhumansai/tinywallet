@@ -3,7 +3,7 @@
 use log::debug;
 
 use super::global::with_ledger_mut;
-use super::types::{BudgetCheck, PaymentRecord, ReservationId};
+use super::types::{BudgetRefusal, PaymentRecord, ReservationId};
 
 const LOG_PREFIX: &str = "[x402::store]";
 
@@ -55,8 +55,8 @@ impl Drop for Reservation {
 /// # Errors
 ///
 /// The outer error is `"x402 payment ledger not initialized"`; the inner one is
-/// the [`BudgetCheck`] verdict that refused the amount.
-pub fn reserve(amount: u64) -> Result<Result<Reservation, BudgetCheck>, String> {
+/// the [`BudgetRefusal`] that stopped the amount.
+pub fn reserve(amount: u64) -> Result<Result<Reservation, BudgetRefusal>, String> {
     with_ledger_mut(|l| {
         l.reserve(amount).map(|id| Reservation {
             id: Some(id),

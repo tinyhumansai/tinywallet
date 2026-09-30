@@ -9,7 +9,7 @@ use super::LOG_PREFIX;
 use super::builder::PaymentBuilder;
 use super::error::X402Error;
 use super::headers::{encode_payment, parse_402_headers, parse_settlement_response};
-use crate::ledger::{self, BudgetCheck};
+use crate::ledger::{self, BudgetRefusal, Reservation};
 use crate::wire::{
     HEADER_PAYMENT_RESPONSE, HEADER_PAYMENT_SIGNATURE, PaymentChain, PaymentRequired,
     PaymentRequirements,
@@ -190,7 +190,10 @@ pub async fn pay_challenge_header(
 
 /// Result of a successful x402 payment: the header value to attach and the
 /// metadata for the ledger.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Not `Clone`: it owns the [`Reservation`] that keeps the payment's amount
+/// counted against the budget.
+#[derive(Debug)]
 pub struct X402PaymentResult {
     /// The `PAYMENT-SIGNATURE` header value.
     pub header_value: String,
@@ -204,19 +207,27 @@ pub struct X402PaymentResult {
     pub network: String,
     /// The URL the payment is for.
     pub url: String,
+    /// The budget held for this payment. Keep it alive until the outcome is
+    /// recorded, then [`commit`](Reservation::commit) it with the final record;
+    /// dropping it releases the hold without recording anything.
+    pub reservation: Reservation,
 }
 
 /// End-to-end 402 handler for the HTTP tool layer. Given a 402 response's
 /// headers and the original URL:
 ///
 /// 1. parses the `PAYMENT-REQUIRED` challenge,
-/// 2. checks the spending budget in the process-wide ledger,
+/// 2. checks the spending budget in the process-wide ledger and reserves the
+///    amount in the same critical section, so concurrent payments cannot
+///    overspend,
 /// 3. has `builder` construct and sign the payment (Solana preferred, EVM
 ///    fallback), and
 /// 4. returns the encoded `PAYMENT-SIGNATURE` header value.
 ///
 /// The caller retries the original request with this header attached and
-/// records the payment outcome in the ledger.
+/// records the payment outcome in the ledger, committing the
+/// [`X402PaymentResult::reservation`] with that record. If signing fails the
+/// reservation is released before this returns.
 ///
 /// # Errors
 ///
@@ -237,18 +248,17 @@ pub async fn handle_402_and_pay(
     // each fit overspend together.
     let reservation = match ledger::reserve(amount).map_err(X402Error::Wallet)? {
         Ok(reservation) => reservation,
-        Err(BudgetCheck::Allowed) => unreachable_allowed(),
-        Err(BudgetCheck::ExceedsPerRequest { requested, cap }) => {
+        Err(BudgetRefusal::PerRequest { requested, cap }) => {
             return Err(X402Error::AmountExceedsCap { requested, cap });
         }
-        Err(BudgetCheck::ExceedsDailyBudget { current, cap }) => {
+        Err(BudgetRefusal::Daily { current, cap }) => {
             return Err(X402Error::BudgetExceeded {
                 period: "daily",
                 current,
                 cap,
             });
         }
-        Err(BudgetCheck::ExceedsMonthlyBudget { current, cap }) => {
+        Err(BudgetRefusal::Monthly { current, cap }) => {
             return Err(X402Error::BudgetExceeded {
                 period: "monthly",
                 current,
@@ -272,6 +282,7 @@ pub async fn handle_402_and_pay(
         recipient: requirement.pay_to.clone(),
         network: requirement.network.clone(),
         url: request_url.to_string(),
+        reservation,
     })
 }
 

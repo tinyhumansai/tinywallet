@@ -46,7 +46,8 @@ pub use global::{init_global, with_ledger, with_ledger_mut};
 pub use reservation::{Reservation, reserve};
 pub use store::PaymentLedger;
 pub use types::{
-    BudgetCheck, PaymentRecord, PaymentStatus, ReservationId, SpendingBudget, SpendingSummary,
+    BudgetCheck, BudgetRefusal, PaymentRecord, PaymentStatus, ReservationId, SpendingBudget,
+    SpendingSummary,
 };
 
 #[cfg(test)]
