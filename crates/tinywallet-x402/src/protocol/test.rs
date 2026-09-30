@@ -808,3 +808,112 @@ fn the_client_and_a_payment_result_are_debuggable() {
     let client = client_with(Arc::new(StubBuilder::default()));
     assert!(format!("{client:?}").starts_with("X402Client"));
 }
+
+// ---------------------------------------------------------------------------
+// The network / asset allowlist
+// ---------------------------------------------------------------------------
+
+fn requirement_on(network: &str, asset: &str) -> PaymentRequirements {
+    let mut requirement = evm_requirement();
+    requirement.network = network.into();
+    requirement.asset = asset.into();
+    requirement
+}
+
+#[test]
+fn handle_402_accepts_usdc_on_a_known_testnet() {
+    let c = challenge(vec![requirement_on(
+        crate::wire::BASE_SEPOLIA_CAIP2,
+        crate::wire::USDC_BASE_SEPOLIA,
+    )]);
+    let (_, idx, chain) = handle_402(&challenge_headers(&c)).unwrap();
+    assert_eq!((idx, chain), (0, PaymentChain::Evm));
+}
+
+#[test]
+fn handle_402_skips_an_unsupported_option_for_a_supported_one() {
+    let bogus = requirement_on("eip155:137", "0xdeadbeef");
+    let c = challenge(vec![bogus, evm_requirement()]);
+    let (_, idx, _) = handle_402(&challenge_headers(&c)).unwrap();
+    assert_eq!(idx, 1);
+}
+
+#[test]
+fn handle_402_refuses_an_unknown_network() {
+    let c = challenge(vec![requirement_on("eip155:137", "0xdeadbeef")]);
+    let err = handle_402(&challenge_headers(&c)).unwrap_err();
+    assert!(
+        matches!(&err, X402Error::UnsupportedNetwork { network } if network == "eip155:137"),
+        "{err}"
+    );
+    assert_eq!(
+        err.to_string(),
+        "x402 network eip155:137 is not supported; payments are accepted only in USDC on known networks"
+    );
+}
+
+#[test]
+fn handle_402_refuses_an_asset_that_is_not_usdc() {
+    let c = challenge(vec![requirement_on(
+        crate::wire::SOLANA_MAINNET_CAIP2,
+        "NotUsdcMint1111111111111111111111111111111",
+    )]);
+    let err = handle_402(&challenge_headers(&c)).unwrap_err();
+    assert!(matches!(err, X402Error::UnsupportedAsset { .. }), "{err}");
+    assert_eq!(
+        err.to_string(),
+        "x402 asset NotUsdcMint1111111111111111111111111111111 is not the USDC accepted on \
+         solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+    );
+}
+
+#[tokio::test]
+async fn an_unsupported_challenge_reserves_and_signs_nothing() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let _dir = init_ledger(SpendingBudget::default());
+    let builder = StubBuilder::default();
+    let headers = challenge_headers(&challenge(vec![requirement_on("eip155:137", "0xbad")]));
+
+    let err = handle_402_and_pay(&builder, &headers, "u")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, X402Error::UnsupportedNetwork { .. }));
+    assert!(builder.chains.lock().unwrap().is_empty());
+    assert_eq!(
+        ledger::with_ledger(ledger::PaymentLedger::reserved_atomic).unwrap(),
+        0
+    );
+    ledger::reset_global();
+}
+
+#[tokio::test]
+async fn the_client_refuses_to_pay_an_unsupported_asset() {
+    let server = TestServer::start(paid_config(vec![requirement_on(
+        crate::wire::BASE_MAINNET_CAIP2,
+        "0x0000000000000000000000000000000000000001",
+    )]))
+    .await;
+    let builder = Arc::new(StubBuilder::default());
+    let client = client_with(builder.clone());
+
+    let err = client
+        .try_paid_request(get(&client, &server.url), None)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, X402Error::UnsupportedAsset { .. }), "{err}");
+    assert!(builder.chains.lock().unwrap().is_empty());
+    assert_eq!(server.seen().len(), 1, "no paid retry was sent");
+}
+
+#[tokio::test]
+async fn a_bare_requirement_is_checked_before_it_is_signed() {
+    let builder = StubBuilder::default();
+    let c = challenge(vec![]);
+    let err = pay_challenge_header(&builder, &c, &requirement_on("cosmos:hub", "uatom"))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, X402Error::UnsupportedNetwork { .. }), "{err}");
+    assert!(builder.chains.lock().unwrap().is_empty());
+}
