@@ -640,6 +640,48 @@ async fn a_challenge_above_the_cap_is_refused_before_paying() {
     assert_eq!(server.seen().len(), 1, "no retry was sent");
 }
 
+/// A request whose body is a stream: it cannot be cloned, so it cannot be sent
+/// a second time.
+fn streaming_post(url: &str) -> reqwest::Request {
+    reqwest::Client::new()
+        .post(url)
+        .body(reqwest::Body::wrap(axum::body::Body::from("streamed")))
+        .build()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_streaming_body_is_refused_before_anything_is_paid() {
+    let server = TestServer::start(paid_config(vec![solana_requirement()])).await;
+    let builder = Arc::new(StubBuilder::default());
+    let client = client_with(builder.clone());
+
+    let err = client
+        .try_paid_request(streaming_post(&server.url), None)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, X402Error::NonReplayableBody), "{err}");
+    assert_eq!(
+        err.to_string(),
+        "x402 request body cannot be replayed for the paid retry; use a buffered body"
+    );
+    assert!(builder.chains.lock().unwrap().is_empty(), "nothing was signed");
+    assert_eq!(server.seen().len(), 1, "no paid retry was sent");
+}
+
+#[tokio::test]
+async fn a_streaming_body_is_fine_when_no_payment_is_asked_for() {
+    let server = TestServer::start(ServerConfig::default()).await;
+    let client = client_with(Arc::new(StubBuilder::default()));
+    let response = client
+        .try_paid_request(streaming_post(&server.url), None)
+        .await
+        .unwrap();
+    assert_eq!(response.text().await.unwrap(), "content");
+    assert_eq!(server.seen()[0].body, "streamed");
+}
+
 #[tokio::test]
 async fn a_402_without_a_payable_option_or_header_is_an_error() {
     let mut upto = evm_requirement();
