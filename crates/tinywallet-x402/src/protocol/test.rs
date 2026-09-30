@@ -431,6 +431,59 @@ async fn each_budget_limit_refuses_with_its_own_error() {
     ledger::reset_global();
 }
 
+/// A builder that takes a moment to sign, as a real wallet does, so concurrent
+/// payments overlap between the budget check and the signature.
+struct SlowBuilder(StubBuilder);
+
+#[async_trait]
+impl PaymentBuilder for SlowBuilder {
+    async fn build(
+        &self,
+        challenge: &PaymentRequired,
+        requirement: &PaymentRequirements,
+        chain: PaymentChain,
+    ) -> Result<PaymentPayload, X402Error> {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        self.0.build(challenge, requirement, chain).await
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn parallel_payments_cannot_overspend_the_daily_cap() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    // Each Solana challenge costs 10_000; the day allows exactly three.
+    let _dir = init_ledger(SpendingBudget {
+        per_request_max_atomic: 10_000,
+        daily_max_atomic: 30_000,
+        monthly_max_atomic: 1_000_000,
+    });
+    let builder = Arc::new(SlowBuilder(StubBuilder::default()));
+    let headers = challenge_headers(&challenge(vec![solana_requirement()]));
+
+    let handles: Vec<_> = (0..12)
+        .map(|_| {
+            let builder = Arc::clone(&builder);
+            let headers = headers.clone();
+            tokio::spawn(async move { handle_402_and_pay(&*builder, &headers, "u").await })
+        })
+        .collect();
+    let mut results = Vec::new();
+    for handle in handles {
+        results.push(handle.await.unwrap());
+    }
+
+    let paid = results.iter().filter(|r| r.is_ok()).count();
+    assert_eq!(paid, 3, "exactly the payments the cap allows may be signed");
+    assert_eq!(builder.0.chains.lock().unwrap().len(), 3, "and only those");
+    for refused in results.iter().filter_map(|r| r.as_ref().err()) {
+        assert!(
+            matches!(refused, X402Error::BudgetExceeded { period: "daily", .. }),
+            "{refused}"
+        );
+    }
+    ledger::reset_global();
+}
+
 #[tokio::test]
 async fn a_wallet_failure_is_passed_through() {
     let _guard = ledger::TEST_LOCK.lock().await;
