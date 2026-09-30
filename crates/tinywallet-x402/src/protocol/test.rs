@@ -645,7 +645,7 @@ async fn a_challenge_above_the_cap_is_refused_before_paying() {
 fn streaming_post(url: &str) -> reqwest::Request {
     reqwest::Client::new()
         .post(url)
-        .body(reqwest::Body::wrap(axum::body::Body::from("streamed")))
+        .body(reqwest::Body::wrap(http_body_util::Full::new(axum::body::Bytes::from("streamed"))))
         .build()
         .unwrap()
 }

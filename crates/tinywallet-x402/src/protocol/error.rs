@@ -34,6 +34,9 @@ pub enum X402Error {
         /// The period's cap.
         cap: u64,
     },
+    /// The request body is a stream, so it cannot be sent again with the payment.
+    #[error("x402 request body cannot be replayed for the paid retry; use a buffered body")]
+    NonReplayableBody,
     /// The challenge or a header could not be understood.
     #[error("x402 protocol: {0}")]
     Protocol(String),

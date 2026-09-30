@@ -72,6 +72,9 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "net",
 # A loopback HTTP server so the 402 client and the tool are exercised against a
 # real socket, without network access.
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+# `Full<Bytes>` is a `Sync` HTTP body; wrapped with `reqwest::Body::wrap` it is a
+# streaming body that cannot be cloned, which the replay tests need.
+http-body-util = "0.1"
 # Scratch directories for the ledger's JSONL file.
 tempfile = "3"
 # The root crate's `key` gate derives a known account from a BIP-39 mnemonic, so
