@@ -128,18 +128,6 @@ async fn broadcast_raw_hex(engine: &WalletEngine, tx_hex: &str) -> Result<String
 pub(crate) struct SpendPlan {
     /// The UTXOs to spend, largest first.
     pub(crate) selected: Vec<EsploraUtxo>,
-    /// The fee, in satoshis.
-    pub(crate) fee_sats: u64,
-    /// The change returned to the sender, in satoshis; zero when there is no
-    /// change output.
-    pub(crate) change_sats: u64,
-}
-
-/// The coins chosen for a transfer, the fee they pay, and the change they leave.
-#[derive(Debug, Clone)]
-pub(crate) struct SpendPlan {
-    /// The UTXOs to spend, largest first.
-    pub(crate) selected: Vec<EsploraUtxo>,
     /// The fee, in satoshis. When the change would be dust this is everything
     /// the inputs hold beyond the amount, so the two sides agree on it.
     pub(crate) fee_sats: u64,
