@@ -172,9 +172,9 @@ fn selection_reports_overflow_rather_than_wrapping() {
         plan_spend(&[], 1, u64::MAX).unwrap_err(),
         "amount + fee overflow"
     );
-    // Two huge outputs that together exceed u64 before reaching the target.
-    let big = u64::MAX - 10;
-    let err = plan_spend(&[utxo("a", big), utxo("b", big)], u64::MAX - 5_000, 1).unwrap_err();
+    // Two outputs that together exceed u64 before reaching the target.
+    let half = 1u64 << 63;
+    let err = plan_spend(&[utxo("a", half), utxo("b", half)], u64::MAX - 1_000, 1).unwrap_err();
     assert_eq!(err, "utxo sum overflow");
 }
 
