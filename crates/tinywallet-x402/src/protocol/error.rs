@@ -34,6 +34,22 @@ pub enum X402Error {
         /// The period's cap.
         cap: u64,
     },
+    /// The challenge names a network this crate does not pay on.
+    #[error(
+        "x402 network {network} is not supported; payments are accepted only in USDC on known networks"
+    )]
+    UnsupportedNetwork {
+        /// The CAIP-2 network the challenge asked for.
+        network: String,
+    },
+    /// The challenge asks for an asset other than the network's USDC.
+    #[error("x402 asset {asset} is not the USDC accepted on {network}")]
+    UnsupportedAsset {
+        /// The CAIP-2 network the challenge asked for.
+        network: String,
+        /// The mint or contract it asked to be paid in.
+        asset: String,
+    },
     /// The request body is a stream, so it cannot be sent again with the payment.
     #[error("x402 request body cannot be replayed for the paid retry; use a buffered body")]
     NonReplayableBody,

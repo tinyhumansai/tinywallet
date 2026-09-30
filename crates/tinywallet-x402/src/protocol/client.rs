@@ -9,6 +9,7 @@ use super::LOG_PREFIX;
 use super::builder::PaymentBuilder;
 use super::error::X402Error;
 use super::headers::{encode_payment, parse_402_headers, parse_settlement_response};
+use super::select::{ensure_payable, select_requirement};
 use crate::ledger::{self, BudgetRefusal, Reservation};
 use crate::wire::{
     HEADER_PAYMENT_RESPONSE, HEADER_PAYMENT_SIGNATURE, PaymentChain, PaymentRequired,
@@ -84,9 +85,8 @@ impl X402Client {
             challenge.accepts.len()
         );
 
-        let (requirement, chain) = challenge
-            .best_exact_requirement()
-            .ok_or(X402Error::NoPaymentOption)?;
+        let (index, chain) = select_requirement(&challenge)?;
+        let requirement = &challenge.accepts[index];
 
         let amount = parse_amount(requirement)?;
         if let Some(cap) = max_amount {
@@ -110,8 +110,9 @@ impl X402Client {
         let payment = self.builder.build(&challenge, requirement, chain).await?;
         let encoded = encode_payment(&payment)?;
 
-        let proof = HeaderValue::from_str(&encoded)
-            .map_err(|e| X402Error::Protocol(format!("payment proof is not a valid header: {e}")))?;
+        let proof = HeaderValue::from_str(&encoded).map_err(|e| {
+            X402Error::Protocol(format!("payment proof is not a valid header: {e}"))
+        })?;
         retry_req
             .headers_mut()
             .insert(HEADER_PAYMENT_SIGNATURE, proof);
@@ -144,31 +145,20 @@ impl X402Client {
 /// Parse a 402 response's headers and return the challenge with the index of the
 /// best payment option and its chain family.
 ///
-/// Solana is preferred (lower fees, faster finality); EVM is the fallback.
+/// Solana is preferred (lower fees, faster finality); EVM is the fallback. Only
+/// USDC on the networks in [`crate::wire::SUPPORTED_USDC`] is payable.
 ///
 /// # Errors
 ///
 /// [`X402Error::NoPaymentHeader`] / [`X402Error::Protocol`] from reading the
-/// header, and [`X402Error::NoPaymentOption`] when nothing in it is payable.
+/// header, [`X402Error::NoPaymentOption`] when it offers no `exact` option on a
+/// Solana or EVM network, and [`X402Error::UnsupportedNetwork`] /
+/// [`X402Error::UnsupportedAsset`] when none of those is payable.
 pub fn handle_402(
     headers: &HeaderMap,
 ) -> Result<(PaymentRequired, usize, PaymentChain), X402Error> {
     let challenge = parse_402_headers(headers)?;
-    let (idx, chain) = challenge
-        .accepts
-        .iter()
-        .enumerate()
-        .find(|(_, r)| r.scheme == "exact" && r.network.starts_with("solana:"))
-        .map(|(i, _)| (i, PaymentChain::Solana))
-        .or_else(|| {
-            challenge
-                .accepts
-                .iter()
-                .enumerate()
-                .find(|(_, r)| r.scheme == "exact" && r.network.starts_with("eip155:"))
-                .map(|(i, _)| (i, PaymentChain::Evm))
-        })
-        .ok_or(X402Error::NoPaymentOption)?;
+    let (idx, chain) = select_requirement(&challenge)?;
     Ok((challenge, idx, chain))
 }
 
@@ -186,6 +176,7 @@ pub async fn pay_challenge_header(
     challenge: &PaymentRequired,
     requirement: &PaymentRequirements,
 ) -> Result<String, X402Error> {
+    ensure_payable(requirement)?;
     let chain = if requirement.network.starts_with("eip155:") {
         PaymentChain::Evm
     } else {
