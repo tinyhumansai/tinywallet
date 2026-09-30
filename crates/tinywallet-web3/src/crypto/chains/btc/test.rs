@@ -6,8 +6,8 @@ use serde_json::json;
 use tinywallet_bus::wire::TransactionSpec;
 
 use super::{
-    EsploraUtxo, estimated_btc_fee_sats, execute_btc_quote, lookup_tx, native_balance,
-    select_utxos, tx_receipt, tx_status, validate_btc_address, validate_btc_sender_address,
+    EsploraUtxo, estimated_vbytes, execute_btc_quote, lookup_tx, native_balance, plan_spend,
+    tx_receipt, tx_status, validate_btc_address, validate_btc_sender_address,
 };
 use crate::crypto::execution::{PreparedKind, PreparedStatus, TxState};
 use crate::crypto::wallet::WalletChain;
@@ -61,49 +61,121 @@ fn a_p2tr_address_is_a_valid_recipient_but_not_a_valid_sender() {
     );
 }
 
-// ── UTXO selection ───────────────────────────────────────────────────────
+// ── fee sizing and UTXO selection ────────────────────────────────────────
+
+const RATE: u64 = 20;
+
+#[test]
+fn vbytes_follow_the_input_and_output_counts() {
+    // 10.5 vB of overhead (rounded up), 68 vB per P2WPKH input, 31 vB per output.
+    assert_eq!(estimated_vbytes(1, 2), 141, "the classic 1-in 2-out size");
+    assert_eq!(estimated_vbytes(1, 1), 110);
+    assert_eq!(estimated_vbytes(3, 2), 277);
+    assert_eq!(estimated_vbytes(5, 1), 382);
+}
 
 #[test]
 fn selection_is_largest_first_and_returns_change() {
     let utxos = vec![utxo("a", 5000), utxo("b", 10_000), utxo("c", 1_000)];
-    let (chosen, change) = select_utxos(&utxos, 6_000, 2_000).unwrap();
-    assert_eq!(chosen.len(), 1);
-    assert_eq!(chosen[0].txid, "b");
-    assert_eq!(change, 2_000);
+    let plan = plan_spend(&utxos, 6_000, RATE).unwrap();
+    assert_eq!(plan.selected.len(), 1);
+    assert_eq!(plan.selected[0].txid, "b");
+    assert_eq!(plan.fee_sats, 20 * 141);
+    assert_eq!(plan.change_sats, 10_000 - 6_000 - 2_820);
 }
 
 #[test]
-fn selection_combines_outputs_when_one_is_not_enough() {
-    let utxos = vec![utxo("a", 5000), utxo("b", 5000), utxo("c", 5000)];
-    let (chosen, change) = select_utxos(&utxos, 11_000, 1_000).unwrap();
-    assert_eq!(chosen.len(), 3);
-    assert_eq!(change, 3_000);
+fn a_single_input_pays_the_classic_fee() {
+    let plan = plan_spend(&[utxo("a", 100_000)], 50_000, RATE).unwrap();
+    assert_eq!(plan.fee_sats, 2_820);
+    assert_eq!(plan.change_sats, 47_180);
+}
+
+#[test]
+fn selecting_several_inputs_pays_a_larger_fee_than_one() {
+    let utxos: Vec<_> = ["a", "b", "c", "d", "e"]
+        .into_iter()
+        .map(|id| utxo(id, 30_000))
+        .collect();
+    let single = plan_spend(&utxos, 20_000, RATE).unwrap();
+    let multi = plan_spend(&utxos, 70_000, RATE).unwrap();
+    assert_eq!(single.selected.len(), 1);
+    assert_eq!(multi.selected.len(), 3);
+    assert_eq!(multi.fee_sats, RATE * estimated_vbytes(3, 2));
+    assert!(multi.fee_sats > single.fee_sats);
+    // Everything spent is accounted for: amount, fee and change.
+    assert_eq!(70_000 + multi.fee_sats + multi.change_sats, 90_000);
+}
+
+#[test]
+fn selection_adds_an_input_when_the_first_cannot_cover_the_fee_it_needs() {
+    // 10_000 covers the 9_000 amount but not the 1-in fee on top of it, so a
+    // second input is pulled in, and the fee is sized for both.
+    let plan = plan_spend(&[utxo("a", 10_000), utxo("b", 3_000)], 9_000, RATE).unwrap();
+    assert_eq!(plan.selected.len(), 2);
+    assert!(plan.fee_sats >= RATE * estimated_vbytes(2, 1));
+    assert_eq!(9_000 + plan.fee_sats + plan.change_sats, 13_000);
+}
+
+#[test]
+fn dust_change_is_dropped_and_folded_into_the_fee() {
+    // The 1-in 2-out fee is 2_820. Leave 500 sats of change: below dust.
+    let plan = plan_spend(&[utxo("a", 50_000)], 50_000 - 2_820 - 500, RATE).unwrap();
+    assert_eq!(plan.change_sats, 0, "no change output for dust");
+    assert_eq!(plan.fee_sats, 2_820 + 500, "the dust goes to the miner");
+}
+
+#[test]
+fn change_is_kept_only_above_the_dust_threshold() {
+    let at_dust = plan_spend(&[utxo("a", 50_000)], 50_000 - 2_820 - 546, RATE).unwrap();
+    assert_eq!(at_dust.change_sats, 0, "546 sats is still dust");
+    let above = plan_spend(&[utxo("a", 50_000)], 50_000 - 2_820 - 547, RATE).unwrap();
+    assert_eq!(above.change_sats, 547);
+    assert_eq!(above.fee_sats, 2_820);
+}
+
+#[test]
+fn a_change_free_spend_that_only_covers_the_one_output_fee_is_accepted() {
+    // Total covers amount + the 1-output fee (2_200) but not the 2-output fee.
+    let plan = plan_spend(&[utxo("a", 50_000)], 50_000 - 2_200, RATE).unwrap();
+    assert_eq!(plan.selected.len(), 1);
+    assert_eq!(plan.change_sats, 0);
+    assert_eq!(plan.fee_sats, 2_200);
 }
 
 #[test]
 fn selection_errors_when_funds_are_insufficient() {
-    let err = select_utxos(&[utxo("a", 1_000)], 5_000, 1_000).unwrap_err();
+    let err = plan_spend(&[utxo("a", 1_000)], 5_000, RATE).unwrap_err();
     assert_eq!(
         err,
-        "insufficient BTC: have 1000 sats, need 6000 (amount 5000 + fee 1000)"
+        "insufficient BTC: have 1000 sats, need 7200 (amount 5000 + fee 2200)"
+    );
+}
+
+#[test]
+fn the_insufficient_error_prices_every_input_it_would_need_to_spend() {
+    let err = plan_spend(&[utxo("a", 3_000), utxo("b", 3_000)], 10_000, RATE).unwrap_err();
+    // Two inputs, one output: 20 * 178 = 3_560.
+    assert_eq!(
+        err,
+        "insufficient BTC: have 6000 sats, need 13560 (amount 10000 + fee 3560)"
     );
 }
 
 #[test]
 fn selection_reports_overflow_rather_than_wrapping() {
     assert_eq!(
-        select_utxos(&[], u64::MAX, 1).unwrap_err(),
+        plan_spend(&[], u64::MAX, RATE).unwrap_err(),
         "amount + fee overflow"
     );
-    // Two huge outputs that together exceed u64 before reaching a target of u64::MAX.
+    assert_eq!(
+        plan_spend(&[], 1, u64::MAX).unwrap_err(),
+        "amount + fee overflow"
+    );
+    // Two huge outputs that together exceed u64 before reaching the target.
     let big = u64::MAX - 10;
-    let err = select_utxos(&[utxo("a", big), utxo("b", big)], u64::MAX - 1, 1).unwrap_err();
+    let err = plan_spend(&[utxo("a", big), utxo("b", big)], u64::MAX - 5_000, 1).unwrap_err();
     assert_eq!(err, "utxo sum overflow");
-}
-
-#[test]
-fn the_fee_estimate_is_rate_times_typical_size() {
-    assert_eq!(estimated_btc_fee_sats(), 20 * 141);
 }
 
 // ── balance ──────────────────────────────────────────────────────────────
@@ -173,6 +245,50 @@ async fn execute_selects_utxos_hands_the_spec_to_the_signer_and_broadcasts() {
         Call::RestPost { path, body, content_type, .. }
             if path == "tx" && body == "0200000000010abc" && content_type == "text/plain"
     )));
+}
+
+#[tokio::test]
+async fn execute_sizes_the_fee_for_every_input_it_spends() {
+    let rig = Rig::new();
+    let utxos: Vec<_> = (0u32..3)
+        .map(|vout| json!({"txid": TXID, "vout": vout, "value": 30_000u64}))
+        .collect();
+    rig.transport
+        .on_get(&utxo_path(), &json!(utxos).to_string());
+    rig.transport.on_post("tx", TXID);
+
+    let result = execute_btc_quote(&rig.engine, btc_quote("70000"))
+        .await
+        .unwrap();
+
+    // 3 inputs and 2 outputs: 277 vB at 20 sat/vB.
+    assert_eq!(result.transaction.estimated_fee_raw, "5540");
+    match &rig.signer.transactions()[0] {
+        TransactionSpec::Btc { fee_sat, utxos, .. } => {
+            assert_eq!(*fee_sat, 5_540);
+            assert_eq!(utxos.len(), 3);
+        }
+        other => panic!("expected a BTC spec, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn execute_hands_the_signer_the_dust_folded_fee() {
+    let rig = Rig::new();
+    rig.transport.on_get(
+        &utxo_path(),
+        &json!([{"txid": TXID, "vout": 0, "value": 50_000u64}]).to_string(),
+    );
+    rig.transport.on_post("tx", TXID);
+    // 50_000 - 47_000 = 3_000 left, 2_820 of it fee and 180 of it dust change.
+    let result = execute_btc_quote(&rig.engine, btc_quote("47000"))
+        .await
+        .unwrap();
+    assert_eq!(result.transaction.estimated_fee_raw, "3000");
+    match &rig.signer.transactions()[0] {
+        TransactionSpec::Btc { fee_sat, .. } => assert_eq!(*fee_sat, 3_000),
+        other => panic!("expected a BTC spec, got {other:?}"),
+    }
 }
 
 #[tokio::test]
