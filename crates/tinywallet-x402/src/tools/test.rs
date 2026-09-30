@@ -246,7 +246,7 @@ async fn an_evm_402_is_paid_recorded_and_reported() {
     ledger::reset_global();
 }
 
-/// A host whose active session is fixed, or absent.
+/// A host whose active thread is fixed, or absent.
 struct FakeScope(Option<&'static str>);
 
 impl ThreadScope for FakeScope {
@@ -256,7 +256,7 @@ impl ThreadScope for FakeScope {
 }
 
 #[tokio::test]
-async fn every_record_of_a_payment_is_stamped_with_the_hosts_active_session() {
+async fn every_record_of_a_payment_names_the_hosts_thread_and_the_ledgers_session() {
     let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger();
     let server = TestServer::start(paid_config(evm_requirement())).await;
@@ -267,32 +267,40 @@ async fn every_record_of_a_payment_is_stamped_with_the_hosts_active_session() {
     assert!(!result.is_error, "{}", text(&result));
     let records = records();
     assert_eq!(records.len(), 2);
-    assert!(
-        records.iter().all(|r| r.session_id == "thread-7"),
-        "{records:?}"
-    );
+    for record in &records {
+        assert_eq!(record.thread_id.as_deref(), Some("thread-7"));
+        assert_eq!(record.session_id, "tool-test", "the ledger's own session");
+    }
     ledger::reset_global();
 }
 
 #[tokio::test]
-async fn payments_default_to_the_ledgers_own_session() {
+async fn a_tool_payment_counts_toward_the_session_total_with_or_without_a_thread() {
     let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger();
     let server = TestServer::start(paid_config(evm_requirement())).await;
 
-    // No scope installed, then a scope with nothing active: same answer.
+    // No scope installed, then a scope with nothing active, then one thread.
     run(&tool(), json!({"url": server.url})).await;
     let quiet = tool().with_thread_scope(Arc::new(FakeScope(None)));
     run(&quiet, json!({"url": server.url})).await;
+    let threaded = tool().with_thread_scope(Arc::new(FakeScope(Some("thread-7"))));
+    run(&threaded, json!({"url": server.url})).await;
 
     let records = records();
-    assert_eq!(records.len(), 4);
-    assert!(records.iter().all(|r| r.session_id == "tool-test"));
+    assert_eq!(records.len(), 6);
     assert_eq!(
-        ledger::with_ledger(|l| l.summary().session_total_atomic).unwrap(),
-        5_000,
-        "both payments count toward the session total"
+        records
+            .iter()
+            .filter(|r| r.status == PaymentStatus::Settled)
+            .map(|r| r.thread_id.as_deref())
+            .collect::<Vec<_>>(),
+        vec![None, None, Some("thread-7")]
     );
+    assert!(records.iter().all(|r| r.session_id == "tool-test"));
+    let summary = ledger::with_ledger(|l| l.summary()).unwrap();
+    assert_eq!(summary.session_total_atomic, 7_500);
+    assert_eq!(summary.session_count, 3);
     ledger::reset_global();
 }
 

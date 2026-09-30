@@ -117,6 +117,7 @@ fn settled(amount: u64) -> PaymentRecord {
         status: PaymentStatus::Settled,
         timestamp: chrono::Utc::now(),
         session_id: "test-session".into(),
+        thread_id: None,
     }
 }
 

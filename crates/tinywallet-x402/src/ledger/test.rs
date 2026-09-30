@@ -41,6 +41,7 @@ fn record(
         status,
         timestamp,
         session_id: session.into(),
+        thread_id: None,
     }
 }
 
@@ -525,4 +526,35 @@ fn a_verdict_converts_to_its_refusal() {
             cap: 1
         })
     );
+}
+
+#[test]
+fn a_line_written_before_threads_existed_still_loads() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("x402");
+    fs::create_dir_all(&path).unwrap();
+    let old = r#"{"id":"old","url":"https://x","asset":"USDC","amountAtomic":5,"amountDisplay":"5","recipient":"r","network":"n","txSignature":null,"status":"settled","timestamp":"2026-03-15T12:00:00Z","sessionId":"session-a"}"#;
+    fs::write(path.join("payments.jsonl"), format!("{old}\n")).unwrap();
+
+    let ledger = ledger_in(&dir);
+
+    let records = ledger.recent_payments(5);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].thread_id, None);
+    assert_eq!(records[0].session_id, "session-a");
+}
+
+#[test]
+fn a_thread_is_written_only_when_there_is_one() {
+    let mut with = record(1, PaymentStatus::Settled, now(), SESSION);
+    assert!(
+        !serde_json::to_string(&with)
+            .unwrap()
+            .contains("threadId")
+    );
+    with.thread_id = Some("thread-1".into());
+    let json = serde_json::to_value(&with).unwrap();
+    assert_eq!(json["threadId"], "thread-1");
+    let back: PaymentRecord = serde_json::from_value(json).unwrap();
+    assert_eq!(back.thread_id.as_deref(), Some("thread-1"));
 }

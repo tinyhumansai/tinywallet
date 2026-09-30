@@ -1,9 +1,9 @@
-//! Tests for the session seam.
+//! Tests for the thread seam.
 
 use super::*;
 
 #[test]
-fn the_default_scope_has_no_active_session() {
+fn the_default_scope_has_no_active_thread() {
     assert_eq!(NoThread.current_thread(), None);
 }
 

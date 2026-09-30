@@ -27,8 +27,13 @@ pub struct PaymentRecord {
     pub status: PaymentStatus,
     /// When this line was written.
     pub timestamp: DateTime<Utc>,
-    /// The session that made the payment.
+    /// The ledger session that made the payment: the process that opened the
+    /// ledger. [`SpendingSummary::session_total_atomic`] counts by this.
     pub session_id: String,
+    /// The conversation thread that asked for the payment, when the host
+    /// reported one. Absent from older ledger files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
 }
 
 /// Where a payment attempt stands.

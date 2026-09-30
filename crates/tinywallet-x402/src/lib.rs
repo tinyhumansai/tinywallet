@@ -8,7 +8,7 @@
 //! - [`abi`] — ERC-20 `transfer` calldata.
 //! - [`ledger`] — the append-only spending ledger and its budgets.
 //! - [`thread`] — the [`ThreadScope`](thread::ThreadScope) seam that tells
-//!   the ledger which session a payment belongs to.
+//!   the ledger which thread a payment belongs to.
 //! - [`protocol`] — reading a 402 challenge, the client that pays and retries,
 //!   and the [`ProxyPolicy`](protocol::ProxyPolicy) seam.
 //! - [`crypto`] — building the on-chain payment (EVM EIP-3009, Solana SPL)
@@ -39,7 +39,7 @@
 //! | `wire` | on | the x402 header payload types ([`wire`]) |
 //! | `eip712` | off | EIP-712 hashing ([`eip712`]) |
 //! | `abi` | off | ERC-20 `transfer` calldata ([`abi`]) |
-//! | `ledger` | off | the spending ledger ([`ledger`]) and the session seam ([`thread`]) |
+//! | `ledger` | off | the spending ledger ([`ledger`]) and the thread seam ([`thread`]) |
 //! | `pay` | off | the 402 client and the payment builders ([`protocol`], [`crypto`]) |
 //! | `tools` | off | the `x402_request` tool ([`tools`]) |
 

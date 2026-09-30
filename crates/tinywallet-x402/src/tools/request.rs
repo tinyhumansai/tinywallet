@@ -32,7 +32,7 @@ const MAX_BODY_BYTES: usize = 50_000;
 pub struct X402RequestTool {
     payments: Arc<dyn PaymentBuilder>,
     proxy: Arc<dyn ProxyPolicy>,
-    session: Arc<dyn ThreadScope>,
+    thread: Arc<dyn ThreadScope>,
 }
 
 impl std::fmt::Debug for X402RequestTool {
@@ -59,17 +59,18 @@ impl X402RequestTool {
         Self {
             payments,
             proxy,
-            session: Arc::new(NoThread),
+            thread: Arc::new(NoThread),
         }
     }
 
-    /// Stamp payments with the session `session` reports as active.
+    /// Record the thread `thread` reports as active in each payment's
+    /// `thread_id`.
     ///
-    /// Without this, or when the scope reports no session, a payment is
-    /// attributed to the ledger's own session.
+    /// Without this, or when the scope reports no thread, `thread_id` is empty.
+    /// Either way `session_id` is the ledger's own session.
     #[must_use]
-    pub fn with_thread_scope(mut self, session: Arc<dyn ThreadScope>) -> Self {
-        self.session = session;
+    pub fn with_thread_scope(mut self, thread: Arc<dyn ThreadScope>) -> Self {
+        self.thread = thread;
         self
     }
 
@@ -252,12 +253,11 @@ impl X402RequestTool {
             payment.recipient, payment.network
         );
 
-        // The session the payment is attributed to: the host's active one, or
-        // the ledger's own when the call runs outside any session. Read here, on
-        // the tool's own task, where a host's task-local is still in scope.
-        let session_id = self.session.current_thread().unwrap_or_else(|| {
-            ledger::with_ledger(|l| l.session_id().to_string()).unwrap_or_default()
-        });
+        // `session_id` is always the ledger's own, so the session total counts
+        // the payment; `thread_id` is the host's finer attribution. Both are read
+        // here, on the tool's own task, where a host's task-local is in scope.
+        let session_id = ledger::with_ledger(|l| l.session_id().to_string()).unwrap_or_default();
+        let thread_id = self.thread.current_thread();
 
         // Record the pending payment. Every later state is a new line with the
         // same id.
@@ -274,6 +274,7 @@ impl X402RequestTool {
             status,
             timestamp: chrono::Utc::now(),
             session_id: session_id.clone(),
+            thread_id: thread_id.clone(),
         };
         let _ = ledger::with_ledger_mut(|l| l.record_payment(record(PaymentStatus::Pending, None)));
 
