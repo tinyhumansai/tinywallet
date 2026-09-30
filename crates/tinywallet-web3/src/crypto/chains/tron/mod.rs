@@ -16,7 +16,6 @@ use serde_json::{Map, Value, json};
 use tinywallet_bus::wire::TransactionSpec;
 use tinywallet_crypto::TronTransfer;
 
-use crate::crypto::defaults::explorer_tx_url;
 use crate::crypto::execution::{
     ExecutionResult, PreparedKind, PreparedStatus, PreparedTransaction, TxLookupInfo,
     TxReceiptInfo, TxState, TxStatusInfo,
@@ -336,7 +335,7 @@ pub(crate) async fn execute_tron_quote(
         "{LOG_PREFIX} broadcast quote_id={} txid={txid} kind={:?}",
         quote.quote_id, quote.kind
     );
-    let explorer_url = explorer_tx_url(WalletChain::Tron, &txid);
+    let explorer_url = engine.explorer_url(WalletChain::Tron, &txid);
     Ok(ExecutionResult {
         quote_id: quote.quote_id.clone(),
         status: PreparedStatus::Broadcasted,

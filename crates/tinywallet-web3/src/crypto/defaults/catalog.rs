@@ -29,7 +29,11 @@ pub const fn default_rpc_url(chain: WalletChain, cluster: SolanaCluster) -> &'st
 
 /// The explorer link for a transaction on `chain` (Ethereum mainnet for EVM).
 #[must_use]
-pub fn explorer_tx_url(chain: WalletChain, tx_hash: &str) -> Option<String> {
+pub fn explorer_tx_url(
+    chain: WalletChain,
+    _cluster: SolanaCluster,
+    tx_hash: &str,
+) -> Option<String> {
     let base = match chain {
         WalletChain::Evm => EvmNetwork::EthereumMainnet.explorer_tx_base(),
         WalletChain::Btc => BLOCKSTREAM_TX_BASE,
@@ -186,6 +190,7 @@ pub fn network_defaults(endpoints: &dyn RpcEndpoints) -> Vec<WalletNetworkDefaul
             rpc_url: endpoints.url(WalletChain::Evm, Some(network)),
             rpc_source: endpoints.source(WalletChain::Evm, Some(network)),
             explorer_tx_url_base: network.explorer_tx_base().to_string(),
+            explorer_tx_url_suffix: None,
             supports_broadcast: true,
             supports_token_transfers: true,
             supports_contract_calls: true,
@@ -205,6 +210,7 @@ pub fn network_defaults(endpoints: &dyn RpcEndpoints) -> Vec<WalletNetworkDefaul
             rpc_url: endpoints.url(chain, None),
             rpc_source: endpoints.source(chain, None),
             explorer_tx_url_base: explorer.to_string(),
+            explorer_tx_url_suffix: None,
             supports_broadcast: true,
             supports_token_transfers: chain != WalletChain::Btc,
             supports_contract_calls: false,

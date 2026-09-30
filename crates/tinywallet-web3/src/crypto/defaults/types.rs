@@ -200,6 +200,10 @@ pub struct WalletNetworkDefaults {
     pub rpc_source: RpcSource,
     /// Explorer transaction-URL prefix.
     pub explorer_tx_url_base: String,
+    /// Text that follows the transaction hash in an explorer link, when the
+    /// network needs one (Solana devnet's `?cluster=devnet`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explorer_tx_url_suffix: Option<String>,
     /// Whether the wallet can broadcast here.
     pub supports_broadcast: bool,
     /// Whether token transfers are supported.

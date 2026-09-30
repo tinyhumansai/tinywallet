@@ -12,7 +12,6 @@ use serde::Deserialize;
 use serde_json::Value;
 use tinywallet_bus::wire::{TransactionSpec, Utxo};
 
-use crate::crypto::defaults::explorer_tx_url;
 use crate::crypto::execution::{
     ExecutionResult, PreparedKind, PreparedStatus, PreparedTransaction, TxLookupInfo,
     TxReceiptInfo, TxState, TxStatusInfo,
@@ -260,7 +259,7 @@ pub(crate) async fn execute_btc_quote(
         "{LOG_PREFIX} broadcast quote_id={} txid={} amount_sats={} change_sats={}",
         quote.quote_id, txid_hex, amount_sats, change_sats
     );
-    let explorer_url = explorer_tx_url(WalletChain::Btc, &txid_hex);
+    let explorer_url = engine.explorer_url(WalletChain::Btc, &txid_hex);
     Ok(ExecutionResult {
         quote_id: quote.quote_id.clone(),
         status: PreparedStatus::Broadcasted,

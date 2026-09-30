@@ -9,7 +9,6 @@
 
 use log::debug;
 
-use crate::crypto::defaults::explorer_tx_url;
 use crate::crypto::execution::RawBroadcastResult;
 use crate::crypto::wallet::{WalletChain, WalletEngine};
 
@@ -109,7 +108,7 @@ pub(crate) async fn sign_and_broadcast_versioned(
     debug!("{LOG_PREFIX} sign_and_broadcast_versioned sig={tx_sig}");
     Ok(RawBroadcastResult {
         transaction_hash: tx_sig.clone(),
-        explorer_url: explorer_tx_url(WalletChain::Solana, &tx_sig),
+        explorer_url: engine.explorer_url(WalletChain::Solana, &tx_sig),
         // Solana fees are dynamic (base plus priority) and only known once the
         // tx is confirmed: leave unset rather than misreporting a free
         // transfer.
