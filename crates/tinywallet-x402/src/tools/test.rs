@@ -12,11 +12,11 @@ use tinytools::{PermissionLevel, Tool, ToolExposure, ToolResult};
 
 use super::*;
 use crate::ledger::{self, PaymentRecord, PaymentStatus, SpendingBudget};
-use crate::thread::ThreadScope;
 use crate::test_support::{
     FakePaymentSigner, FakeProxyPolicy, FakeTransport, ServerConfig, TestServer, challenge,
     challenge_header, evm_requirement, solana_requirement,
 };
+use crate::thread::ThreadScope;
 use crate::wire::{PaymentRequirements, SettlementResponse};
 
 fn tool_with(proxy: Arc<FakeProxyPolicy>) -> X402RequestTool {

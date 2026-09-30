@@ -547,11 +547,7 @@ fn a_line_written_before_threads_existed_still_loads() {
 #[test]
 fn a_thread_is_written_only_when_there_is_one() {
     let mut with = record(1, PaymentStatus::Settled, now(), SESSION);
-    assert!(
-        !serde_json::to_string(&with)
-            .unwrap()
-            .contains("threadId")
-    );
+    assert!(!serde_json::to_string(&with).unwrap().contains("threadId"));
     with.thread_id = Some("thread-1".into());
     let json = serde_json::to_value(&with).unwrap();
     assert_eq!(json["threadId"], "thread-1");
