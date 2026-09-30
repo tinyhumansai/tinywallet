@@ -477,7 +477,13 @@ async fn parallel_payments_cannot_overspend_the_daily_cap() {
     assert_eq!(builder.0.chains.lock().unwrap().len(), 3, "and only those");
     for refused in results.iter().filter_map(|r| r.as_ref().err()) {
         assert!(
-            matches!(refused, X402Error::BudgetExceeded { period: "daily", .. }),
+            matches!(
+                refused,
+                X402Error::BudgetExceeded {
+                    period: "daily",
+                    ..
+                }
+            ),
             "{refused}"
         );
     }

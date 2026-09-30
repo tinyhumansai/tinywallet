@@ -409,11 +409,17 @@ fn committing_a_reservation_records_the_payment_and_frees_the_hold() {
     let mut ledger = ledger_in(&dir);
     let id = ledger.reserve(400_000).unwrap();
 
-    ledger.commit_reservation(id, record(400_000, PaymentStatus::Settled, Utc::now(), SESSION));
+    ledger.commit_reservation(
+        id,
+        record(400_000, PaymentStatus::Settled, Utc::now(), SESSION),
+    );
 
     assert_eq!(ledger.reserved_atomic(), 0);
     let summary = ledger.summary();
-    assert_eq!(summary.daily_total_atomic, 400_000, "counted once, as settled");
+    assert_eq!(
+        summary.daily_total_atomic, 400_000,
+        "counted once, as settled"
+    );
     assert_eq!(ledger.recent_payments(5).len(), 1);
 }
 
@@ -431,7 +437,10 @@ fn a_global_reservation_is_released_when_dropped() {
 
     let held = reserve(500_000).unwrap().unwrap();
     assert_eq!(held.amount(), 500_000);
-    assert_eq!(with_ledger(PaymentLedger::reserved_atomic).unwrap(), 500_000);
+    assert_eq!(
+        with_ledger(PaymentLedger::reserved_atomic).unwrap(),
+        500_000
+    );
     drop(held);
     assert_eq!(with_ledger(PaymentLedger::reserved_atomic).unwrap(), 0);
     reset_global();

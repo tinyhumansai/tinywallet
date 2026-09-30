@@ -10,7 +10,8 @@ use chrono::{DateTime, Datelike, Utc};
 use log::{debug, warn};
 
 use super::types::{
-    BudgetCheck, BudgetRefusal, PaymentRecord, PaymentStatus, ReservationId, SpendingBudget, SpendingSummary,
+    BudgetCheck, BudgetRefusal, PaymentRecord, PaymentStatus, ReservationId, SpendingBudget,
+    SpendingSummary,
 };
 
 const LOG_PREFIX: &str = "[x402::store]";
