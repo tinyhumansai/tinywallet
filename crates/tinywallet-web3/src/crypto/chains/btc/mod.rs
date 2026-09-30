@@ -24,8 +24,18 @@ const LOG_PREFIX: &str = "[wallet::btc]";
 /// Conservative: mempools cap out around 50 sat/vB during congestion; 20 keeps
 /// us in range without burning sats in quiet times.
 const DEFAULT_FEE_RATE_SAT_VB: u64 = 20;
-/// Approximate vbytes of a 1-input, 2-output P2WPKH transaction.
-const TYPICAL_TX_VBYTES: u64 = 141;
+/// Fixed vbytes of a segwit transaction: version, locktime, counts and the
+/// witness marker, 10.5 vB, rounded up.
+const TX_OVERHEAD_VBYTES: u64 = 11;
+/// vbytes one P2WPKH input adds (outpoint, sequence and the discounted witness).
+const P2WPKH_INPUT_VBYTES: u64 = 68;
+/// vbytes one P2WPKH output adds.
+const P2WPKH_OUTPUT_VBYTES: u64 = 31;
+/// A change output at or below this many satoshis is dropped and folded into
+/// the fee. It is the signer's own threshold (its change is emitted only when
+/// the surplus is strictly above it), so the two sides agree on whether the
+/// transaction has a change output.
+const DUST_THRESHOLD_SATS: u64 = 546;
 
 /// One spendable output as Esplora reports it.
 #[derive(Debug, Deserialize, Clone)]
@@ -47,9 +57,10 @@ struct EsploraAddressStats {
     spent_txo_sum: u64,
 }
 
-/// The vbytes of a P2WPKH transaction with `inputs` inputs and `outputs` outputs.
-pub(crate) const fn estimated_vbytes(_inputs: u64, _outputs: u64) -> u64 {
-    TYPICAL_TX_VBYTES
+/// The vbytes of a P2WPKH transaction with `inputs` inputs and `outputs`
+/// outputs.
+pub(crate) const fn estimated_vbytes(inputs: u64, outputs: u64) -> u64 {
+    TX_OVERHEAD_VBYTES + inputs * P2WPKH_INPUT_VBYTES + outputs * P2WPKH_OUTPUT_VBYTES
 }
 
 fn accepted(result: &Result<String, String>) -> &'static str {
@@ -124,7 +135,35 @@ pub(crate) struct SpendPlan {
     pub(crate) change_sats: u64,
 }
 
-/// Select UTXOs to cover `amount_sats` plus the fee.
+/// The coins chosen for a transfer, the fee they pay, and the change they leave.
+#[derive(Debug, Clone)]
+pub(crate) struct SpendPlan {
+    /// The UTXOs to spend, largest first.
+    pub(crate) selected: Vec<EsploraUtxo>,
+    /// The fee, in satoshis. When the change would be dust this is everything
+    /// the inputs hold beyond the amount, so the two sides agree on it.
+    pub(crate) fee_sats: u64,
+    /// The change returned to the sender, in satoshis; zero when there is no
+    /// change output.
+    pub(crate) change_sats: u64,
+}
+
+/// Price a transaction of `inputs` inputs and `outputs` outputs at
+/// `fee_rate_sat_vb`.
+fn fee_for(fee_rate_sat_vb: u64, inputs: u64, outputs: u64) -> Result<u64, String> {
+    fee_rate_sat_vb
+        .checked_mul(estimated_vbytes(inputs, outputs))
+        .ok_or_else(|| "amount + fee overflow".to_string())
+}
+
+/// Select UTXOs, largest first, to cover `amount_sats` plus a fee sized for the
+/// transaction those inputs make.
+///
+/// Every input adds weight and so fee, which the next input may or may not
+/// cover; the selection therefore grows one input at a time and re-prices the
+/// transaction after each. A change output is planned for first (two outputs);
+/// if what is left over would be dust, it is dropped (one output) and the whole
+/// surplus goes to the fee.
 pub(crate) fn plan_spend(
     utxos: &[EsploraUtxo],
     amount_sats: u64,
@@ -132,9 +171,10 @@ pub(crate) fn plan_spend(
 ) -> Result<SpendPlan, String> {
     let mut sorted = utxos.to_vec();
     sorted.sort_by_key(|item| std::cmp::Reverse(item.value));
-    let fee_sats = fee_rate_sat_vb * TYPICAL_TX_VBYTES;
-    let target = amount_sats
-        .checked_add(fee_sats)
+    // The cheapest a spend can be: no inputs beyond the first, no change. It
+    // fails the whole call when even that overflows.
+    fee_for(fee_rate_sat_vb, 1, 1)?
+        .checked_add(amount_sats)
         .ok_or_else(|| "amount + fee overflow".to_string())?;
     let mut total: u64 = 0;
     let mut chosen = Vec::new();
@@ -143,14 +183,28 @@ pub(crate) fn plan_spend(
             .checked_add(utxo.value)
             .ok_or_else(|| "utxo sum overflow".to_string())?;
         chosen.push(utxo);
-        if total >= target {
+        let inputs = chosen.len() as u64;
+        let fee_with_change = fee_for(fee_rate_sat_vb, inputs, 2)?;
+        let fee_without_change = fee_for(fee_rate_sat_vb, inputs, 1)?;
+        let with_change = amount_sats.saturating_add(fee_with_change);
+        if total >= with_change && total - with_change > DUST_THRESHOLD_SATS {
             return Ok(SpendPlan {
                 selected: chosen,
-                fee_sats,
-                change_sats: total - target,
+                fee_sats: fee_with_change,
+                change_sats: total - with_change,
+            });
+        }
+        if total >= amount_sats.saturating_add(fee_without_change) {
+            return Ok(SpendPlan {
+                selected: chosen,
+                fee_sats: total - amount_sats,
+                change_sats: 0,
             });
         }
     }
+    let inputs = chosen.len() as u64;
+    let fee_sats = fee_for(fee_rate_sat_vb, inputs, 1)?;
+    let target = amount_sats.saturating_add(fee_sats);
     Err(format!(
         "insufficient BTC: have {total} sats, need {target} (amount {amount_sats} + fee {fee_sats})"
     ))
