@@ -485,6 +485,54 @@ async fn parallel_payments_cannot_overspend_the_daily_cap() {
 }
 
 #[tokio::test]
+async fn a_payment_holds_its_amount_until_its_result_is_dropped() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let _dir = init_ledger(SpendingBudget {
+        per_request_max_atomic: 10_000,
+        daily_max_atomic: 10_000,
+        monthly_max_atomic: 1_000_000,
+    });
+    let headers = challenge_headers(&challenge(vec![solana_requirement()]));
+    let builder = StubBuilder::default();
+
+    let first = handle_402_and_pay(&builder, &headers, "u").await.unwrap();
+    assert_eq!(first.reservation.amount(), 10_000);
+    let err = handle_402_and_pay(&builder, &headers, "u")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "x402 daily budget exceeded: 10000/10000 atomic units",
+        "the first payment's hold counts even before it is recorded"
+    );
+
+    drop(first);
+    assert!(handle_402_and_pay(&builder, &headers, "u").await.is_ok());
+    ledger::reset_global();
+}
+
+#[tokio::test]
+async fn a_failed_signature_releases_the_hold() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let _dir = init_ledger(SpendingBudget::default());
+    let headers = challenge_headers(&challenge(vec![solana_requirement()]));
+    let failing = StubBuilder {
+        fail_with: Some("locked".into()),
+        ..StubBuilder::default()
+    };
+
+    handle_402_and_pay(&failing, &headers, "u")
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        ledger::with_ledger(ledger::PaymentLedger::reserved_atomic).unwrap(),
+        0
+    );
+    ledger::reset_global();
+}
+
+#[tokio::test]
 async fn a_wallet_failure_is_passed_through() {
     let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger(SpendingBudget::default());

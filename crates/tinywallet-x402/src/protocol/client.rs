@@ -232,26 +232,30 @@ pub async fn handle_402_and_pay(
     let requirement = &challenge.accepts[idx];
     let amount = parse_amount(requirement)?;
 
-    match ledger::with_ledger(|l| l.check_budget(amount)).map_err(X402Error::Wallet)? {
-        BudgetCheck::Allowed => {}
-        BudgetCheck::ExceedsPerRequest { requested, cap } => {
+    // Check the budget and hold the amount in one critical section, before
+    // anything is signed: a check on its own would let concurrent payments that
+    // each fit overspend together.
+    let reservation = match ledger::reserve(amount).map_err(X402Error::Wallet)? {
+        Ok(reservation) => reservation,
+        Err(BudgetCheck::Allowed) => unreachable_allowed(),
+        Err(BudgetCheck::ExceedsPerRequest { requested, cap }) => {
             return Err(X402Error::AmountExceedsCap { requested, cap });
         }
-        BudgetCheck::ExceedsDailyBudget { current, cap } => {
+        Err(BudgetCheck::ExceedsDailyBudget { current, cap }) => {
             return Err(X402Error::BudgetExceeded {
                 period: "daily",
                 current,
                 cap,
             });
         }
-        BudgetCheck::ExceedsMonthlyBudget { current, cap } => {
+        Err(BudgetCheck::ExceedsMonthlyBudget { current, cap }) => {
             return Err(X402Error::BudgetExceeded {
                 period: "monthly",
                 current,
                 cap,
             });
         }
-    }
+    };
 
     debug!(
         "{LOG_PREFIX} paying {} atomic {} to {} for {} chain={:?}",
