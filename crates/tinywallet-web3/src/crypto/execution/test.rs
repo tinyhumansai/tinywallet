@@ -73,28 +73,168 @@ fn the_supported_solana_usdc_follows_the_cluster() {
     );
 }
 
+/// Script every chain's probe endpoint to answer healthily.
+fn script_healthy_chains(rig: &Rig) {
+    rig.transport
+        .on_rpc("eth_blockNumber", json!("0x12d687"))
+        .on_rpc("getHealth", json!("ok"))
+        .on_get("blocks/tip/height", "850000\n")
+        .on_post(
+            "wallet/getnowblock",
+            &json!({"blockID": "00ab", "block_header": {}}).to_string(),
+        );
+}
+
+fn row(rows: &[super::ChainStatus], chain: WalletChain) -> &super::ChainStatus {
+    rows.iter().find(|r| r.chain == chain).unwrap()
+}
+
 #[tokio::test]
 async fn chain_status_reports_missing_providers_without_accounts() {
     let rig = Rig::new();
+    script_healthy_chains(&rig);
     let mut status = configured_status();
     status.accounts.retain(|a| a.chain != WalletChain::Btc);
     rig.accounts.set(Ok(status));
     let rows = rig.engine.chain_status().await.unwrap();
     assert_eq!(rows.len(), EvmNetwork::ALL.len() + 3);
-    let btc = rows.iter().find(|r| r.chain == WalletChain::Btc).unwrap();
+    let btc = row(&rows, WalletChain::Btc);
     assert!(!btc.configured);
     assert_eq!(btc.provider_status, ProviderStatus::Missing);
+    assert_eq!(btc.error, None, "no account is not an endpoint failure");
     let base = rows
         .iter()
         .find(|r| r.evm_network == Some(EvmNetwork::BaseMainnet))
         .unwrap();
     assert!(base.configured);
     assert_eq!(base.rpc_url, "https://rpc.test/base_mainnet");
-    let sol = rows
-        .iter()
-        .find(|r| r.chain == WalletChain::Solana)
-        .unwrap();
-    assert_eq!(sol.provider_status, ProviderStatus::Ready);
+    assert_eq!(
+        row(&rows, WalletChain::Solana).provider_status,
+        ProviderStatus::Ready
+    );
+    // A chain with no account is not probed.
+    assert!(
+        !rig.transport
+            .calls()
+            .iter()
+            .any(|c| matches!(c, Call::RestGet { .. })),
+        "the BTC endpoint must not be contacted without an account"
+    );
+}
+
+#[tokio::test]
+async fn chain_status_is_ready_only_once_every_endpoint_answers_its_probe() {
+    let rig = Rig::new();
+    script_healthy_chains(&rig);
+    let rows = rig.engine.chain_status().await.unwrap();
+    assert!(rows.iter().all(|r| r.provider_status == ProviderStatus::Ready));
+    assert!(rows.iter().all(|r| r.error.is_none()), "{rows:?}");
+
+    // One cheap call per row, on that row's own network.
+    let calls = rig.transport.calls();
+    for network in EvmNetwork::ALL {
+        assert!(
+            calls.iter().any(|c| matches!(
+                c,
+                Call::JsonRpc { network: n, method, .. }
+                    if method == "eth_blockNumber"
+                        && *n == NetworkId::evm(network.chain_id())
+            )),
+            "no eth_blockNumber probe for {network:?}"
+        );
+    }
+    assert!(calls.iter().any(|c| matches!(
+        c,
+        Call::JsonRpc { method, .. } if method == "getHealth"
+    )));
+    assert!(calls.iter().any(|c| matches!(
+        c,
+        Call::RestGet { path, .. } if path == "blocks/tip/height"
+    )));
+    assert!(calls.iter().any(|c| matches!(
+        c,
+        Call::RestPost { path, .. } if path == "wallet/getnowblock"
+    )));
+}
+
+#[tokio::test]
+async fn chain_status_reports_an_unreachable_endpoint_with_its_error() {
+    let rig = Rig::new();
+    rig.transport
+        .on_rpc("eth_blockNumber", json!("0x1"))
+        .on_rpc_error("getHealth", "node is behind by 42 slots")
+        .on_get_error("blocks/tip/height", "wallet REST GET transport failed: refused")
+        .on_post_unreachable("wallet/getnowblock", "wallet REST POST transport failed: timeout");
+    let rows = rig.engine.chain_status().await.unwrap();
+
+    let unhealthy = [
+        (WalletChain::Solana, "node is behind by 42 slots"),
+        (WalletChain::Btc, "wallet REST GET transport failed: refused"),
+        (WalletChain::Tron, "wallet REST POST transport failed: timeout"),
+    ];
+    for (chain, message) in unhealthy {
+        let r = row(&rows, chain);
+        assert!(r.configured, "the account is still there");
+        assert_eq!(r.provider_status, ProviderStatus::Missing, "{chain:?}");
+        assert_eq!(r.error.as_deref(), Some(message), "{chain:?}");
+    }
+    let evm: Vec<_> = rows.iter().filter(|r| r.chain == WalletChain::Evm).collect();
+    assert!(evm.iter().all(|r| r.provider_status == ProviderStatus::Ready));
+}
+
+#[tokio::test]
+async fn chain_status_rejects_an_answer_that_is_not_a_chain_tip() {
+    let rig = Rig::new();
+    script_healthy_chains(&rig);
+    // Reachable, but not saying what a tip says: a stub or captive portal.
+    rig.transport.on_rpc("eth_blockNumber", json!({"oops": true}));
+    let rows = rig.engine.chain_status().await.unwrap();
+    let evm = row(&rows, WalletChain::Evm);
+    assert_eq!(evm.provider_status, ProviderStatus::Missing);
+    assert!(
+        evm.error.as_deref().unwrap().contains("eth_blockNumber"),
+        "{evm:?}"
+    );
+
+    let rig = Rig::new();
+    script_healthy_chains(&rig);
+    rig.transport.on_get("blocks/tip/height", "<html>");
+    rig.transport
+        .on_post("wallet/getnowblock", &json!({"Error": "no block"}).to_string());
+    let rows = rig.engine.chain_status().await.unwrap();
+    let btc = row(&rows, WalletChain::Btc);
+    assert_eq!(btc.provider_status, ProviderStatus::Missing);
+    assert!(btc.error.as_deref().unwrap().contains("tip height"), "{btc:?}");
+    let tron = row(&rows, WalletChain::Tron);
+    assert_eq!(tron.provider_status, ProviderStatus::Missing);
+    assert!(tron.error.as_deref().unwrap().contains("getnowblock"), "{tron:?}");
+}
+
+#[test]
+fn a_healthy_chain_status_row_serializes_without_an_error_member() {
+    let healthy = super::ChainStatus {
+        chain: WalletChain::Btc,
+        evm_network: None,
+        configured: true,
+        provider_status: ProviderStatus::Ready,
+        rpc_url: "https://rpc.test/btc".to_string(),
+        error: None,
+    };
+    assert_eq!(
+        serde_json::to_value(&healthy).unwrap(),
+        json!({
+            "chain": "btc", "configured": true, "providerStatus": "ready",
+            "rpcUrl": "https://rpc.test/btc"
+        })
+    );
+    let failed = super::ChainStatus {
+        provider_status: ProviderStatus::Missing,
+        error: Some("refused".to_string()),
+        ..healthy
+    };
+    let value = serde_json::to_value(&failed).unwrap();
+    assert_eq!(value["providerStatus"], "missing");
+    assert_eq!(value["error"], "refused");
 }
 
 #[tokio::test]

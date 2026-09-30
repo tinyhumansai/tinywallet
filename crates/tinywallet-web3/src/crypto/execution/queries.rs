@@ -94,6 +94,7 @@ impl WalletEngine {
                 configured: has_account,
                 provider_status: provider_status(has_account),
                 rpc_url: self.endpoints.url(WalletChain::Evm, Some(network)),
+                error: None,
             });
         }
         for chain in [WalletChain::Btc, WalletChain::Solana, WalletChain::Tron] {
@@ -104,6 +105,7 @@ impl WalletEngine {
                 configured: has_account,
                 provider_status: provider_status(has_account),
                 rpc_url: self.endpoints.url(chain, None),
+                error: None,
             });
         }
         debug!("{LOG_PREFIX} chain_status reported chains={}", rows.len());

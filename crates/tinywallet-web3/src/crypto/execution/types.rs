@@ -23,6 +23,11 @@ pub struct ChainStatus {
     pub provider_status: ProviderStatus,
     /// The endpoint the host resolved.
     pub rpc_url: String,
+    /// Why the provider is not ready, when the wallet has an account but the
+    /// endpoint did not answer a probe. Absent otherwise, so a healthy row
+    /// serializes exactly as it always has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// Whether a provider answered.
