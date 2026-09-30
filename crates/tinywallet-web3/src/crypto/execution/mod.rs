@@ -17,6 +17,7 @@
 //! - `validate` — address/amount/calldata validation, formatting, hex.
 //! - `accounts` — resolving a derived account for a chain.
 //! - `queries` — the read-only surface.
+//! - `probe` — the per-chain tip call `chain_status` uses to test an endpoint.
 //! - `transfer` — preparing a transfer quote.
 //! - `tx_lookup` — transaction status, receipt and raw lookup.
 //! - `broadcast` — `execute_prepared` and the raw sign-and-broadcast
@@ -24,6 +25,7 @@
 
 mod accounts;
 mod broadcast;
+mod probe;
 mod queries;
 mod transfer;
 mod tx_lookup;

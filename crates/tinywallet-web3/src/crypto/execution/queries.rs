@@ -36,14 +36,6 @@ fn asset_to_supported(asset: WalletAssetDefinition) -> SupportedAsset {
     }
 }
 
-fn provider_status(has_account: bool) -> ProviderStatus {
-    if has_account {
-        ProviderStatus::Ready
-    } else {
-        ProviderStatus::Missing
-    }
-}
-
 impl WalletEngine {
     /// The default row for every supported network, with the endpoints the
     /// host resolved.
@@ -77,39 +69,65 @@ impl WalletEngine {
         assets
     }
 
-    /// Which chains have an account and a provider.
+    /// Which chains have an account and a provider that answers.
+    ///
+    /// A chain with an account has its endpoint probed (see
+    /// `WalletEngine::probe_provider`): [`ProviderStatus::Ready`] when it
+    /// answers, [`ProviderStatus::Missing`] with the failure in
+    /// [`ChainStatus::error`] when it does not. A chain with no account is
+    /// `Missing` and is not contacted.
     ///
     /// # Errors
     ///
-    /// The host's error if the wallet status cannot be read.
+    /// The host's error if the wallet status cannot be read. An endpoint that
+    /// fails its probe is reported in its row, not as an error.
     pub async fn chain_status(&self) -> Result<Vec<ChainStatus>, String> {
         let status = self.accounts.status().await?;
         let has = |chain: WalletChain| status.accounts.iter().any(|a| a.chain == chain);
         let mut rows = Vec::new();
         for network in EvmNetwork::ALL {
-            let has_account = has(WalletChain::Evm);
-            rows.push(ChainStatus {
-                chain: WalletChain::Evm,
-                evm_network: Some(network),
-                configured: has_account,
-                provider_status: provider_status(has_account),
-                rpc_url: self.endpoints.url(WalletChain::Evm, Some(network)),
-                error: None,
-            });
+            rows.push(
+                self.chain_status_row(WalletChain::Evm, Some(network), has(WalletChain::Evm))
+                    .await,
+            );
         }
         for chain in [WalletChain::Btc, WalletChain::Solana, WalletChain::Tron] {
-            let has_account = has(chain);
-            rows.push(ChainStatus {
-                chain,
-                evm_network: None,
-                configured: has_account,
-                provider_status: provider_status(has_account),
-                rpc_url: self.endpoints.url(chain, None),
-                error: None,
-            });
+            rows.push(self.chain_status_row(chain, None, has(chain)).await);
         }
         debug!("{LOG_PREFIX} chain_status reported chains={}", rows.len());
         Ok(rows)
+    }
+
+    /// One chain's status row, probing its endpoint when it has an account.
+    async fn chain_status_row(
+        &self,
+        chain: WalletChain,
+        network: Option<EvmNetwork>,
+        has_account: bool,
+    ) -> ChainStatus {
+        let (provider_status, error) = if has_account {
+            match self.probe_provider(chain, network).await {
+                Ok(()) => (ProviderStatus::Ready, None),
+                Err(error) => {
+                    warn!(
+                        "{LOG_PREFIX} chain_status chain={} network={} probe failed: {error}",
+                        chain.as_str(),
+                        network.map_or("-", EvmNetwork::as_str)
+                    );
+                    (ProviderStatus::Missing, Some(error))
+                }
+            }
+        } else {
+            (ProviderStatus::Missing, None)
+        };
+        ChainStatus {
+            chain,
+            evm_network: network,
+            configured: has_account,
+            provider_status,
+            rpc_url: self.endpoints.url(chain, network),
+            error,
+        }
     }
 
     /// The native-asset definition for a non-EVM chain.
