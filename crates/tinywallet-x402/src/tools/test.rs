@@ -12,6 +12,7 @@ use tinytools::{PermissionLevel, Tool, ToolExposure, ToolResult};
 
 use super::*;
 use crate::ledger::{self, PaymentRecord, PaymentStatus, SpendingBudget};
+use crate::session::SessionScope;
 use crate::test_support::{
     FakePaymentSigner, FakeProxyPolicy, FakeTransport, ServerConfig, TestServer, challenge,
     challenge_header, evm_requirement, solana_requirement,
@@ -242,6 +243,56 @@ async fn an_evm_402_is_paid_recorded_and_reported() {
     assert_eq!(records[1].amount_display, "0.002500 USDC");
     assert_eq!(records[1].tx_signature.as_deref(), Some("0xabc123"));
     assert_eq!(records[1].url, server.url);
+    ledger::reset_global();
+}
+
+/// A host whose active session is fixed, or absent.
+struct FakeScope(Option<&'static str>);
+
+impl SessionScope for FakeScope {
+    fn current_session(&self) -> Option<String> {
+        self.0.map(String::from)
+    }
+}
+
+#[tokio::test]
+async fn every_record_of_a_payment_is_stamped_with_the_hosts_active_session() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let _dir = init_ledger();
+    let server = TestServer::start(paid_config(evm_requirement())).await;
+    let tool = tool().with_session_scope(Arc::new(FakeScope(Some("thread-7"))));
+
+    let result = run(&tool, json!({"url": server.url})).await;
+
+    assert!(!result.is_error, "{}", text(&result));
+    let records = records();
+    assert_eq!(records.len(), 2);
+    assert!(
+        records.iter().all(|r| r.session_id == "thread-7"),
+        "{records:?}"
+    );
+    ledger::reset_global();
+}
+
+#[tokio::test]
+async fn payments_default_to_the_ledgers_own_session() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let _dir = init_ledger();
+    let server = TestServer::start(paid_config(evm_requirement())).await;
+
+    // No scope installed, then a scope with nothing active: same answer.
+    run(&tool(), json!({"url": server.url})).await;
+    let quiet = tool().with_session_scope(Arc::new(FakeScope(None)));
+    run(&quiet, json!({"url": server.url})).await;
+
+    let records = records();
+    assert_eq!(records.len(), 4);
+    assert!(records.iter().all(|r| r.session_id == "tool-test"));
+    assert_eq!(
+        ledger::with_ledger(|l| l.summary().session_total_atomic).unwrap(),
+        5_000,
+        "both payments count toward the session total"
+    );
     ledger::reset_global();
 }
 

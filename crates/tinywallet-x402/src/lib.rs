@@ -7,6 +7,8 @@
 //!   x402 signs. Nothing here signs; it returns the bytes to sign.
 //! - [`abi`] — ERC-20 `transfer` calldata.
 //! - [`ledger`] — the append-only spending ledger and its budgets.
+//! - [`session`] — the [`SessionScope`](session::SessionScope) seam that tells
+//!   the ledger which session a payment belongs to.
 //! - [`protocol`] — reading a 402 challenge, the client that pays and retries,
 //!   and the [`ProxyPolicy`](protocol::ProxyPolicy) seam.
 //! - [`crypto`] — building the on-chain payment (EVM EIP-3009, Solana SPL)
@@ -37,7 +39,7 @@
 //! | `wire` | on | the x402 header payload types ([`wire`]) |
 //! | `eip712` | off | EIP-712 hashing ([`eip712`]) |
 //! | `abi` | off | ERC-20 `transfer` calldata ([`abi`]) |
-//! | `ledger` | off | the spending ledger ([`ledger`]) |
+//! | `ledger` | off | the spending ledger ([`ledger`]) and the session seam ([`session`]) |
 //! | `pay` | off | the 402 client and the payment builders ([`protocol`], [`crypto`]) |
 //! | `tools` | off | the `x402_request` tool ([`tools`]) |
 
@@ -51,6 +53,8 @@ pub mod eip712;
 pub mod ledger;
 #[cfg(feature = "pay")]
 pub mod protocol;
+#[cfg(feature = "ledger")]
+pub mod session;
 #[cfg(feature = "tools")]
 pub mod tools;
 #[cfg(feature = "wire")]
