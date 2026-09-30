@@ -12,7 +12,7 @@ use tinytools::{PermissionLevel, Tool, ToolExposure, ToolResult};
 
 use super::*;
 use crate::ledger::{self, PaymentRecord, PaymentStatus, SpendingBudget};
-use crate::session::SessionScope;
+use crate::thread::ThreadScope;
 use crate::test_support::{
     FakePaymentSigner, FakeProxyPolicy, FakeTransport, ServerConfig, TestServer, challenge,
     challenge_header, evm_requirement, solana_requirement,
@@ -249,8 +249,8 @@ async fn an_evm_402_is_paid_recorded_and_reported() {
 /// A host whose active session is fixed, or absent.
 struct FakeScope(Option<&'static str>);
 
-impl SessionScope for FakeScope {
-    fn current_session(&self) -> Option<String> {
+impl ThreadScope for FakeScope {
+    fn current_thread(&self) -> Option<String> {
         self.0.map(String::from)
     }
 }
@@ -260,7 +260,7 @@ async fn every_record_of_a_payment_is_stamped_with_the_hosts_active_session() {
     let _guard = ledger::TEST_LOCK.lock().await;
     let _dir = init_ledger();
     let server = TestServer::start(paid_config(evm_requirement())).await;
-    let tool = tool().with_session_scope(Arc::new(FakeScope(Some("thread-7"))));
+    let tool = tool().with_thread_scope(Arc::new(FakeScope(Some("thread-7"))));
 
     let result = run(&tool, json!({"url": server.url})).await;
 
@@ -282,7 +282,7 @@ async fn payments_default_to_the_ledgers_own_session() {
 
     // No scope installed, then a scope with nothing active: same answer.
     run(&tool(), json!({"url": server.url})).await;
-    let quiet = tool().with_session_scope(Arc::new(FakeScope(None)));
+    let quiet = tool().with_thread_scope(Arc::new(FakeScope(None)));
     run(&quiet, json!({"url": server.url})).await;
 
     let records = records();

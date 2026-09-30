@@ -4,7 +4,7 @@
 //! Rail-neutral. A payment record names the session that made it so per-session
 //! totals can be reported; what a "session" is (a chat thread, a job, a process)
 //! is the host's to say, and this crate holds no state of its own about it. The
-//! host implements [`SessionScope`] and hands it to the tool.
+//! host implements [`ThreadScope`] and hands it to the tool.
 //!
 //! The lookup is synchronous on purpose: it is called on the tool's own task, so
 //! a host can answer from a task-local without any `.await` or lock.
@@ -13,21 +13,21 @@
 ///
 /// Called once per payment, on the task that runs the tool. Implementations must
 /// not block.
-pub trait SessionScope: Send + Sync {
+pub trait ThreadScope: Send + Sync {
     /// The active session's id, or `None` when the call runs outside any
     /// session (a CLI call, a background job).
     ///
     /// A payment made with no active session is attributed to the ledger's own
     /// session.
-    fn current_session(&self) -> Option<String>;
+    fn current_thread(&self) -> Option<String>;
 }
 
 /// The default scope: there is never an active session.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct NoSession;
+pub struct NoThread;
 
-impl SessionScope for NoSession {
-    fn current_session(&self) -> Option<String> {
+impl ThreadScope for NoThread {
+    fn current_thread(&self) -> Option<String> {
         None
     }
 }

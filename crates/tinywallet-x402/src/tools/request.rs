@@ -14,7 +14,7 @@ use tinywallet_crypto::rpc::Transport;
 use crate::crypto::{CryptoPayments, PaymentSigner};
 use crate::ledger::{self, PaymentRecord, PaymentStatus};
 use crate::protocol::{PaymentBuilder, ProxyPolicy, handle_402_and_pay};
-use crate::session::{NoSession, SessionScope};
+use crate::thread::{NoThread, ThreadScope};
 use crate::wire::{
     HEADER_PAYMENT_REQUIRED, HEADER_PAYMENT_REQUIRED_V1, HEADER_PAYMENT_RESPONSE,
     HEADER_PAYMENT_SIGNATURE, SettlementResponse,
@@ -32,7 +32,7 @@ const MAX_BODY_BYTES: usize = 50_000;
 pub struct X402RequestTool {
     payments: Arc<dyn PaymentBuilder>,
     proxy: Arc<dyn ProxyPolicy>,
-    session: Arc<dyn SessionScope>,
+    session: Arc<dyn ThreadScope>,
 }
 
 impl std::fmt::Debug for X402RequestTool {
@@ -59,7 +59,7 @@ impl X402RequestTool {
         Self {
             payments,
             proxy,
-            session: Arc::new(NoSession),
+            session: Arc::new(NoThread),
         }
     }
 
@@ -68,7 +68,7 @@ impl X402RequestTool {
     /// Without this, or when the scope reports no session, a payment is
     /// attributed to the ledger's own session.
     #[must_use]
-    pub fn with_session_scope(mut self, session: Arc<dyn SessionScope>) -> Self {
+    pub fn with_thread_scope(mut self, session: Arc<dyn ThreadScope>) -> Self {
         self.session = session;
         self
     }
@@ -255,7 +255,7 @@ impl X402RequestTool {
         // The session the payment is attributed to: the host's active one, or
         // the ledger's own when the call runs outside any session. Read here, on
         // the tool's own task, where a host's task-local is still in scope.
-        let session_id = self.session.current_session().unwrap_or_else(|| {
+        let session_id = self.session.current_thread().unwrap_or_else(|| {
             ledger::with_ledger(|l| l.session_id().to_string()).unwrap_or_default()
         });
 

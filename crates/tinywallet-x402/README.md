@@ -12,7 +12,7 @@ This crate is everything about that flow that is not specific to one host.
 | `wire` | `wire` (default) | neutral | Header payload types, CAIP-2 and asset constants, challenge selection. |
 | `eip712`, `abi` | `eip712`, `abi` | crypto | EIP-712 / EIP-3009 hashing and ERC-20 `transfer` calldata. Pure hashing, no signer. |
 | `ledger` | `ledger` | neutral | `PaymentRecord`, `SpendingBudget`, the append-only JSONL `PaymentLedger`, budget `Reservation`s (`reserve`), and the process-wide handle (`init_global`, `with_ledger`, `with_ledger_mut`). Imports no chain type. |
-| `session` | `ledger` | neutral | The `SessionScope` seam (which session is running this call) and its `NoSession` default. |
+| `session` | `ledger` | neutral | The `ThreadScope` seam (which session is running this call) and its `NoThread` default. |
 | `protocol` | `pay` | neutral | Header codec, `X402Error`, `X402Client`, `handle_402`, `handle_402_and_pay`, and the `PaymentBuilder` and `ProxyPolicy` seams. |
 | `crypto` | `pay` | crypto | `CryptoPayments` (the `PaymentBuilder` for the crypto rail), EVM EIP-3009 and Solana SPL payment construction, and the `PaymentSigner` seam. |
 | `tools` | `tools` | neutral | `X402RequestTool`, the `x402_request` agent tool (`tinytools::Tool`). |
@@ -33,10 +33,10 @@ configuration of its own.
 - `tinywallet_crypto::rpc::Transport`: reads the Solana blockhash.
 - `protocol::ProxyPolicy`: applies the host's proxy rules to a
   `reqwest::ClientBuilder`.
-- `session::SessionScope` (optional): `current_session()` names the session
+- `thread::ThreadScope` (optional): `current_thread()` names the session
   (chat thread, job) running the tool call. It is synchronous and is called on the
   tool's own task, so a host can answer from a task-local. Install it with
-  `X402RequestTool::with_session_scope`; the default, `NoSession`, reports none.
+  `X402RequestTool::with_thread_scope`; the default, `NoThread`, reports none.
 
 ## Payment safety
 
@@ -56,7 +56,7 @@ configuration of its own.
   with `NonReplayableBody` before the challenge is read or anything is signed.
   The paid retry is that clone plus `PAYMENT-SIGNATURE`.
 - **Session ids.** The tool stamps every record of a payment with
-  `SessionScope::current_session()`, or the ledger's own session when there is
+  `ThreadScope::current_thread()`, or the ledger's own session when there is
   none, so per-session totals include tool payments.
 
 ## Changes in 0.6.1 / 0.7.0 (API)
@@ -68,8 +68,8 @@ configuration of its own.
 - New: `ledger::{reserve, Reservation, ReservationId, BudgetRefusal}`,
   `PaymentLedger::{reserve, release, commit_reservation, reserved_atomic,
   session_id}`; `check_budget` now counts held reservations.
-- New: `wire::{check_usdc, AssetCheck, SUPPORTED_USDC}`; `session::{SessionScope,
-  NoSession}`; `X402RequestTool::with_session_scope`.
+- New: `wire::{check_usdc, AssetCheck, SUPPORTED_USDC}`; `thread::{ThreadScope,
+  NoThread}`; `X402RequestTool::with_thread_scope`.
 - `handle_402` and `X402Client` no longer select a requirement outside the
   allowlist. `PaymentRequired::best_exact_requirement` and its siblings still do
   not consult it.
