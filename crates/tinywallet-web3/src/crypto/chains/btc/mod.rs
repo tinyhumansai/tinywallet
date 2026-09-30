@@ -20,9 +20,9 @@ use crate::crypto::execution::{
 use crate::crypto::wallet::{WalletChain, WalletEngine};
 
 const LOG_PREFIX: &str = "[wallet::btc]";
-/// Hardcoded fee rate (sat/vbyte) used to estimate fees for prepared quotes and
-/// to size the change output. Conservative: mempools cap out around 50 sat/vB
-/// during congestion; 20 keeps us in range without burning sats in quiet times.
+/// Hardcoded fee rate (sat/vbyte) used to size the fee of an executed transfer.
+/// Conservative: mempools cap out around 50 sat/vB during congestion; 20 keeps
+/// us in range without burning sats in quiet times.
 const DEFAULT_FEE_RATE_SAT_VB: u64 = 20;
 /// Approximate vbytes of a 1-input, 2-output P2WPKH transaction.
 const TYPICAL_TX_VBYTES: u64 = 141;
@@ -47,9 +47,9 @@ struct EsploraAddressStats {
     spent_txo_sum: u64,
 }
 
-/// The flat fee estimate, in satoshis.
-pub(crate) const fn estimated_btc_fee_sats() -> u64 {
-    DEFAULT_FEE_RATE_SAT_VB * TYPICAL_TX_VBYTES
+/// The vbytes of a P2WPKH transaction with `inputs` inputs and `outputs` outputs.
+pub(crate) const fn estimated_vbytes(_inputs: u64, _outputs: u64) -> u64 {
+    TYPICAL_TX_VBYTES
 }
 
 fn accepted(result: &Result<String, String>) -> &'static str {
@@ -112,15 +112,27 @@ async fn broadcast_raw_hex(engine: &WalletEngine, tx_hex: &str) -> Result<String
         .await
 }
 
-/// Select UTXOs to cover `amount_sats + fee_sats`, returning the selected set
-/// and the change. Greedy, largest-first.
-pub(crate) fn select_utxos(
+/// The coins chosen for a transfer, the fee they pay, and the change they leave.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SpendPlan {
+    /// The UTXOs to spend, largest first.
+    pub(crate) selected: Vec<EsploraUtxo>,
+    /// The fee, in satoshis.
+    pub(crate) fee_sats: u64,
+    /// The change returned to the sender, in satoshis; zero when there is no
+    /// change output.
+    pub(crate) change_sats: u64,
+}
+
+/// Select UTXOs to cover `amount_sats` plus the fee.
+pub(crate) fn plan_spend(
     utxos: &[EsploraUtxo],
     amount_sats: u64,
-    fee_sats: u64,
-) -> Result<(Vec<EsploraUtxo>, u64), String> {
+    fee_rate_sat_vb: u64,
+) -> Result<SpendPlan, String> {
     let mut sorted = utxos.to_vec();
     sorted.sort_by_key(|item| std::cmp::Reverse(item.value));
+    let fee_sats = fee_rate_sat_vb * TYPICAL_TX_VBYTES;
     let target = amount_sats
         .checked_add(fee_sats)
         .ok_or_else(|| "amount + fee overflow".to_string())?;
@@ -132,7 +144,11 @@ pub(crate) fn select_utxos(
             .ok_or_else(|| "utxo sum overflow".to_string())?;
         chosen.push(utxo);
         if total >= target {
-            return Ok((chosen, total - target));
+            return Ok(SpendPlan {
+                selected: chosen,
+                fee_sats,
+                change_sats: total - target,
+            });
         }
     }
     Err(format!(
@@ -164,8 +180,11 @@ pub(crate) async fn execute_btc_quote(
     if utxos.is_empty() {
         return Err(format!("no spendable UTXOs for {from_addr}"));
     }
-    let fee_sats = estimated_btc_fee_sats();
-    let (selected, change_sats) = select_utxos(&utxos, amount_sats, fee_sats)?;
+    let SpendPlan {
+        selected,
+        fee_sats,
+        change_sats,
+    } = plan_spend(&utxos, amount_sats, DEFAULT_FEE_RATE_SAT_VB)?;
 
     // Selection stays here (this crate knows the fee policy and the UTXO
     // source), but the transaction itself is encoded by the signer, which also
