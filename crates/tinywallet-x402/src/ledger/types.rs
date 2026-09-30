@@ -115,3 +115,8 @@ pub enum BudgetCheck {
         cap: u64,
     },
 }
+
+/// A hold on part of the budget, taken by
+/// [`PaymentLedger::reserve`](super::PaymentLedger::reserve).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ReservationId(pub(super) u64);
