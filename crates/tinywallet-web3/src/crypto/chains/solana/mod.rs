@@ -22,7 +22,6 @@ use serde::Deserialize;
 use serde_json::json;
 use tinywallet_bus::wire::{Scheme, Signature};
 
-use crate::crypto::defaults::explorer_tx_url;
 use crate::crypto::execution::{
     ExecutionResult, PreparedKind, PreparedStatus, PreparedTransaction,
 };
@@ -234,7 +233,7 @@ pub(crate) async fn execute_solana_quote(
         "{LOG_PREFIX} broadcast quote_id={} sig={tx_sig} kind={:?}",
         quote.quote_id, quote.kind
     );
-    let explorer_url = explorer_tx_url(WalletChain::Solana, &tx_sig);
+    let explorer_url = engine.explorer_url(WalletChain::Solana, &tx_sig);
     Ok(ExecutionResult {
         quote_id: quote.quote_id.clone(),
         status: PreparedStatus::Broadcasted,

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tinywallet_crypto::rpc::{NetworkId, Transport, TransportError};
 
-use crate::crypto::defaults::EvmNetwork;
+use crate::crypto::defaults::{EvmNetwork, explorer_tx_url};
 use crate::crypto::execution::PreparedTransaction;
 use crate::crypto::seams::{RpcEndpoints, WalletAccounts, WalletSigner};
 use crate::quote::QuoteStore;
@@ -83,6 +83,12 @@ impl WalletEngine {
     #[must_use]
     pub fn prepared_quotes(&self) -> Vec<PreparedTransaction> {
         self.quotes.live()
+    }
+
+    /// The explorer link for `tx_hash` on `chain`, on the Solana cluster the
+    /// host is configured for.
+    pub(crate) fn explorer_url(&self, chain: WalletChain, tx_hash: &str) -> Option<String> {
+        explorer_tx_url(chain, self.endpoints.solana_cluster(), tx_hash)
     }
 
     /// The [`NetworkId`] a request for `chain` (and, for EVM, `network`) is

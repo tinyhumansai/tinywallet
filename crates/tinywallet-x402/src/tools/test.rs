@@ -16,6 +16,7 @@ use crate::test_support::{
     FakePaymentSigner, FakeProxyPolicy, FakeTransport, ServerConfig, TestServer, challenge,
     challenge_header, evm_requirement, solana_requirement,
 };
+use crate::thread::ThreadScope;
 use crate::wire::{PaymentRequirements, SettlementResponse};
 
 fn tool_with(proxy: Arc<FakeProxyPolicy>) -> X402RequestTool {
@@ -242,6 +243,64 @@ async fn an_evm_402_is_paid_recorded_and_reported() {
     assert_eq!(records[1].amount_display, "0.002500 USDC");
     assert_eq!(records[1].tx_signature.as_deref(), Some("0xabc123"));
     assert_eq!(records[1].url, server.url);
+    ledger::reset_global();
+}
+
+/// A host whose active thread is fixed, or absent.
+struct FakeScope(Option<&'static str>);
+
+impl ThreadScope for FakeScope {
+    fn current_thread(&self) -> Option<String> {
+        self.0.map(String::from)
+    }
+}
+
+#[tokio::test]
+async fn every_record_of_a_payment_names_the_hosts_thread_and_the_ledgers_session() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let _dir = init_ledger();
+    let server = TestServer::start(paid_config(evm_requirement())).await;
+    let tool = tool().with_thread_scope(Arc::new(FakeScope(Some("thread-7"))));
+
+    let result = run(&tool, json!({"url": server.url})).await;
+
+    assert!(!result.is_error, "{}", text(&result));
+    let records = records();
+    assert_eq!(records.len(), 2);
+    for record in &records {
+        assert_eq!(record.thread_id.as_deref(), Some("thread-7"));
+        assert_eq!(record.session_id, "tool-test", "the ledger's own session");
+    }
+    ledger::reset_global();
+}
+
+#[tokio::test]
+async fn a_tool_payment_counts_toward_the_session_total_with_or_without_a_thread() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let _dir = init_ledger();
+    let server = TestServer::start(paid_config(evm_requirement())).await;
+
+    // No scope installed, then a scope with nothing active, then one thread.
+    run(&tool(), json!({"url": server.url})).await;
+    let quiet = tool().with_thread_scope(Arc::new(FakeScope(None)));
+    run(&quiet, json!({"url": server.url})).await;
+    let threaded = tool().with_thread_scope(Arc::new(FakeScope(Some("thread-7"))));
+    run(&threaded, json!({"url": server.url})).await;
+
+    let records = records();
+    assert_eq!(records.len(), 6);
+    assert_eq!(
+        records
+            .iter()
+            .filter(|r| r.status == PaymentStatus::Settled)
+            .map(|r| r.thread_id.as_deref())
+            .collect::<Vec<_>>(),
+        vec![None, None, Some("thread-7")]
+    );
+    assert!(records.iter().all(|r| r.session_id == "tool-test"));
+    let summary = ledger::with_ledger(ledger::PaymentLedger::summary).unwrap();
+    assert_eq!(summary.session_total_atomic, 7_500);
+    assert_eq!(summary.session_count, 3);
     ledger::reset_global();
 }
 

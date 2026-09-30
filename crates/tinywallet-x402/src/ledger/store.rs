@@ -1,15 +1,25 @@
 //! The ledger itself: an in-memory record list backed by a JSONL file.
 
+use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use chrono::{DateTime, Datelike, Utc};
 use log::{debug, warn};
 
-use super::types::{BudgetCheck, PaymentRecord, PaymentStatus, SpendingBudget, SpendingSummary};
+use super::types::{
+    BudgetCheck, BudgetRefusal, PaymentRecord, PaymentStatus, ReservationId, SpendingBudget,
+    SpendingSummary,
+};
 
 const LOG_PREFIX: &str = "[x402::store]";
+
+/// Source of [`ReservationId`]s. Process-wide rather than per ledger, so a hold
+/// taken on a ledger that was later replaced can never release a hold on its
+/// successor.
+static NEXT_RESERVATION: AtomicU64 = AtomicU64::new(1);
 
 /// Append-only payment history with budget enforcement.
 #[derive(Debug)]
@@ -18,6 +28,9 @@ pub struct PaymentLedger {
     file_path: PathBuf,
     budget: SpendingBudget,
     session_id: String,
+    /// Amounts held for payments that are signed but not yet recorded. Memory
+    /// only: a hold that outlives its process protects nothing.
+    reservations: HashMap<ReservationId, u64>,
 }
 
 impl PaymentLedger {
@@ -39,10 +52,21 @@ impl PaymentLedger {
             file_path,
             budget,
             session_id: session_id.to_string(),
+            reservations: HashMap::new(),
         }
     }
 
+    /// The session this ledger was opened for: the one
+    /// [`SpendingSummary::session_total_atomic`] counts.
+    #[must_use]
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
     /// Check `amount` against the per-request, daily and monthly limits.
+    ///
+    /// Settled payments and outstanding [reservations](Self::reserve) both count
+    /// toward the daily and monthly totals.
     #[must_use]
     pub fn check_budget(&self, amount: u64) -> BudgetCheck {
         self.check_budget_at(Utc::now(), amount)
@@ -60,13 +84,15 @@ impl PaymentLedger {
 
         let today = now.date_naive();
         let this_month = (now.year(), now.month());
+        let reserved = self.reserved_atomic();
 
         let daily: u64 = self
             .records
             .iter()
             .filter(|r| r.status == PaymentStatus::Settled && r.timestamp.date_naive() == today)
             .map(|r| r.amount_atomic)
-            .sum();
+            .sum::<u64>()
+            .saturating_add(reserved);
         if daily.saturating_add(amount) > self.budget.daily_max_atomic {
             return BudgetCheck::ExceedsDailyBudget {
                 current: daily,
@@ -82,7 +108,8 @@ impl PaymentLedger {
                     && (r.timestamp.year(), r.timestamp.month()) == this_month
             })
             .map(|r| r.amount_atomic)
-            .sum();
+            .sum::<u64>()
+            .saturating_add(reserved);
         if monthly.saturating_add(amount) > self.budget.monthly_max_atomic {
             return BudgetCheck::ExceedsMonthlyBudget {
                 current: monthly,
@@ -91,6 +118,60 @@ impl PaymentLedger {
         }
 
         BudgetCheck::Allowed
+    }
+
+    /// Check `amount` against the limits and, if it fits, hold it, all under
+    /// the caller's exclusive borrow.
+    ///
+    /// This is the atomic form of [`check_budget`](Self::check_budget) followed
+    /// by signing: two payments that each fit alone cannot both be admitted when
+    /// together they exceed a cap, because the second check sees the first hold.
+    /// The hold ends with [`release`](Self::release) or
+    /// [`commit_reservation`](Self::commit_reservation).
+    ///
+    /// # Errors
+    ///
+    /// The [`BudgetRefusal`] that stopped `amount`; nothing is held then.
+    pub fn reserve(&mut self, amount: u64) -> Result<ReservationId, BudgetRefusal> {
+        self.reserve_at(Utc::now(), amount)
+    }
+
+    /// [`reserve`](Self::reserve) as of `now`.
+    pub(crate) fn reserve_at(
+        &mut self,
+        now: DateTime<Utc>,
+        amount: u64,
+    ) -> Result<ReservationId, BudgetRefusal> {
+        if let Some(refusal) = self.check_budget_at(now, amount).refusal() {
+            return Err(refusal);
+        }
+        let id = ReservationId(NEXT_RESERVATION.fetch_add(1, Ordering::Relaxed));
+        self.reservations.insert(id, amount);
+        debug!("{LOG_PREFIX} reserved {amount} atomic as {id:?}");
+        Ok(id)
+    }
+
+    /// Drop a hold without recording a payment. Releasing a hold that is
+    /// already gone does nothing.
+    pub fn release(&mut self, id: ReservationId) {
+        if self.reservations.remove(&id).is_some() {
+            debug!("{LOG_PREFIX} released {id:?}");
+        }
+    }
+
+    /// Record `record` and drop the hold `id` in one step, so the amount counts
+    /// exactly once: as held before, as `record` after.
+    pub fn commit_reservation(&mut self, id: ReservationId, record: PaymentRecord) {
+        self.record_payment(record);
+        self.release(id);
+    }
+
+    /// The total currently held by reservations, in atomic units.
+    #[must_use]
+    pub fn reserved_atomic(&self) -> u64 {
+        self.reservations
+            .values()
+            .fold(0, |total, amount| total.saturating_add(*amount))
     }
 
     /// Append `record` to the file and to memory.

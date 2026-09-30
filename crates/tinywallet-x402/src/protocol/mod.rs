@@ -11,6 +11,7 @@
 //! - `headers` — parsing the challenge and settlement headers and encoding the
 //!   proof.
 //! - `builder` — the [`PaymentBuilder`] seam.
+//! - `select` — picking the requirement to pay, and the network/asset allowlist.
 //! - `proxy` — the [`ProxyPolicy`] seam for outbound HTTP.
 //! - `client` — [`X402Client`] and the `handle_402*` entry points.
 
@@ -19,6 +20,7 @@ mod client;
 mod error;
 mod headers;
 mod proxy;
+mod select;
 
 pub use builder::PaymentBuilder;
 pub use client::{

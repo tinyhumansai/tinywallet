@@ -19,6 +19,13 @@
 //! The protocol carries them as decimal strings for that reason, and so does
 //! this module.
 //!
+//! ## Which networks and assets are payable
+//!
+//! The server names the network and asset it wants, so [`check_usdc`] holds the
+//! allowlist ([`SUPPORTED_USDC`]): USDC on the networks this crate knows, nothing
+//! else. The selection helpers on [`PaymentRequired`] do not consult it; the
+//! `protocol` module does before it selects or signs.
+//!
 //! ## The client signs an authorisation; the facilitator broadcasts
 //!
 //! In both supported schemes the payer never broadcasts. On Solana it hands
@@ -31,10 +38,12 @@
 //!
 //! [CAIP-2]: https://chainagnostic.org/CAIPs/caip-2
 
+mod assets;
 #[cfg(test)]
 mod test;
 mod types;
 
+pub use assets::{AssetCheck, SUPPORTED_USDC, check_usdc};
 pub use types::{
     BASE_MAINNET_CAIP2, BASE_SEPOLIA_CAIP2, COMPUTE_BUDGET_PROGRAM, ETHEREUM_MAINNET_CAIP2,
     EvmAuthorization, EvmPaymentProof, HEADER_PAYMENT_REQUIRED, HEADER_PAYMENT_REQUIRED_V1,

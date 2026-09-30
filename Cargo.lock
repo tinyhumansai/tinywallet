@@ -2062,6 +2062,7 @@ dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
  "hex",
+ "http-body-util",
  "k256",
  "log",
  "reqwest",

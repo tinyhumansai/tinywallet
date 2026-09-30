@@ -28,15 +28,22 @@ pub const fn default_rpc_url(chain: WalletChain, cluster: SolanaCluster) -> &'st
 }
 
 /// The explorer link for a transaction on `chain` (Ethereum mainnet for EVM).
+///
+/// `cluster` only matters for Solana, whose link then carries the cluster
+/// (`?cluster=devnet`) so it opens on the network the transaction went to.
 #[must_use]
-pub fn explorer_tx_url(chain: WalletChain, tx_hash: &str) -> Option<String> {
-    let base = match chain {
-        WalletChain::Evm => EvmNetwork::EthereumMainnet.explorer_tx_base(),
-        WalletChain::Btc => BLOCKSTREAM_TX_BASE,
-        WalletChain::Solana => SOLSCAN_TX_BASE,
-        WalletChain::Tron => TRONSCAN_TX_BASE,
+pub fn explorer_tx_url(
+    chain: WalletChain,
+    cluster: SolanaCluster,
+    tx_hash: &str,
+) -> Option<String> {
+    let (base, suffix) = match chain {
+        WalletChain::Evm => (EvmNetwork::EthereumMainnet.explorer_tx_base(), ""),
+        WalletChain::Btc => (BLOCKSTREAM_TX_BASE, ""),
+        WalletChain::Solana => (SOLSCAN_TX_BASE, cluster.explorer_tx_suffix()),
+        WalletChain::Tron => (TRONSCAN_TX_BASE, ""),
     };
-    Some(format!("{base}{tx_hash}"))
+    Some(format!("{base}{tx_hash}{suffix}"))
 }
 
 /// The explorer link for a transaction on a specific EVM network.
@@ -186,16 +193,22 @@ pub fn network_defaults(endpoints: &dyn RpcEndpoints) -> Vec<WalletNetworkDefaul
             rpc_url: endpoints.url(WalletChain::Evm, Some(network)),
             rpc_source: endpoints.source(WalletChain::Evm, Some(network)),
             explorer_tx_url_base: network.explorer_tx_base().to_string(),
+            explorer_tx_url_suffix: None,
             supports_broadcast: true,
             supports_token_transfers: true,
             supports_contract_calls: true,
             assets: evm_asset_catalog(network),
         });
     }
-    for (chain, label, explorer) in [
-        (WalletChain::Btc, "bitcoin-mainnet", BLOCKSTREAM_TX_BASE),
-        (WalletChain::Solana, "solana-mainnet-beta", SOLSCAN_TX_BASE),
-        (WalletChain::Tron, "tron-mainnet", TRONSCAN_TX_BASE),
+    for (chain, label, explorer, suffix) in [
+        (WalletChain::Btc, "bitcoin-mainnet", BLOCKSTREAM_TX_BASE, ""),
+        (
+            WalletChain::Solana,
+            cluster.network_label(),
+            SOLSCAN_TX_BASE,
+            cluster.explorer_tx_suffix(),
+        ),
+        (WalletChain::Tron, "tron-mainnet", TRONSCAN_TX_BASE, ""),
     ] {
         out.push(WalletNetworkDefaults {
             chain,
@@ -205,6 +218,7 @@ pub fn network_defaults(endpoints: &dyn RpcEndpoints) -> Vec<WalletNetworkDefaul
             rpc_url: endpoints.url(chain, None),
             rpc_source: endpoints.source(chain, None),
             explorer_tx_url_base: explorer.to_string(),
+            explorer_tx_url_suffix: (!suffix.is_empty()).then(|| suffix.to_string()),
             supports_broadcast: true,
             supports_token_transfers: chain != WalletChain::Btc,
             supports_contract_calls: false,

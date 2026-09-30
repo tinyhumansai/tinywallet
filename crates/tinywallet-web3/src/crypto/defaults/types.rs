@@ -12,6 +12,8 @@ const OPTIMISTIC_TX_BASE: &str = "https://optimistic.etherscan.io/tx/";
 const POLYGONSCAN_TX_BASE: &str = "https://polygonscan.com/tx/";
 const BSCSCAN_TX_BASE: &str = "https://bscscan.com/tx/";
 
+const SOLSCAN_DEVNET_SUFFIX: &str = "?cluster=devnet";
+
 const DEFAULT_SOLANA_RPC_URL: &str = "https://api.mainnet-beta.solana.com";
 const DEVNET_SOLANA_RPC_URL: &str = "https://api.devnet.solana.com";
 
@@ -22,9 +24,9 @@ const SOLANA_USDC_MINT_DEVNET: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDn
 
 /// The Solana cluster the wallet broadcasts to.
 ///
-/// Drives **both** the default Solana RPC endpoint and the USDC SPL mint, so a
-/// devnet x402 payment challenge's on-chain transfer lands on devnet with the
-/// devnet mint rather than mainnet.
+/// Drives the default Solana RPC endpoint, the USDC SPL mint and the explorer
+/// link, so a devnet x402 payment challenge's on-chain transfer lands on devnet
+/// with the devnet mint rather than mainnet, and its link opens on devnet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SolanaCluster {
     /// Mainnet-beta, the default.
@@ -40,6 +42,27 @@ impl SolanaCluster {
         match self {
             Self::Mainnet => DEFAULT_SOLANA_RPC_URL,
             Self::Devnet => DEVNET_SOLANA_RPC_URL,
+        }
+    }
+
+    /// The kebab-case label used in summaries, matching
+    /// [`EvmNetwork::network_label`].
+    #[must_use]
+    pub const fn network_label(self) -> &'static str {
+        match self {
+            Self::Mainnet => "solana-mainnet-beta",
+            Self::Devnet => "solana-devnet",
+        }
+    }
+
+    /// The text that follows a transaction hash in an explorer link, so it
+    /// opens on this cluster. Empty for mainnet, which is the explorer's
+    /// default.
+    #[must_use]
+    pub const fn explorer_tx_suffix(self) -> &'static str {
+        match self {
+            Self::Mainnet => "",
+            Self::Devnet => SOLSCAN_DEVNET_SUFFIX,
         }
     }
 
@@ -200,6 +223,10 @@ pub struct WalletNetworkDefaults {
     pub rpc_source: RpcSource,
     /// Explorer transaction-URL prefix.
     pub explorer_tx_url_base: String,
+    /// Text that follows the transaction hash in an explorer link, when the
+    /// network needs one (Solana devnet's `?cluster=devnet`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explorer_tx_url_suffix: Option<String>,
     /// Whether the wallet can broadcast here.
     pub supports_broadcast: bool,
     /// Whether token transfers are supported.

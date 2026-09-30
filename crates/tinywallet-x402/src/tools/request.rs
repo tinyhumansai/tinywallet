@@ -14,6 +14,7 @@ use tinywallet_crypto::rpc::Transport;
 use crate::crypto::{CryptoPayments, PaymentSigner};
 use crate::ledger::{self, PaymentRecord, PaymentStatus};
 use crate::protocol::{PaymentBuilder, ProxyPolicy, handle_402_and_pay};
+use crate::thread::{NoThread, ThreadScope};
 use crate::wire::{
     HEADER_PAYMENT_REQUIRED, HEADER_PAYMENT_REQUIRED_V1, HEADER_PAYMENT_RESPONSE,
     HEADER_PAYMENT_SIGNATURE, SettlementResponse,
@@ -31,6 +32,7 @@ const MAX_BODY_BYTES: usize = 50_000;
 pub struct X402RequestTool {
     payments: Arc<dyn PaymentBuilder>,
     proxy: Arc<dyn ProxyPolicy>,
+    thread: Arc<dyn ThreadScope>,
 }
 
 impl std::fmt::Debug for X402RequestTool {
@@ -54,7 +56,22 @@ impl X402RequestTool {
     /// A tool that pays through any [`PaymentBuilder`].
     #[must_use]
     pub fn with_builder(payments: Arc<dyn PaymentBuilder>, proxy: Arc<dyn ProxyPolicy>) -> Self {
-        Self { payments, proxy }
+        Self {
+            payments,
+            proxy,
+            thread: Arc::new(NoThread),
+        }
+    }
+
+    /// Record the thread `thread` reports as active in each payment's
+    /// `thread_id`.
+    ///
+    /// Without this, or when the scope reports no thread, `thread_id` is empty.
+    /// Either way `session_id` is the ledger's own session.
+    #[must_use]
+    pub fn with_thread_scope(mut self, thread: Arc<dyn ThreadScope>) -> Self {
+        self.thread = thread;
+        self
     }
 
     fn build_client(&self) -> Result<reqwest::Client, reqwest::Error> {
@@ -228,11 +245,19 @@ impl X402RequestTool {
             Ok(r) => r,
             Err(e) => return ToolResult::error(format!("x402 payment failed: {e}")),
         };
+        // The hold on the budget, kept until the outcome is recorded below.
+        let reservation = payment.reservation;
         let amount_display = format_usdc(payment.amount_atomic);
         debug!(
             "{LOG_PREFIX} payment built: {amount_display} to {} on {} for {url}",
             payment.recipient, payment.network
         );
+
+        // `session_id` is always the ledger's own, so the session total counts
+        // the payment; `thread_id` is the host's finer attribution. Both are read
+        // here, on the tool's own task, where a host's task-local is in scope.
+        let session_id = ledger::with_ledger(|l| l.session_id().to_string()).unwrap_or_default();
+        let thread_id = self.thread.current_thread();
 
         // Record the pending payment. Every later state is a new line with the
         // same id.
@@ -248,7 +273,8 @@ impl X402RequestTool {
             tx_signature,
             status,
             timestamp: chrono::Utc::now(),
-            session_id: String::new(),
+            session_id: session_id.clone(),
+            thread_id: thread_id.clone(),
         };
         let _ = ledger::with_ledger_mut(|l| l.record_payment(record(PaymentStatus::Pending, None)));
 
@@ -262,9 +288,7 @@ impl X402RequestTool {
         {
             Ok(r) => r,
             Err(e) => {
-                let _ = ledger::with_ledger_mut(|l| {
-                    l.record_payment(record(PaymentStatus::Failed, None));
-                });
+                reservation.commit(record(PaymentStatus::Failed, None));
                 return ToolResult::error(format!("x402 retry request failed: {e}"));
             }
         };
@@ -282,9 +306,9 @@ impl X402RequestTool {
             .and_then(|b64| B64.decode(b64).ok())
             .and_then(|bytes| serde_json::from_slice::<SettlementResponse>(&bytes).ok())
             .and_then(|r| (r.success && !r.transaction.is_empty()).then_some(r.transaction));
-        let _ = ledger::with_ledger_mut(|l| {
-            l.record_payment(record(settled_status, tx_sig.clone()));
-        });
+        // Recording the outcome and ending the budget hold are one step, so the
+        // amount is counted exactly once at every instant.
+        reservation.commit(record(settled_status, tx_sig.clone()));
 
         if settled_status == PaymentStatus::Settled {
             debug!("{LOG_PREFIX} payment settled for {url} tx={tx_sig:?} amount={amount_display}");

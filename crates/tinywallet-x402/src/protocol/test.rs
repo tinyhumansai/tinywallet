@@ -117,6 +117,7 @@ fn settled(amount: u64) -> PaymentRecord {
         status: PaymentStatus::Settled,
         timestamp: chrono::Utc::now(),
         session_id: "test-session".into(),
+        thread_id: None,
     }
 }
 
@@ -431,6 +432,113 @@ async fn each_budget_limit_refuses_with_its_own_error() {
     ledger::reset_global();
 }
 
+/// A builder that takes a moment to sign, as a real wallet does, so concurrent
+/// payments overlap between the budget check and the signature.
+struct SlowBuilder(StubBuilder);
+
+#[async_trait]
+impl PaymentBuilder for SlowBuilder {
+    async fn build(
+        &self,
+        challenge: &PaymentRequired,
+        requirement: &PaymentRequirements,
+        chain: PaymentChain,
+    ) -> Result<PaymentPayload, X402Error> {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        self.0.build(challenge, requirement, chain).await
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn parallel_payments_cannot_overspend_the_daily_cap() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    // Each Solana challenge costs 10_000; the day allows exactly three.
+    let _dir = init_ledger(SpendingBudget {
+        per_request_max_atomic: 10_000,
+        daily_max_atomic: 30_000,
+        monthly_max_atomic: 1_000_000,
+    });
+    let builder = Arc::new(SlowBuilder(StubBuilder::default()));
+    let headers = challenge_headers(&challenge(vec![solana_requirement()]));
+
+    let handles: Vec<_> = (0..12)
+        .map(|_| {
+            let builder = Arc::clone(&builder);
+            let headers = headers.clone();
+            tokio::spawn(async move { handle_402_and_pay(&*builder, &headers, "u").await })
+        })
+        .collect();
+    let mut results = Vec::new();
+    for handle in handles {
+        results.push(handle.await.unwrap());
+    }
+
+    let paid = results.iter().filter(|r| r.is_ok()).count();
+    assert_eq!(paid, 3, "exactly the payments the cap allows may be signed");
+    assert_eq!(builder.0.chains.lock().unwrap().len(), 3, "and only those");
+    for refused in results.iter().filter_map(|r| r.as_ref().err()) {
+        assert!(
+            matches!(
+                refused,
+                X402Error::BudgetExceeded {
+                    period: "daily",
+                    ..
+                }
+            ),
+            "{refused}"
+        );
+    }
+    ledger::reset_global();
+}
+
+#[tokio::test]
+async fn a_payment_holds_its_amount_until_its_result_is_dropped() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let _dir = init_ledger(SpendingBudget {
+        per_request_max_atomic: 10_000,
+        daily_max_atomic: 10_000,
+        monthly_max_atomic: 1_000_000,
+    });
+    let headers = challenge_headers(&challenge(vec![solana_requirement()]));
+    let builder = StubBuilder::default();
+
+    let first = handle_402_and_pay(&builder, &headers, "u").await.unwrap();
+    assert_eq!(first.reservation.amount(), 10_000);
+    let err = handle_402_and_pay(&builder, &headers, "u")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "x402 daily budget exceeded: 10000/10000 atomic units",
+        "the first payment's hold counts even before it is recorded"
+    );
+
+    drop(first);
+    assert!(handle_402_and_pay(&builder, &headers, "u").await.is_ok());
+    ledger::reset_global();
+}
+
+#[tokio::test]
+async fn a_failed_signature_releases_the_hold() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let _dir = init_ledger(SpendingBudget::default());
+    let headers = challenge_headers(&challenge(vec![solana_requirement()]));
+    let failing = StubBuilder {
+        fail_with: Some("locked".into()),
+        ..StubBuilder::default()
+    };
+
+    handle_402_and_pay(&failing, &headers, "u")
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        ledger::with_ledger(ledger::PaymentLedger::reserved_atomic).unwrap(),
+        0
+    );
+    ledger::reset_global();
+}
+
 #[tokio::test]
 async fn a_wallet_failure_is_passed_through() {
     let _guard = ledger::TEST_LOCK.lock().await;
@@ -531,6 +639,53 @@ async fn a_challenge_above_the_cap_is_refused_before_paying() {
     );
     assert!(builder.chains.lock().unwrap().is_empty());
     assert_eq!(server.seen().len(), 1, "no retry was sent");
+}
+
+/// A request whose body is a stream: it cannot be cloned, so it cannot be sent
+/// a second time.
+fn streaming_post(url: &str) -> reqwest::Request {
+    reqwest::Client::new()
+        .post(url)
+        .body(reqwest::Body::wrap(http_body_util::Full::new(
+            axum::body::Bytes::from("streamed"),
+        )))
+        .build()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_streaming_body_is_refused_before_anything_is_paid() {
+    let server = TestServer::start(paid_config(vec![solana_requirement()])).await;
+    let builder = Arc::new(StubBuilder::default());
+    let client = client_with(builder.clone());
+
+    let err = client
+        .try_paid_request(streaming_post(&server.url), None)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, X402Error::NonReplayableBody), "{err}");
+    assert_eq!(
+        err.to_string(),
+        "x402 request body cannot be replayed for the paid retry; use a buffered body"
+    );
+    assert!(
+        builder.chains.lock().unwrap().is_empty(),
+        "nothing was signed"
+    );
+    assert_eq!(server.seen().len(), 1, "no paid retry was sent");
+}
+
+#[tokio::test]
+async fn a_streaming_body_is_fine_when_no_payment_is_asked_for() {
+    let server = TestServer::start(ServerConfig::default()).await;
+    let client = client_with(Arc::new(StubBuilder::default()));
+    let response = client
+        .try_paid_request(streaming_post(&server.url), None)
+        .await
+        .unwrap();
+    assert_eq!(response.text().await.unwrap(), "content");
+    assert_eq!(server.seen()[0].body, "streamed");
 }
 
 #[tokio::test]
@@ -658,4 +813,113 @@ async fn a_server_that_hangs_up_on_the_retry_is_a_transport_error() {
 fn the_client_and_a_payment_result_are_debuggable() {
     let client = client_with(Arc::new(StubBuilder::default()));
     assert!(format!("{client:?}").starts_with("X402Client"));
+}
+
+// ---------------------------------------------------------------------------
+// The network / asset allowlist
+// ---------------------------------------------------------------------------
+
+fn requirement_on(network: &str, asset: &str) -> PaymentRequirements {
+    let mut requirement = evm_requirement();
+    requirement.network = network.into();
+    requirement.asset = asset.into();
+    requirement
+}
+
+#[test]
+fn handle_402_accepts_usdc_on_a_known_testnet() {
+    let c = challenge(vec![requirement_on(
+        crate::wire::BASE_SEPOLIA_CAIP2,
+        crate::wire::USDC_BASE_SEPOLIA,
+    )]);
+    let (_, idx, chain) = handle_402(&challenge_headers(&c)).unwrap();
+    assert_eq!((idx, chain), (0, PaymentChain::Evm));
+}
+
+#[test]
+fn handle_402_skips_an_unsupported_option_for_a_supported_one() {
+    let bogus = requirement_on("eip155:137", "0xdeadbeef");
+    let c = challenge(vec![bogus, evm_requirement()]);
+    let (_, idx, _) = handle_402(&challenge_headers(&c)).unwrap();
+    assert_eq!(idx, 1);
+}
+
+#[test]
+fn handle_402_refuses_an_unknown_network() {
+    let c = challenge(vec![requirement_on("eip155:137", "0xdeadbeef")]);
+    let err = handle_402(&challenge_headers(&c)).unwrap_err();
+    assert!(
+        matches!(&err, X402Error::UnsupportedNetwork { network } if network == "eip155:137"),
+        "{err}"
+    );
+    assert_eq!(
+        err.to_string(),
+        "x402 network eip155:137 is not supported; payments are accepted only in USDC on known networks"
+    );
+}
+
+#[test]
+fn handle_402_refuses_an_asset_that_is_not_usdc() {
+    let c = challenge(vec![requirement_on(
+        crate::wire::SOLANA_MAINNET_CAIP2,
+        "NotUsdcMint1111111111111111111111111111111",
+    )]);
+    let err = handle_402(&challenge_headers(&c)).unwrap_err();
+    assert!(matches!(err, X402Error::UnsupportedAsset { .. }), "{err}");
+    assert_eq!(
+        err.to_string(),
+        "x402 asset NotUsdcMint1111111111111111111111111111111 is not the USDC accepted on \
+         solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+    );
+}
+
+#[tokio::test]
+async fn an_unsupported_challenge_reserves_and_signs_nothing() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let _dir = init_ledger(SpendingBudget::default());
+    let builder = StubBuilder::default();
+    let headers = challenge_headers(&challenge(vec![requirement_on("eip155:137", "0xbad")]));
+
+    let err = handle_402_and_pay(&builder, &headers, "u")
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, X402Error::UnsupportedNetwork { .. }));
+    assert!(builder.chains.lock().unwrap().is_empty());
+    assert_eq!(
+        ledger::with_ledger(ledger::PaymentLedger::reserved_atomic).unwrap(),
+        0
+    );
+    ledger::reset_global();
+}
+
+#[tokio::test]
+async fn the_client_refuses_to_pay_an_unsupported_asset() {
+    let server = TestServer::start(paid_config(vec![requirement_on(
+        crate::wire::BASE_MAINNET_CAIP2,
+        "0x0000000000000000000000000000000000000001",
+    )]))
+    .await;
+    let builder = Arc::new(StubBuilder::default());
+    let client = client_with(builder.clone());
+
+    let err = client
+        .try_paid_request(get(&client, &server.url), None)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, X402Error::UnsupportedAsset { .. }), "{err}");
+    assert!(builder.chains.lock().unwrap().is_empty());
+    assert_eq!(server.seen().len(), 1, "no paid retry was sent");
+}
+
+#[tokio::test]
+async fn a_bare_requirement_is_checked_before_it_is_signed() {
+    let builder = StubBuilder::default();
+    let c = challenge(vec![]);
+    let err = pay_challenge_header(&builder, &c, &requirement_on("cosmos:hub", "uatom"))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, X402Error::UnsupportedNetwork { .. }), "{err}");
+    assert!(builder.chains.lock().unwrap().is_empty());
 }

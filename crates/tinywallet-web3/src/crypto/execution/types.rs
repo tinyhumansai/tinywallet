@@ -23,15 +23,23 @@ pub struct ChainStatus {
     pub provider_status: ProviderStatus,
     /// The endpoint the host resolved.
     pub rpc_url: String,
+    /// Why the provider is not ready, when the wallet has an account but the
+    /// endpoint did not answer a probe. Absent otherwise, so a healthy row
+    /// serializes exactly as it always has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// Whether a provider answered.
+///
+/// A chain status row is `Ready` only when its endpoint answered a probe.
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderStatus {
     /// Ready.
     Ready,
-    /// Missing or unreachable.
+    /// Missing or unreachable: the wallet has no account for the chain, or its
+    /// endpoint did not answer (the reason is in the row's `error`).
     Missing,
 }
 

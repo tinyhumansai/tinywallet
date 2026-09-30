@@ -41,6 +41,7 @@ fn record(
         status,
         timestamp,
         session_id: session.into(),
+        thread_id: None,
     }
 }
 
@@ -329,4 +330,227 @@ fn a_poisoned_global_lock_is_recovered() {
     });
     assert!(with_ledger(|l| l.recent_payments(1).len()).is_ok());
     reset_global();
+}
+
+// ---------------------------------------------------------------------------
+// Reservations: check and hold in one critical section
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_reservation_counts_against_the_daily_budget_until_released() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut ledger = ledger_in(&dir);
+    // The day allows 2_000_000: four holds of 500_000 fit, a fifth does not.
+    let ids: Vec<_> = (0..4)
+        .map(|_| ledger.reserve_at(now(), 500_000).unwrap())
+        .collect();
+    assert_eq!(ledger.reserved_atomic(), 2_000_000);
+    assert_eq!(
+        ledger.reserve_at(now(), 1).unwrap_err(),
+        BudgetRefusal::Daily {
+            current: 2_000_000,
+            cap: 2_000_000
+        }
+    );
+
+    ledger.release(ids[0]);
+    assert_eq!(ledger.reserved_atomic(), 1_500_000);
+    assert!(ledger.reserve_at(now(), 500_000).is_ok());
+}
+
+#[test]
+fn a_reservation_counts_against_the_monthly_budget() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut ledger = PaymentLedger::new(
+        dir.path(),
+        SESSION,
+        SpendingBudget {
+            per_request_max_atomic: 500_000,
+            daily_max_atomic: 10_000_000,
+            monthly_max_atomic: 600_000,
+        },
+    );
+    ledger.reserve_at(now(), 500_000).unwrap();
+    assert_eq!(
+        ledger.reserve_at(now(), 500_000).unwrap_err(),
+        BudgetRefusal::Monthly {
+            current: 500_000,
+            cap: 600_000
+        }
+    );
+}
+
+#[test]
+fn a_refused_reservation_holds_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut ledger = ledger_in(&dir);
+    assert_eq!(
+        ledger.reserve_at(now(), 600_000).unwrap_err(),
+        BudgetRefusal::PerRequest {
+            requested: 600_000,
+            cap: 500_000
+        }
+    );
+    assert_eq!(ledger.reserved_atomic(), 0);
+}
+
+#[test]
+fn releasing_an_unknown_reservation_is_harmless() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut ledger = ledger_in(&dir);
+    let id = ledger.reserve_at(now(), 1_000).unwrap();
+    ledger.release(id);
+    ledger.release(id);
+    assert_eq!(ledger.reserved_atomic(), 0);
+}
+
+#[test]
+fn committing_a_reservation_records_the_payment_and_frees_the_hold() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut ledger = ledger_in(&dir);
+    let id = ledger.reserve(400_000).unwrap();
+
+    ledger.commit_reservation(
+        id,
+        record(400_000, PaymentStatus::Settled, Utc::now(), SESSION),
+    );
+
+    assert_eq!(ledger.reserved_atomic(), 0);
+    let summary = ledger.summary();
+    assert_eq!(
+        summary.daily_total_atomic, 400_000,
+        "counted once, as settled"
+    );
+    assert_eq!(ledger.recent_payments(5).len(), 1);
+}
+
+#[test]
+fn the_ledger_reports_its_own_session_id() {
+    let dir = tempfile::tempdir().unwrap();
+    assert_eq!(ledger_in(&dir).session_id(), SESSION);
+}
+
+#[test]
+fn a_global_reservation_is_released_when_dropped() {
+    let _guard = TEST_LOCK.blocking_lock();
+    let dir = tempfile::tempdir().unwrap();
+    init_global(dir.path(), SESSION, budget());
+
+    let held = reserve(500_000).unwrap().unwrap();
+    assert_eq!(held.amount(), 500_000);
+    assert_eq!(
+        with_ledger(PaymentLedger::reserved_atomic).unwrap(),
+        500_000
+    );
+    drop(held);
+    assert_eq!(with_ledger(PaymentLedger::reserved_atomic).unwrap(), 0);
+    reset_global();
+}
+
+#[test]
+fn a_global_reservation_can_be_released_explicitly() {
+    let _guard = TEST_LOCK.blocking_lock();
+    let dir = tempfile::tempdir().unwrap();
+    init_global(dir.path(), SESSION, budget());
+
+    let held = reserve(500_000).unwrap().unwrap();
+    held.release();
+    assert_eq!(with_ledger(PaymentLedger::reserved_atomic).unwrap(), 0);
+    reset_global();
+}
+
+#[test]
+fn a_global_reservation_committed_is_recorded_once() {
+    let _guard = TEST_LOCK.blocking_lock();
+    let dir = tempfile::tempdir().unwrap();
+    init_global(dir.path(), SESSION, budget());
+
+    let held = reserve(500_000).unwrap().unwrap();
+    held.commit(record(500_000, PaymentStatus::Settled, Utc::now(), SESSION));
+
+    assert_eq!(with_ledger(PaymentLedger::reserved_atomic).unwrap(), 0);
+    assert_eq!(
+        with_ledger(|l| l.summary().daily_total_atomic).unwrap(),
+        500_000
+    );
+    reset_global();
+}
+
+#[test]
+fn a_global_reservation_is_refused_over_budget_and_needs_a_ledger() {
+    let _guard = TEST_LOCK.blocking_lock();
+    reset_global();
+    assert_eq!(
+        reserve(1).unwrap_err(),
+        "x402 payment ledger not initialized"
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    init_global(dir.path(), SESSION, budget());
+    assert_eq!(
+        reserve(600_000).unwrap().unwrap_err(),
+        BudgetRefusal::PerRequest {
+            requested: 600_000,
+            cap: 500_000
+        }
+    );
+    reset_global();
+}
+
+#[test]
+fn dropping_a_reservation_after_the_ledger_is_gone_is_harmless() {
+    let _guard = TEST_LOCK.blocking_lock();
+    let dir = tempfile::tempdir().unwrap();
+    init_global(dir.path(), SESSION, budget());
+    let held = reserve(500_000).unwrap().unwrap();
+    reset_global();
+    drop(held);
+
+    // A new ledger never inherits an old hold, even if ids were reused.
+    init_global(dir.path(), SESSION, budget());
+    assert_eq!(with_ledger(PaymentLedger::reserved_atomic).unwrap(), 0);
+    reset_global();
+}
+
+#[test]
+fn a_verdict_converts_to_its_refusal() {
+    assert_eq!(BudgetCheck::Allowed.refusal(), None);
+    assert_eq!(
+        BudgetCheck::ExceedsPerRequest {
+            requested: 2,
+            cap: 1
+        }
+        .refusal(),
+        Some(BudgetRefusal::PerRequest {
+            requested: 2,
+            cap: 1
+        })
+    );
+}
+
+#[test]
+fn a_line_written_before_threads_existed_still_loads() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("x402");
+    fs::create_dir_all(&path).unwrap();
+    let old = r#"{"id":"old","url":"https://x","asset":"USDC","amountAtomic":5,"amountDisplay":"5","recipient":"r","network":"n","txSignature":null,"status":"settled","timestamp":"2026-03-15T12:00:00Z","sessionId":"session-a"}"#;
+    fs::write(path.join("payments.jsonl"), format!("{old}\n")).unwrap();
+
+    let ledger = ledger_in(&dir);
+
+    let records = ledger.recent_payments(5);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].thread_id, None);
+    assert_eq!(records[0].session_id, "session-a");
+}
+
+#[test]
+fn a_thread_is_written_only_when_there_is_one() {
+    let mut with = record(1, PaymentStatus::Settled, now(), SESSION);
+    assert!(!serde_json::to_string(&with).unwrap().contains("threadId"));
+    with.thread_id = Some("thread-1".into());
+    let json = serde_json::to_value(&with).unwrap();
+    assert_eq!(json["threadId"], "thread-1");
+    let back: PaymentRecord = serde_json::from_value(json).unwrap();
+    assert_eq!(back.thread_id.as_deref(), Some("thread-1"));
 }

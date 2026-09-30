@@ -5,7 +5,7 @@
 use log::warn;
 
 use crate::crypto::chains::{btc, evm, solana, tron};
-use crate::crypto::defaults::{EvmNetwork, explorer_tx_url};
+use crate::crypto::defaults::EvmNetwork;
 use crate::crypto::wallet::{WalletChain, WalletEngine};
 
 use super::LOG_PREFIX;
@@ -91,7 +91,7 @@ impl WalletEngine {
             }
         };
         if final_result.explorer_url.is_none() {
-            final_result.explorer_url = explorer_tx_url(chain, &final_result.transaction_hash);
+            final_result.explorer_url = self.explorer_url(chain, &final_result.transaction_hash);
         }
         Ok(final_result)
     }

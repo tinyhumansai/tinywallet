@@ -2,14 +2,15 @@
 //! `handle_402*` entry points the HTTP tool layer drives directly.
 
 use log::{debug, warn};
-use reqwest::header::HeaderMap;
+use reqwest::header::{HeaderMap, HeaderValue};
 use std::sync::Arc;
 
 use super::LOG_PREFIX;
 use super::builder::PaymentBuilder;
 use super::error::X402Error;
 use super::headers::{encode_payment, parse_402_headers, parse_settlement_response};
-use crate::ledger::{self, BudgetCheck};
+use super::select::{ensure_payable, select_requirement};
+use crate::ledger::{self, BudgetRefusal, Reservation};
 use crate::wire::{
     HEADER_PAYMENT_RESPONSE, HEADER_PAYMENT_SIGNATURE, PaymentChain, PaymentRequired,
     PaymentRequirements,
@@ -52,13 +53,12 @@ impl X402Client {
         request: reqwest::Request,
         max_amount: Option<u64>,
     ) -> Result<reqwest::Response, X402Error> {
+        // The paid retry is a second copy of the request. A streaming body cannot
+        // be copied, and the copy is taken before the first send consumes the
+        // request, so the answer is known up front.
+        let replay = request.try_clone();
         let method = request.method().clone();
         let url = request.url().clone();
-        let headers = request.headers().clone();
-        let body_bytes = request
-            .body()
-            .and_then(|b| b.as_bytes())
-            .map(<[u8]>::to_vec);
 
         debug!("{LOG_PREFIX} initial request {method} {url}");
         let response = self
@@ -71,6 +71,13 @@ impl X402Client {
             return Ok(response);
         }
 
+        // Refuse before reading the challenge, let alone signing: paying for a
+        // request that cannot be replayed would spend money for nothing.
+        let Some(mut retry_req) = replay else {
+            warn!("{LOG_PREFIX} 402 for a request with a streaming body; refusing to pay {url}");
+            return Err(X402Error::NonReplayableBody);
+        };
+
         let challenge = parse_402_headers(response.headers())?;
         debug!(
             "{LOG_PREFIX} got 402 challenge version={} accepts={}",
@@ -78,9 +85,8 @@ impl X402Client {
             challenge.accepts.len()
         );
 
-        let (requirement, chain) = challenge
-            .best_exact_requirement()
-            .ok_or(X402Error::NoPaymentOption)?;
+        let (index, chain) = select_requirement(&challenge)?;
+        let requirement = &challenge.accepts[index];
 
         let amount = parse_amount(requirement)?;
         if let Some(cap) = max_amount {
@@ -104,17 +110,19 @@ impl X402Client {
         let payment = self.builder.build(&challenge, requirement, chain).await?;
         let encoded = encode_payment(&payment)?;
 
-        let mut retry_req = self.http.request(method, url);
-        for (key, value) in &headers {
-            retry_req = retry_req.header(key, value);
-        }
-        retry_req = retry_req.header(HEADER_PAYMENT_SIGNATURE, &encoded);
-        if let Some(body) = body_bytes {
-            retry_req = retry_req.body(body);
-        }
+        let proof = HeaderValue::from_str(&encoded).map_err(|e| {
+            X402Error::Protocol(format!("payment proof is not a valid header: {e}"))
+        })?;
+        retry_req
+            .headers_mut()
+            .insert(HEADER_PAYMENT_SIGNATURE, proof);
 
         debug!("{LOG_PREFIX} retrying with payment proof");
-        let paid_response = retry_req.send().await.map_err(X402Error::Transport)?;
+        let paid_response = self
+            .http
+            .execute(retry_req)
+            .await
+            .map_err(X402Error::Transport)?;
 
         if let Some(receipt_header) = paid_response.headers().get(HEADER_PAYMENT_RESPONSE) {
             match parse_settlement_response(receipt_header.to_str().unwrap_or("")) {
@@ -137,31 +145,20 @@ impl X402Client {
 /// Parse a 402 response's headers and return the challenge with the index of the
 /// best payment option and its chain family.
 ///
-/// Solana is preferred (lower fees, faster finality); EVM is the fallback.
+/// Solana is preferred (lower fees, faster finality); EVM is the fallback. Only
+/// USDC on the networks in [`crate::wire::SUPPORTED_USDC`] is payable.
 ///
 /// # Errors
 ///
 /// [`X402Error::NoPaymentHeader`] / [`X402Error::Protocol`] from reading the
-/// header, and [`X402Error::NoPaymentOption`] when nothing in it is payable.
+/// header, [`X402Error::NoPaymentOption`] when it offers no `exact` option on a
+/// Solana or EVM network, and [`X402Error::UnsupportedNetwork`] /
+/// [`X402Error::UnsupportedAsset`] when none of those is payable.
 pub fn handle_402(
     headers: &HeaderMap,
 ) -> Result<(PaymentRequired, usize, PaymentChain), X402Error> {
     let challenge = parse_402_headers(headers)?;
-    let (idx, chain) = challenge
-        .accepts
-        .iter()
-        .enumerate()
-        .find(|(_, r)| r.scheme == "exact" && r.network.starts_with("solana:"))
-        .map(|(i, _)| (i, PaymentChain::Solana))
-        .or_else(|| {
-            challenge
-                .accepts
-                .iter()
-                .enumerate()
-                .find(|(_, r)| r.scheme == "exact" && r.network.starts_with("eip155:"))
-                .map(|(i, _)| (i, PaymentChain::Evm))
-        })
-        .ok_or(X402Error::NoPaymentOption)?;
+    let (idx, chain) = select_requirement(&challenge)?;
     Ok((challenge, idx, chain))
 }
 
@@ -179,6 +176,7 @@ pub async fn pay_challenge_header(
     challenge: &PaymentRequired,
     requirement: &PaymentRequirements,
 ) -> Result<String, X402Error> {
+    ensure_payable(requirement)?;
     let chain = if requirement.network.starts_with("eip155:") {
         PaymentChain::Evm
     } else {
@@ -190,7 +188,10 @@ pub async fn pay_challenge_header(
 
 /// Result of a successful x402 payment: the header value to attach and the
 /// metadata for the ledger.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Not `Clone`: it owns the [`Reservation`] that keeps the payment's amount
+/// counted against the budget.
+#[derive(Debug)]
 pub struct X402PaymentResult {
     /// The `PAYMENT-SIGNATURE` header value.
     pub header_value: String,
@@ -204,19 +205,27 @@ pub struct X402PaymentResult {
     pub network: String,
     /// The URL the payment is for.
     pub url: String,
+    /// The budget held for this payment. Keep it alive until the outcome is
+    /// recorded, then [`commit`](Reservation::commit) it with the final record;
+    /// dropping it releases the hold without recording anything.
+    pub reservation: Reservation,
 }
 
 /// End-to-end 402 handler for the HTTP tool layer. Given a 402 response's
 /// headers and the original URL:
 ///
 /// 1. parses the `PAYMENT-REQUIRED` challenge,
-/// 2. checks the spending budget in the process-wide ledger,
+/// 2. checks the spending budget in the process-wide ledger and reserves the
+///    amount in the same critical section, so concurrent payments cannot
+///    overspend,
 /// 3. has `builder` construct and sign the payment (Solana preferred, EVM
 ///    fallback), and
 /// 4. returns the encoded `PAYMENT-SIGNATURE` header value.
 ///
 /// The caller retries the original request with this header attached and
-/// records the payment outcome in the ledger.
+/// records the payment outcome in the ledger, committing the
+/// [`X402PaymentResult::reservation`] with that record. If signing fails the
+/// reservation is released before this returns.
 ///
 /// # Errors
 ///
@@ -232,26 +241,29 @@ pub async fn handle_402_and_pay(
     let requirement = &challenge.accepts[idx];
     let amount = parse_amount(requirement)?;
 
-    match ledger::with_ledger(|l| l.check_budget(amount)).map_err(X402Error::Wallet)? {
-        BudgetCheck::Allowed => {}
-        BudgetCheck::ExceedsPerRequest { requested, cap } => {
+    // Check the budget and hold the amount in one critical section, before
+    // anything is signed: a check on its own would let concurrent payments that
+    // each fit overspend together.
+    let reservation = match ledger::reserve(amount).map_err(X402Error::Wallet)? {
+        Ok(reservation) => reservation,
+        Err(BudgetRefusal::PerRequest { requested, cap }) => {
             return Err(X402Error::AmountExceedsCap { requested, cap });
         }
-        BudgetCheck::ExceedsDailyBudget { current, cap } => {
+        Err(BudgetRefusal::Daily { current, cap }) => {
             return Err(X402Error::BudgetExceeded {
                 period: "daily",
                 current,
                 cap,
             });
         }
-        BudgetCheck::ExceedsMonthlyBudget { current, cap } => {
+        Err(BudgetRefusal::Monthly { current, cap }) => {
             return Err(X402Error::BudgetExceeded {
                 period: "monthly",
                 current,
                 cap,
             });
         }
-    }
+    };
 
     debug!(
         "{LOG_PREFIX} paying {} atomic {} to {} for {} chain={:?}",
@@ -268,6 +280,7 @@ pub async fn handle_402_and_pay(
         recipient: requirement.pay_to.clone(),
         network: requirement.network.clone(),
         url: request_url.to_string(),
+        reservation,
     })
 }
 

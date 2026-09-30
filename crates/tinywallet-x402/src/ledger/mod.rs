@@ -16,8 +16,18 @@
 //! # Budgets
 //!
 //! [`PaymentLedger::check_budget`] enforces a per-request cap and daily and
-//! monthly totals over *settled* payments only, so a failed or denied attempt
-//! does not eat the budget.
+//! monthly totals over *settled* payments plus outstanding reservations, so a
+//! failed or denied attempt does not eat the budget.
+//!
+//! # Reservations
+//!
+//! A payment is checked, signed, sent and only then recorded, and other payments
+//! run in between. Checking alone would let two concurrent payments that each fit
+//! together overspend. [`reserve`] (or [`PaymentLedger::reserve`]) therefore
+//! checks and holds the amount in one critical section, before anything is
+//! signed. The hold is a [`Reservation`]: dropped, it releases; committed with
+//! [`Reservation::commit`], it turns into the recorded payment atomically.
+//! Holds live in memory only.
 //!
 //! # The process-wide handle
 //!
@@ -26,14 +36,19 @@
 //! this crate.
 
 mod global;
+mod reservation;
 mod store;
 mod types;
 
 #[cfg(test)]
 pub(crate) use global::{TEST_LOCK, reset_global};
 pub use global::{init_global, with_ledger, with_ledger_mut};
+pub use reservation::{Reservation, reserve};
 pub use store::PaymentLedger;
-pub use types::{BudgetCheck, PaymentRecord, PaymentStatus, SpendingBudget, SpendingSummary};
+pub use types::{
+    BudgetCheck, BudgetRefusal, PaymentRecord, PaymentStatus, ReservationId, SpendingBudget,
+    SpendingSummary,
+};
 
 #[cfg(test)]
 mod test;

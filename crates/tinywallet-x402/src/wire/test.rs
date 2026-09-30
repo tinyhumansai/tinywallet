@@ -7,10 +7,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use crate::wire::{
-    BASE_MAINNET_CAIP2, EvmAuthorization, EvmPaymentProof, PaymentExtra, PaymentPayload,
-    PaymentProof, PaymentRequired, PaymentRequirements, ResourceInfo, SOLANA_MAINNET_CAIP2,
-    SettlementResponse, SolanaPaymentProof, USDC_BASE_MAINNET, USDC_ETHEREUM_MAINNET,
-    USDC_MINT_MAINNET,
+    AssetCheck, BASE_MAINNET_CAIP2, EvmAuthorization, EvmPaymentProof, PaymentExtra,
+    PaymentPayload, PaymentProof, PaymentRequired, PaymentRequirements, ResourceInfo,
+    SOLANA_MAINNET_CAIP2, SUPPORTED_USDC, SettlementResponse, SolanaPaymentProof,
+    USDC_BASE_MAINNET, USDC_ETHEREUM_MAINNET, USDC_MINT_MAINNET, check_usdc,
 };
 
 fn requirement(network: &str, asset: &str, extra: Option<PaymentExtra>) -> PaymentRequirements {
@@ -197,5 +197,72 @@ fn a_solana_payload_carries_the_transaction_but_no_signature() {
     assert!(
         !json.contains("\"resource\""),
         "an absent resource is omitted: {json}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The network -> USDC allowlist
+// ---------------------------------------------------------------------------
+
+#[test]
+fn usdc_is_accepted_on_every_known_network() {
+    use crate::wire::{
+        BASE_SEPOLIA_CAIP2, ETHEREUM_MAINNET_CAIP2, SOLANA_DEVNET_CAIP2, USDC_BASE_SEPOLIA,
+        USDC_MINT_DEVNET,
+    };
+    let pairs = [
+        (SOLANA_MAINNET_CAIP2, USDC_MINT_MAINNET),
+        (SOLANA_DEVNET_CAIP2, USDC_MINT_DEVNET),
+        (BASE_MAINNET_CAIP2, USDC_BASE_MAINNET),
+        (BASE_SEPOLIA_CAIP2, USDC_BASE_SEPOLIA),
+        (ETHEREUM_MAINNET_CAIP2, USDC_ETHEREUM_MAINNET),
+    ];
+    assert_eq!(pairs.len(), SUPPORTED_USDC.len());
+    for (network, asset) in pairs {
+        assert_eq!(check_usdc(network, asset), AssetCheck::Allowed, "{network}");
+    }
+}
+
+#[test]
+fn an_evm_asset_is_compared_without_regard_to_case() {
+    assert_eq!(
+        check_usdc(BASE_MAINNET_CAIP2, &USDC_BASE_MAINNET.to_lowercase()),
+        AssetCheck::Allowed
+    );
+}
+
+#[test]
+fn a_solana_mint_is_compared_exactly() {
+    assert_eq!(
+        check_usdc(SOLANA_MAINNET_CAIP2, &USDC_MINT_MAINNET.to_lowercase()),
+        AssetCheck::WrongAsset
+    );
+}
+
+#[test]
+fn an_unknown_network_is_not_accepted_even_with_a_known_asset() {
+    assert_eq!(
+        check_usdc("eip155:137", USDC_BASE_MAINNET),
+        AssetCheck::UnknownNetwork
+    );
+    assert_eq!(
+        check_usdc("solana:someOtherCluster", USDC_MINT_MAINNET),
+        AssetCheck::UnknownNetwork
+    );
+}
+
+#[test]
+fn another_asset_on_a_known_network_is_not_accepted() {
+    // USDC's Base contract is not USDC on Ethereum, and neither is a made-up token.
+    assert_eq!(
+        check_usdc(BASE_MAINNET_CAIP2, USDC_ETHEREUM_MAINNET),
+        AssetCheck::WrongAsset
+    );
+    assert_eq!(
+        check_usdc(
+            SOLANA_MAINNET_CAIP2,
+            "NotUsdcMint1111111111111111111111111111111"
+        ),
+        AssetCheck::WrongAsset
     );
 }
