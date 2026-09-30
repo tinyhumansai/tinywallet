@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use tinywallet_crypto::rpc::{NetworkId, Transport, TransportError};
 
-use crate::crypto::defaults::EvmNetwork;
+use crate::crypto::defaults::{EvmNetwork, explorer_tx_url};
 use crate::crypto::execution::PreparedTransaction;
 use crate::crypto::seams::{RpcEndpoints, WalletAccounts, WalletSigner};
 use crate::quote::QuoteStore;

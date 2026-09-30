@@ -2,7 +2,7 @@
 //! `handle_402*` entry points the HTTP tool layer drives directly.
 
 use log::{debug, warn};
-use reqwest::header::HeaderMap;
+use reqwest::header::{HeaderMap, HeaderValue};
 use std::sync::Arc;
 
 use super::LOG_PREFIX;
@@ -52,13 +52,12 @@ impl X402Client {
         request: reqwest::Request,
         max_amount: Option<u64>,
     ) -> Result<reqwest::Response, X402Error> {
+        // The paid retry is a second copy of the request. A streaming body cannot
+        // be copied, and the copy is taken before the first send consumes the
+        // request, so the answer is known up front.
+        let replay = request.try_clone();
         let method = request.method().clone();
         let url = request.url().clone();
-        let headers = request.headers().clone();
-        let body_bytes = request
-            .body()
-            .and_then(|b| b.as_bytes())
-            .map(<[u8]>::to_vec);
 
         debug!("{LOG_PREFIX} initial request {method} {url}");
         let response = self
@@ -70,6 +69,13 @@ impl X402Client {
         if response.status() != reqwest::StatusCode::PAYMENT_REQUIRED {
             return Ok(response);
         }
+
+        // Refuse before reading the challenge, let alone signing: paying for a
+        // request that cannot be replayed would spend money for nothing.
+        let Some(mut retry_req) = replay else {
+            warn!("{LOG_PREFIX} 402 for a request with a streaming body; refusing to pay {url}");
+            return Err(X402Error::NonReplayableBody);
+        };
 
         let challenge = parse_402_headers(response.headers())?;
         debug!(
@@ -104,17 +110,18 @@ impl X402Client {
         let payment = self.builder.build(&challenge, requirement, chain).await?;
         let encoded = encode_payment(&payment)?;
 
-        let mut retry_req = self.http.request(method, url);
-        for (key, value) in &headers {
-            retry_req = retry_req.header(key, value);
-        }
-        retry_req = retry_req.header(HEADER_PAYMENT_SIGNATURE, &encoded);
-        if let Some(body) = body_bytes {
-            retry_req = retry_req.body(body);
-        }
+        let proof = HeaderValue::from_str(&encoded)
+            .map_err(|e| X402Error::Protocol(format!("payment proof is not a valid header: {e}")))?;
+        retry_req
+            .headers_mut()
+            .insert(HEADER_PAYMENT_SIGNATURE, proof);
 
         debug!("{LOG_PREFIX} retrying with payment proof");
-        let paid_response = retry_req.send().await.map_err(X402Error::Transport)?;
+        let paid_response = self
+            .http
+            .execute(retry_req)
+            .await
+            .map_err(X402Error::Transport)?;
 
         if let Some(receipt_header) = paid_response.headers().get(HEADER_PAYMENT_RESPONSE) {
             match parse_settlement_response(receipt_header.to_str().unwrap_or("")) {
