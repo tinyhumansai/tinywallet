@@ -56,6 +56,36 @@ before acting, so two concurrent confirmations cannot double-submit, and puts it
 back with a fresh lifetime if signing or broadcast fails. A caller of the wrong
 thread gets exactly the not-found text, so a leaked quote id gives no oracle.
 
+## Bitcoin fees
+
+The fee is sized from the transaction actually built: 11 vB of overhead
+(10.5, rounded up), 68 vB per P2WPKH input and 31 vB per output, at a fixed
+20 sat/vB. Selection is largest-first and grows one input at a time, re-pricing
+after each, so the fee always covers the inputs it added. A change output is
+planned for first; if it would be dust (546 sats or less, the signer's own
+threshold) it is dropped and the whole surplus becomes the fee. The fee handed to
+the signer is the one it will see, so both sides agree on whether there is change.
+
+## Chain status
+
+`WalletEngine::chain_status` probes the endpoint of every chain the wallet has an
+account for, through `Transport`: `eth_blockNumber` per EVM network, `getHealth`
+on Solana, Esplora's `blocks/tip/height` on Bitcoin and `wallet/getnowblock` on
+Tron. An endpoint that answers is `ready`. One that fails, or answers with
+something that is not a tip, is `missing` and its row carries the failure in
+`error`. A chain with no account is `missing` without being contacted. `error` is
+omitted from a healthy row, so its wire shape is unchanged, and no new
+`providerStatus` value exists.
+
+## Solana cluster
+
+`RpcEndpoints::solana_cluster()` drives more than the endpoint. `network_defaults`
+labels the Solana row `solana-devnet` (not `solana-mainnet-beta`), lists the
+devnet USDC mint, and, because a devnet link needs text after the hash, reports
+`explorer_tx_url_suffix` (`?cluster=devnet`; absent on mainnet). Executed
+transfers link to `https://solscan.io/tx/<sig>?cluster=devnet`.
+`explorer_tx_url` takes the cluster for that reason.
+
 ## Features
 
 | Feature | Default | Gates |

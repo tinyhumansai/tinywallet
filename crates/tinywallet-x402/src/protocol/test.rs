@@ -645,7 +645,9 @@ async fn a_challenge_above_the_cap_is_refused_before_paying() {
 fn streaming_post(url: &str) -> reqwest::Request {
     reqwest::Client::new()
         .post(url)
-        .body(reqwest::Body::wrap(http_body_util::Full::new(axum::body::Bytes::from("streamed"))))
+        .body(reqwest::Body::wrap(http_body_util::Full::new(
+            axum::body::Bytes::from("streamed"),
+        )))
         .build()
         .unwrap()
 }
@@ -666,7 +668,10 @@ async fn a_streaming_body_is_refused_before_anything_is_paid() {
         err.to_string(),
         "x402 request body cannot be replayed for the paid retry; use a buffered body"
     );
-    assert!(builder.chains.lock().unwrap().is_empty(), "nothing was signed");
+    assert!(
+        builder.chains.lock().unwrap().is_empty(),
+        "nothing was signed"
+    );
     assert_eq!(server.seen().len(), 1, "no paid retry was sent");
 }
 

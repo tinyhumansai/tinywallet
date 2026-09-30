@@ -7,11 +7,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use crate::wire::{
-    AssetCheck, SUPPORTED_USDC, check_usdc,
-    BASE_MAINNET_CAIP2, EvmAuthorization, EvmPaymentProof, PaymentExtra, PaymentPayload,
-    PaymentProof, PaymentRequired, PaymentRequirements, ResourceInfo, SOLANA_MAINNET_CAIP2,
-    SettlementResponse, SolanaPaymentProof, USDC_BASE_MAINNET, USDC_ETHEREUM_MAINNET,
-    USDC_MINT_MAINNET,
+    AssetCheck, BASE_MAINNET_CAIP2, EvmAuthorization, EvmPaymentProof, PaymentExtra,
+    PaymentPayload, PaymentProof, PaymentRequired, PaymentRequirements, ResourceInfo,
+    SOLANA_MAINNET_CAIP2, SUPPORTED_USDC, SettlementResponse, SolanaPaymentProof,
+    USDC_BASE_MAINNET, USDC_ETHEREUM_MAINNET, USDC_MINT_MAINNET, check_usdc,
 };
 
 fn requirement(network: &str, asset: &str, extra: Option<PaymentExtra>) -> PaymentRequirements {
@@ -260,7 +259,10 @@ fn another_asset_on_a_known_network_is_not_accepted() {
         AssetCheck::WrongAsset
     );
     assert_eq!(
-        check_usdc(SOLANA_MAINNET_CAIP2, "NotUsdcMint1111111111111111111111111111111"),
+        check_usdc(
+            SOLANA_MAINNET_CAIP2,
+            "NotUsdcMint1111111111111111111111111111111"
+        ),
         AssetCheck::WrongAsset
     );
 }
