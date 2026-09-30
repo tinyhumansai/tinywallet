@@ -5,6 +5,7 @@
 
 use serde_json::{Value, json};
 use tinywallet_bus::wire::TransactionSpec;
+use tinywallet_crypto::rpc::NetworkId;
 
 use super::{
     ExecutePreparedParams, PrepareTransferParams, PreparedKind, PreparedStatus, ProviderStatus,
@@ -13,7 +14,7 @@ use crate::crypto::defaults::EvmNetwork;
 use crate::crypto::wallet::WalletChain;
 use crate::quote::WALLET_NOT_CONFIGURED_MESSAGE;
 use crate::test_support::{
-    FakeWalletAccounts, Rig, SignerCall, configured_status, owner_a, owner_b, prepared_quote,
+    Call, FakeWalletAccounts, Rig, SignerCall, configured_status, owner_a, owner_b, prepared_quote,
     sample_address,
 };
 
@@ -127,7 +128,10 @@ async fn chain_status_is_ready_only_once_every_endpoint_answers_its_probe() {
     let rig = Rig::new();
     script_healthy_chains(&rig);
     let rows = rig.engine.chain_status().await.unwrap();
-    assert!(rows.iter().all(|r| r.provider_status == ProviderStatus::Ready));
+    assert!(
+        rows.iter()
+            .all(|r| r.provider_status == ProviderStatus::Ready)
+    );
     assert!(rows.iter().all(|r| r.error.is_none()), "{rows:?}");
 
     // One cheap call per row, on that row's own network.
@@ -163,14 +167,26 @@ async fn chain_status_reports_an_unreachable_endpoint_with_its_error() {
     rig.transport
         .on_rpc("eth_blockNumber", json!("0x1"))
         .on_rpc_error("getHealth", "node is behind by 42 slots")
-        .on_get_error("blocks/tip/height", "wallet REST GET transport failed: refused")
-        .on_post_unreachable("wallet/getnowblock", "wallet REST POST transport failed: timeout");
+        .on_get_error(
+            "blocks/tip/height",
+            "wallet REST GET transport failed: refused",
+        )
+        .on_post_unreachable(
+            "wallet/getnowblock",
+            "wallet REST POST transport failed: timeout",
+        );
     let rows = rig.engine.chain_status().await.unwrap();
 
     let unhealthy = [
         (WalletChain::Solana, "node is behind by 42 slots"),
-        (WalletChain::Btc, "wallet REST GET transport failed: refused"),
-        (WalletChain::Tron, "wallet REST POST transport failed: timeout"),
+        (
+            WalletChain::Btc,
+            "wallet REST GET transport failed: refused",
+        ),
+        (
+            WalletChain::Tron,
+            "wallet REST POST transport failed: timeout",
+        ),
     ];
     for (chain, message) in unhealthy {
         let r = row(&rows, chain);
@@ -178,36 +194,44 @@ async fn chain_status_reports_an_unreachable_endpoint_with_its_error() {
         assert_eq!(r.provider_status, ProviderStatus::Missing, "{chain:?}");
         assert_eq!(r.error.as_deref(), Some(message), "{chain:?}");
     }
-    let evm: Vec<_> = rows.iter().filter(|r| r.chain == WalletChain::Evm).collect();
-    assert!(evm.iter().all(|r| r.provider_status == ProviderStatus::Ready));
+    let evm: Vec<_> = rows
+        .iter()
+        .filter(|r| r.chain == WalletChain::Evm)
+        .collect();
+    assert!(
+        evm.iter()
+            .all(|r| r.provider_status == ProviderStatus::Ready)
+    );
 }
 
 #[tokio::test]
 async fn chain_status_rejects_an_answer_that_is_not_a_chain_tip() {
+    // Reachable, but not saying what a tip says: a stub or a captive portal.
     let rig = Rig::new();
-    script_healthy_chains(&rig);
-    // Reachable, but not saying what a tip says: a stub or captive portal.
-    rig.transport.on_rpc("eth_blockNumber", json!({"oops": true}));
-    let rows = rig.engine.chain_status().await.unwrap();
-    let evm = row(&rows, WalletChain::Evm);
-    assert_eq!(evm.provider_status, ProviderStatus::Missing);
-    assert!(
-        evm.error.as_deref().unwrap().contains("eth_blockNumber"),
-        "{evm:?}"
-    );
-
-    let rig = Rig::new();
-    script_healthy_chains(&rig);
-    rig.transport.on_get("blocks/tip/height", "<html>");
     rig.transport
-        .on_post("wallet/getnowblock", &json!({"Error": "no block"}).to_string());
+        .on_rpc("eth_blockNumber", json!({"oops": true}))
+        .on_rpc("getHealth", json!("ok"))
+        .on_get("blocks/tip/height", "<html>")
+        .on_post(
+            "wallet/getnowblock",
+            &json!({"Error": "no block"}).to_string(),
+        );
     let rows = rig.engine.chain_status().await.unwrap();
-    let btc = row(&rows, WalletChain::Btc);
-    assert_eq!(btc.provider_status, ProviderStatus::Missing);
-    assert!(btc.error.as_deref().unwrap().contains("tip height"), "{btc:?}");
-    let tron = row(&rows, WalletChain::Tron);
-    assert_eq!(tron.provider_status, ProviderStatus::Missing);
-    assert!(tron.error.as_deref().unwrap().contains("getnowblock"), "{tron:?}");
+
+    let expected = [
+        (WalletChain::Evm, "eth_blockNumber"),
+        (WalletChain::Btc, "tip height"),
+        (WalletChain::Tron, "getnowblock"),
+    ];
+    for (chain, needle) in expected {
+        let r = row(&rows, chain);
+        assert_eq!(r.provider_status, ProviderStatus::Missing, "{chain:?}");
+        assert!(r.error.as_deref().unwrap().contains(needle), "{r:?}");
+    }
+    assert_eq!(
+        row(&rows, WalletChain::Solana).provider_status,
+        ProviderStatus::Ready
+    );
 }
 
 #[test]
