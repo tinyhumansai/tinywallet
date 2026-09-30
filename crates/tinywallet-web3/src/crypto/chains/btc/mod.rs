@@ -113,7 +113,7 @@ async fn broadcast_raw_hex(engine: &WalletEngine, tx_hex: &str) -> Result<String
 }
 
 /// The coins chosen for a transfer, the fee they pay, and the change they leave.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub(crate) struct SpendPlan {
     /// The UTXOs to spend, largest first.
     pub(crate) selected: Vec<EsploraUtxo>,
