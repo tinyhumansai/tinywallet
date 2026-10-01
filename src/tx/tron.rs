@@ -48,10 +48,15 @@ pub fn sign(raw_data_hex: &str, secret_key: &[u8]) -> Result<Signature> {
     let recoverable = secp.sign_ecdsa_recoverable(&message, &secret);
     let (recovery_id, compact) = recoverable.serialize_compact();
 
-    let recovery = u8::try_from(recovery_id.to_i32()).map_err(|_| Error::Signing {
-        reason: "unexpected recovery id".to_string(),
-    })?;
+    let recovery = recovery_byte(recovery_id.to_i32())?;
     attach_signature(&compact, recovery)
+}
+
+/// Narrow a secp256k1 recovery id to the single byte Tron appends.
+fn recovery_byte(id: i32) -> Result<u8> {
+    u8::try_from(id).map_err(|_| Error::Signing {
+        reason: "unexpected recovery id".to_string(),
+    })
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use super::{DUST_THRESHOLD, Transfer, Utxo, select_coins};
+use super::{DUST_THRESHOLD, Transfer, Utxo, script_pubkey, select_coins};
 use crate::tx::Error;
 
 const VECTOR: &str = "abandon abandon abandon abandon abandon abandon \
@@ -112,7 +112,7 @@ fn the_fee_is_exactly_inputs_minus_outputs() {
 fn every_input_is_signed_with_a_witness() {
     let utxos = [utxo(60_000, 0), utxo(60_000, 1)];
     let hex = transfer(100_000, 1_000).sign(&utxos, &key()).unwrap();
-    assert!(!hex.is_empty());
+    assert_ne!(hex.len(), 0);
     // Segwit marker and flag follow the 4-byte version in the serialised
     // form: 02000000 then 0001.
     assert!(hex.starts_with("020000000001"), "{hex}");
@@ -282,4 +282,69 @@ fn a_signature_count_that_does_not_match_the_inputs_is_refused() {
         .attach_signatures(&utxos, &public_key(), &[[0x11; 64]])
         .unwrap_err();
     assert!(matches!(error, Error::Signing { .. }), "{error:?}");
+}
+
+#[test]
+fn a_utxo_total_that_overflows_is_an_invalid_field() {
+    let half = u64::MAX / 2 + 1;
+    let utxos = [utxo(half, 0), utxo(half, 1)];
+    match select_coins(&utxos, u64::MAX).unwrap_err() {
+        Error::InvalidField { field, .. } => assert_eq!(field, "utxos"),
+        other => panic!("expected InvalidField, got {other:?}"),
+    }
+}
+
+#[test]
+fn an_amount_plus_fee_that_overflows_is_an_invalid_field() {
+    match transfer(u64::MAX, 1).build(&[utxo(50_000, 0)]).unwrap_err() {
+        Error::InvalidField { field, .. } => assert_eq!(field, "amount"),
+        other => panic!("expected InvalidField, got {other:?}"),
+    }
+}
+
+#[test]
+fn an_invalid_recipient_is_an_address_error_on_every_entry_point() {
+    let mut bad = transfer(1_000, 100);
+    bad.to = "not-an-address".to_string();
+    let utxos = [utxo(50_000, 0)];
+    assert!(matches!(bad.build(&utxos), Err(Error::Address(_))));
+    assert!(matches!(
+        bad.attach_signatures(&utxos, &public_key(), &[[0x11; 64]]),
+        Err(Error::Address(_))
+    ));
+}
+
+#[test]
+fn a_secret_key_of_the_wrong_length_is_a_signing_error() {
+    let error = transfer(1_000, 100)
+        .sign(&[utxo(50_000, 0)], &[0u8; 5])
+        .unwrap_err();
+    assert!(matches!(error, Error::Signing { .. }), "{error:?}");
+}
+
+#[test]
+fn a_public_key_that_is_not_on_the_curve_is_refused() {
+    let utxos = [utxo(50_000, 0)];
+    let invalid = [0u8; 33];
+    assert!(matches!(
+        transfer(1_000, 100).sighashes(&utxos, &invalid),
+        Err(Error::Signing { .. })
+    ));
+}
+
+#[test]
+fn a_signature_that_is_not_a_valid_pair_is_refused() {
+    let utxos = [utxo(50_000, 0)];
+    let error = transfer(1_000, 100)
+        .attach_signatures(&utxos, &public_key(), &[[0xff; 64]])
+        .unwrap_err();
+    assert!(matches!(error, Error::Signing { .. }), "{error:?}");
+}
+
+#[test]
+fn a_script_for_a_malformed_address_is_an_invalid_field() {
+    match script_pubkey("garbage").unwrap_err() {
+        Error::InvalidField { field, .. } => assert_eq!(field, "address"),
+        other => panic!("expected InvalidField, got {other:?}"),
+    }
 }

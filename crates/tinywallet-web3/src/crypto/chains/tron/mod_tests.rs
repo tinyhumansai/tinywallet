@@ -362,10 +362,9 @@ async fn a_native_transfer_is_built_verified_signed_and_broadcast() {
         tron_address_to_hex(RECIPIENT).unwrap()
     );
     assert_eq!(create["amount"], 1_000_000);
-    assert!(
-        rig.transport
-            .posts_to("wallet/triggersmartcontract")
-            .is_empty()
+    assert_eq!(
+        rig.transport.posts_to("wallet/triggersmartcontract").len(),
+        0
     );
 
     // The signer got a verified spec, and its signature is what was broadcast.
@@ -406,11 +405,7 @@ async fn a_trc20_transfer_pays_the_contract_and_carries_the_recipient_in_the_par
     assert_eq!(trigger["parameter"].as_str().unwrap().len(), 128);
     assert_eq!(trigger["fee_limit"], TRC20_FEE_LIMIT_SUN);
     assert_eq!(trigger["call_value"], 0);
-    assert!(
-        rig.transport
-            .posts_to("wallet/createtransaction")
-            .is_empty()
-    );
+    assert_eq!(rig.transport.posts_to("wallet/createtransaction").len(), 0);
     // Without a `txid` in the reply, the node-built transaction's id is used.
     assert_eq!(result.transaction_hash, recompute_txid(&raw).unwrap());
 }
@@ -448,10 +443,9 @@ async fn a_tampering_node_is_caught_before_the_signer_sees_anything() {
         rig.signer.transactions().is_empty(),
         "the signer never saw the decoy"
     );
-    assert!(
-        rig.transport
-            .posts_to("wallet/broadcasttransaction")
-            .is_empty()
+    assert_eq!(
+        rig.transport.posts_to("wallet/broadcasttransaction").len(),
+        0
     );
 }
 
@@ -469,7 +463,7 @@ async fn the_account_the_signer_derives_must_match_the_quote() {
             sample_address(WalletChain::Tron)
         )
     );
-    assert!(rig.transport.calls().is_empty());
+    assert_eq!(rig.transport.calls().len(), 0);
     assert!(
         rig.signer
             .calls()

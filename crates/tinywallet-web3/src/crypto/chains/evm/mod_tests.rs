@@ -252,7 +252,7 @@ async fn sign_and_broadcast_validates_before_touching_the_node() {
         .await
         .unwrap_err();
     assert!(err.starts_with("invalid native value 'lots'"), "{err}");
-    assert!(rig.transport.calls().is_empty());
+    assert_eq!(rig.transport.calls().len(), 0);
 }
 
 #[tokio::test]

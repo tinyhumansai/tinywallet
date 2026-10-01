@@ -50,7 +50,7 @@ fn every_wallet_tool_is_deferred_and_named_as_documented() {
     for (tool, name) in &tools {
         assert_eq!(tool.name(), *name);
         assert!(matches!(tool.exposure(), ToolExposure::Deferred), "{name}");
-        assert!(!tool.description().is_empty());
+        assert_ne!(tool.description().len(), 0);
         let schema = tool.parameters_schema();
         assert_eq!(schema["type"], "object");
         assert_eq!(
