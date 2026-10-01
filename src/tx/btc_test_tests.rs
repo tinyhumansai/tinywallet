@@ -286,7 +286,8 @@ fn a_signature_count_that_does_not_match_the_inputs_is_refused() {
 
 #[test]
 fn a_utxo_total_that_overflows_is_an_invalid_field() {
-    let utxos = [utxo(u64::MAX, 0), utxo(1, 1)];
+    let half = u64::MAX / 2 + 1;
+    let utxos = [utxo(half, 0), utxo(half, 1)];
     match select_coins(&utxos, u64::MAX).unwrap_err() {
         Error::InvalidField { field, .. } => assert_eq!(field, "utxos"),
         other => panic!("expected InvalidField, got {other:?}"),
@@ -335,7 +336,7 @@ fn a_public_key_that_is_not_on_the_curve_is_refused() {
 fn a_signature_that_is_not_a_valid_pair_is_refused() {
     let utxos = [utxo(50_000, 0)];
     let error = transfer(1_000, 100)
-        .attach_signatures(&utxos, &public_key(), &[[0u8; 64]])
+        .attach_signatures(&utxos, &public_key(), &[[0xff; 64]])
         .unwrap_err();
     assert!(matches!(error, Error::Signing { .. }), "{error:?}");
 }
