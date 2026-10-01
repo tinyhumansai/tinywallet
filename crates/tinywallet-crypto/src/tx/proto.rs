@@ -208,5 +208,5 @@ fn take_exact<'a>(input: &mut &'a [u8], length: usize) -> Result<&'a [u8]> {
 }
 
 #[cfg(test)]
-#[path = "proto/test.rs"]
+#[path = "proto/proto_tests.rs"]
 mod test;

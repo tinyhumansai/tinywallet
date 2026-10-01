@@ -82,4 +82,5 @@ pub use tinywallet_crypto::{Chain, Error, Result};
 pub use version::{CONTRACT_VERSION, is_compatible};
 
 #[cfg(test)]
+#[path = "lib_tests.rs"]
 mod test;

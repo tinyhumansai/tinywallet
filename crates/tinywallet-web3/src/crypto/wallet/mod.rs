@@ -13,4 +13,5 @@ pub use engine::{WalletEngine, WalletSeams};
 pub use types::{WalletAccount, WalletChain, WalletSetupSource, WalletStatus};
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

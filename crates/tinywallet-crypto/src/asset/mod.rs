@@ -418,4 +418,5 @@ pub fn networks(solana: SolanaCluster) -> Vec<Network> {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

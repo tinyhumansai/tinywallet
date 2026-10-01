@@ -98,4 +98,5 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

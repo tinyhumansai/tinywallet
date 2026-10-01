@@ -38,4 +38,5 @@ pub(crate) fn init() {
 }
 
 #[cfg(test)]
+#[path = "logging/logging_tests.rs"]
 mod test;

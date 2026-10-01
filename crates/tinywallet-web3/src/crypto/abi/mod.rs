@@ -52,4 +52,5 @@ fn flatten(error: &Error, to_address: &str, amount_raw: &str) -> String {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

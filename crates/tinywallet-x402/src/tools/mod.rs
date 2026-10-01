@@ -19,4 +19,5 @@ mod request;
 pub use request::X402RequestTool;
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

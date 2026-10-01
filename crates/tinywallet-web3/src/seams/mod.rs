@@ -39,4 +39,5 @@ impl QuoteScope for NoQuoteScope {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

@@ -53,4 +53,5 @@ pub(crate) fn fresh_nonce() -> [u8; 32] {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

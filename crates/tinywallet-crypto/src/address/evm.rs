@@ -174,4 +174,5 @@ fn prefixed(body: &str) -> String {
 }
 
 #[cfg(test)]
+#[path = "evm/evm_tests.rs"]
 mod test;

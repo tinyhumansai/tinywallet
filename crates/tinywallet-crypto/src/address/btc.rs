@@ -290,4 +290,5 @@ fn wrong_network(address: &str, reason: &str) -> Error {
 }
 
 #[cfg(test)]
+#[path = "btc/btc_tests.rs"]
 mod test;

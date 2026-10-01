@@ -40,6 +40,7 @@
 
 mod assets;
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;
 mod types;
 

@@ -37,4 +37,5 @@ pub use tinywallet_crypto::tx::proto;
 pub use tinywallet_crypto::tx::{Error, Result};
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

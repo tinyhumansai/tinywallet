@@ -274,4 +274,5 @@ pub fn decode<T: serde::de::DeserializeOwned>(
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

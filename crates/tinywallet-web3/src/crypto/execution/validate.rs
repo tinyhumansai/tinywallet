@@ -120,4 +120,5 @@ pub fn hex_to_bytes(value: &str) -> Result<Vec<u8>, String> {
 }
 
 #[cfg(test)]
+#[path = "validate/validate_tests.rs"]
 mod test;

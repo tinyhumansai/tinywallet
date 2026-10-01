@@ -45,4 +45,5 @@ pub(crate) use validate::validate_calldata;
 const LOG_PREFIX: &str = "[wallet]";
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;
