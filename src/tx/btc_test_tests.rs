@@ -112,7 +112,7 @@ fn the_fee_is_exactly_inputs_minus_outputs() {
 fn every_input_is_signed_with_a_witness() {
     let utxos = [utxo(60_000, 0), utxo(60_000, 1)];
     let hex = transfer(100_000, 1_000).sign(&utxos, &key()).unwrap();
-    assert!(!hex.is_empty());
+    assert_ne!(hex.len(), 0);
     // Segwit marker and flag follow the 4-byte version in the serialised
     // form: 02000000 then 0001.
     assert!(hex.starts_with("020000000001"), "{hex}");

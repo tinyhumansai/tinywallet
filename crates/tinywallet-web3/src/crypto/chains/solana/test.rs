@@ -225,7 +225,7 @@ async fn a_mismatched_derived_key_is_refused_before_any_rpc() {
         err.starts_with("Solana key derivation mismatch: derived Vote"),
         "{err}"
     );
-    assert!(rig.transport.calls().is_empty());
+    assert_eq!(rig.transport.calls().len(), 0);
 }
 
 #[tokio::test]

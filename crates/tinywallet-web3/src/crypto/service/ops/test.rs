@@ -157,7 +157,7 @@ async fn a_swap_on_an_unsignable_chain_is_rejected_before_the_backend() {
     let rig = ServiceRig::new();
     let err = rig.service.quote_swap(swap(999_999)).await.unwrap_err();
     assert!(err.contains("not signable"), "got: {err}");
-    assert!(rig.backend.requests().is_empty());
+    assert_eq!(rig.backend.requests().len(), 0);
 }
 
 #[tokio::test]
@@ -206,7 +206,7 @@ async fn a_same_chain_bridge_is_rejected() {
         err.contains("different source and destination"),
         "got: {err}"
     );
-    assert!(rig.backend.requests().is_empty());
+    assert_eq!(rig.backend.requests().len(), 0);
 }
 
 #[tokio::test]

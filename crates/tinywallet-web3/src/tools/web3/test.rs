@@ -50,7 +50,7 @@ fn every_web3_tool_is_deferred_and_named_as_documented() {
     for (tool, name) in &tools {
         assert_eq!(tool.name(), *name);
         assert!(matches!(tool.exposure(), ToolExposure::Deferred), "{name}");
-        assert!(!tool.description().is_empty());
+        assert_ne!(tool.description().len(), 0);
         assert_eq!(
             tool.parameters_schema()["additionalProperties"],
             false,

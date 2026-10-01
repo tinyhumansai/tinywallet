@@ -375,7 +375,7 @@ async fn a_payment_the_budget_refuses_is_reported_and_not_sent() {
         "x402 payment failed: x402 amount 2500 exceeds per-request cap 100"
     );
     assert_eq!(server.seen().len(), 1);
-    assert!(records().is_empty());
+    assert_eq!(records().len(), 0);
     ledger::reset_global();
 }
 
