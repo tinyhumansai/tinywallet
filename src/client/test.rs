@@ -267,7 +267,7 @@ async fn an_address_from_the_wrong_chain_is_rejected() {
         let err = balance(&transport, network, wrong).await.unwrap_err();
         assert!(matches!(err, Error::Address(_)), "{network}: {err:?}");
     }
-    assert!(transport.calls().is_empty());
+    assert_eq!(transport.calls().len(), 0);
 }
 
 #[tokio::test]
@@ -541,7 +541,7 @@ async fn send_evm_rejects_a_bad_address_before_any_request() {
         .unwrap_err(),
         Error::Address(_)
     ));
-    assert!(transport.methods().is_empty());
+    assert_eq!(transport.methods().len(), 0);
 }
 
 #[tokio::test]

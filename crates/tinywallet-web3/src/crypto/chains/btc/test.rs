@@ -299,7 +299,7 @@ async fn execute_refuses_when_there_are_no_spendable_utxos() {
         .await
         .unwrap_err();
     assert!(err.contains("no spendable UTXOs"), "got: {err}");
-    assert!(rig.signer.transactions().is_empty());
+    assert_eq!(rig.signer.transactions().len(), 0);
 }
 
 #[tokio::test]
