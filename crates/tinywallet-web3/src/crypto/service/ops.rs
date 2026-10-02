@@ -260,4 +260,5 @@ impl Web3Service {
 }
 
 #[cfg(test)]
+#[path = "ops/ops_tests.rs"]
 mod test;

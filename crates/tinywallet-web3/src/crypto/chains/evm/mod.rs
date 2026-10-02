@@ -367,4 +367,5 @@ pub(crate) async fn lookup_tx(
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

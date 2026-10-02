@@ -150,4 +150,5 @@ fn keccak(bytes: &[u8]) -> [u8; 32] {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

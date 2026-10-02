@@ -33,6 +33,7 @@ mod status;
 mod tron;
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;
 
 /// Errors raised by a chain query.

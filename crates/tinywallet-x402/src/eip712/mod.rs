@@ -186,4 +186,5 @@ fn left_pad_address(address: Address20) -> [u8; 32] {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

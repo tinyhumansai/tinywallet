@@ -245,4 +245,5 @@ fn seed_from_mnemonic(mnemonic: &str) -> Result<Zeroizing<Vec<u8>>> {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

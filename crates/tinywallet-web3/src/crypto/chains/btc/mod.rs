@@ -405,4 +405,5 @@ pub(crate) async fn lookup_tx(engine: &WalletEngine, hash: &str) -> Result<TxLoo
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

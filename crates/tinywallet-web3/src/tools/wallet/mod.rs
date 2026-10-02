@@ -13,4 +13,5 @@ pub use status::WalletStatusTool;
 pub use tx_query::{WalletLookupTxTool, WalletTxReceiptTool, WalletTxStatusTool};
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

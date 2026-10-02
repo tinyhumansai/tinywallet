@@ -33,4 +33,5 @@ pub use proxy::ProxyPolicy;
 pub(crate) const LOG_PREFIX: &str = "[x402]";
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

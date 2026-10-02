@@ -91,4 +91,5 @@ pub fn validate(chain: Chain, address: &str) -> Result<String> {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

@@ -144,4 +144,5 @@ pub fn encode(bytes: &[u8; ADDRESS_BYTES]) -> Result<String> {
 }
 
 #[cfg(test)]
+#[path = "tron/tron_tests.rs"]
 mod test;

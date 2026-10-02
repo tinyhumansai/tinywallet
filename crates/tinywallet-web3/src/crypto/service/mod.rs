@@ -73,4 +73,5 @@ impl Web3Service {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

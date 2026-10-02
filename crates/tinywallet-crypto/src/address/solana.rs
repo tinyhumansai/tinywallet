@@ -101,4 +101,5 @@ pub fn encode(bytes: &[u8; ADDRESS_BYTES]) -> String {
 }
 
 #[cfg(test)]
+#[path = "solana/solana_tests.rs"]
 mod test;

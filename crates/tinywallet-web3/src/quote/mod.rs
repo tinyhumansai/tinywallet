@@ -22,4 +22,5 @@ pub use tool::to_tool_result;
 pub use types::{QuoteOwner, Quoted, WALLET_NOT_CONFIGURED_MESSAGE};
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

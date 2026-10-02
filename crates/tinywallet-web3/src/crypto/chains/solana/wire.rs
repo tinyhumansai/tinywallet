@@ -203,4 +203,5 @@ pub(super) fn build_spl_transfer_message(
 }
 
 #[cfg(test)]
+#[path = "wire/wire_tests.rs"]
 mod test;

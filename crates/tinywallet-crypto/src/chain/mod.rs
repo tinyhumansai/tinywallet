@@ -98,4 +98,5 @@ impl FromStr for Chain {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

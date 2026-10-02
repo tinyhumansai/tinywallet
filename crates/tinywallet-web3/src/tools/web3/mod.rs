@@ -14,4 +14,5 @@ pub use dapp::{Web3DappCallTool, Web3DappExecuteTool};
 pub use swap::{Web3SwapExecuteTool, Web3SwapQuoteTool, Web3SwapRoutesTool};
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

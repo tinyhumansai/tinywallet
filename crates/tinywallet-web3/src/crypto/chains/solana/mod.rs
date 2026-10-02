@@ -246,4 +246,5 @@ pub(crate) async fn execute_solana_quote(
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;
