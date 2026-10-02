@@ -291,6 +291,11 @@ jobs:
           - id: windows-11-arm64
             os: windows-11-arm
             target: aarch64-pc-windows-msvc
+    # A hosted runner that loses contact with GitHub hangs its step until the
+    # 6h default (run 37000249529: macos-26-intel stalled in the toolchain
+    # install and the job was only reaped after ~45 min). A normal bundle build
+    # finishes well inside this, so cap it and recover with `existing_tag`.
+    timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
