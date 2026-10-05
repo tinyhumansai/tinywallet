@@ -58,7 +58,7 @@ sha2 = "0.11"
 # Ed25519 point decompression: a program-derived address must be *off* the
 # curve, and this is the only place that check is needed. Default features off
 # and only `alloc`, so no signing code comes with it.
-curve25519-dalek = { version = "4", default-features = false, features = ["alloc"] }
+curve25519-dalek = { version = "5", default-features = false, features = ["alloc"] }
 # The per-engine quote stores are shared across async tasks. `parking_lot`
 # guards return directly (no poisoning), which keeps `unwrap` out of library
 # code, and it is already in every OpenHuman graph.
