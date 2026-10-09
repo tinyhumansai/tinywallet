@@ -58,7 +58,7 @@ resolver = "3"
 # tinyagents) patches this exact URL to its own copy, so the two unify into
 # one package and `tinytools::Tool` stays one type. Keep the rev equal to the
 # tinytools gitlink tinyagents pins.
-tinytools = { git = "https://github.com/tinyhumansai/tinytools", rev = "82c0d975e2667e1c525afe525006134431641785" }
+tinytools = { git = "https://github.com/tinyhumansai/tinytools", rev = "bd60b9b52f1998b4483b9cf107a72d3338e672f8" }
 
 [dependencies]
 # The wire contract. Split out so a host that has moved signing into the
