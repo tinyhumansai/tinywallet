@@ -23,8 +23,8 @@ use tinybus::module::ModuleState;
 use tinybus::test_support;
 use tinywallet::wire::{
     AttachRequest, DerivedAccount, ExportRequest, ExportedKey, PublicKey, Scheme, SecretMaterial,
-    SignMessageRequest, SignRequest, Signature, SignedTransaction, SigningRequest,
-    TransactionSpec, UnsignedTransaction,
+    SignMessageRequest, SignRequest, Signature, SignedTransaction, SigningRequest, TransactionSpec,
+    UnsignedTransaction,
 };
 use tinywallet::{Chain, tx};
 use tinywallet_module::{BUS_NAME, OBJECT_PATH};
@@ -55,8 +55,9 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
     // load of the same artifact would collide on the well-known name, so every
     // chain is exercised against the one admitted instance.
     let (modules, client, broker_task) = test_support::start_bus().await.unwrap();
-    let loaded = test_support::admit_module(&modules, "TINYWALLET_TEST_MODULE", "tinywallet-module")
-        .expect("digest-pinned module should load");
+    let loaded =
+        test_support::admit_module(&modules, "TINYWALLET_TEST_MODULE", "tinywallet-module")
+            .expect("digest-pinned module should load");
     assert_manifest_contract(&loaded);
     test_support::wait_until_serving(&client, BUS_NAME, Duration::from_secs(5))
         .await
@@ -105,7 +106,6 @@ fn assert_manifest_contract(loaded: &tinybus::module::ModuleInfo) {
         tinywallet_bus::METHODS,
         "the manifest and the published contract name different members"
     );
-
 }
 
 /// The load-bearing case: through the bus must equal in-process.
@@ -394,7 +394,10 @@ async fn derives_an_account_without_returning_its_secret(proxy: &tinybus::Proxy)
         .await
         .unwrap();
     assert_eq!(actual.address, expected.address());
-    assert_eq!(actual.public_key.key_hex, hex(&compressed_public(expected.secret_bytes())));
+    assert_eq!(
+        actual.public_key.key_hex,
+        hex(&compressed_public(expected.secret_bytes()))
+    );
 }
 
 /// The one-call flow returns the same broadcast transaction as local signing.
