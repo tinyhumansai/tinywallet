@@ -13,16 +13,15 @@ permissions:
 
 jobs:
   module-ci:
-    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@4dc33967e0910911ccb3b49f1202a6ad39c6bc1a
+    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@40d135e9cf7ca23a31d79ef8e87ae3906d344428
     with:
       coverage-command: scripts/check-coverage.sh
-      msrv-build-command: |
-        cargo build --all-targets --all-features \
-          --package tinywallet --package tinywallet-crypto \
-          --package tinywallet-bus
-        cargo build --all-targets --package tinywallet-x402 \
-          --no-default-features --features wire,eip712,abi,ledger
-        cargo build --all-targets --package tinywallet-web3
+      msrv-build-targets: |
+        [
+          {"packages":["tinywallet","tinywallet-crypto","tinywallet-bus"],"all_targets":true,"all_features":true},
+          {"packages":["tinywallet-x402"],"features":["wire","eip712","abi","ledger"],"all_targets":true,"no_default_features":true},
+          {"packages":["tinywallet-web3"],"all_targets":true}
+        ]
       module-e2e-command: >-
         if [ "$RUNNER_OS" = "Windows" ]; then
           pwsh -File scripts/test-e2e.ps1;
