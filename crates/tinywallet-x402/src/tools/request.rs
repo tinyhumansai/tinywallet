@@ -250,9 +250,8 @@ impl X402RequestTool {
             Ok(_) => return ToolResult::error("[policy-blocked] No approved destination"),
             Err(reason) => return ToolResult::error(reason),
         };
-        let approved_url = match reqwest::Url::parse(&target.request.url) {
-            Ok(url) => url,
-            Err(_) => return ToolResult::error("[policy-blocked] Invalid approved URL"),
+        let Ok(approved_url) = reqwest::Url::parse(&target.request.url) else {
+            return ToolResult::error("[policy-blocked] Invalid approved URL");
         };
         let Some(host) = approved_url.host_str() else {
             return ToolResult::error("[policy-blocked] Approved URL has no host");
