@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   module-ci:
-    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@40d135e9cf7ca23a31d79ef8e87ae3906d344428
+    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@932658c
     with:
       coverage-command: scripts/check-coverage.sh
       msrv-build-targets: |
@@ -28,6 +28,7 @@ jobs:
         else
           scripts/test-e2e.sh;
         fi
+      module-e2e-toolchain: stable
       feature-test-command: cargo test --locked --workspace --all-features
 
   wallet-dependency-boundaries:
