@@ -96,7 +96,9 @@ async fn refuses_a_confidential_call_to_an_unattested_module() {
             .unwrap();
         assert!(
             output.status.success(),
-            "unattested child test failed:\n{}",
+            "unattested child test failed (status {}):\nstdout:\n{}\nstderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
         return;
@@ -143,7 +145,7 @@ async fn refuses_a_confidential_call_to_an_unattested_module() {
         .call("SignTransaction", (request,))
         .await
         .expect("ordinary nonconfidential calls remain available");
-    assert!(!signed.raw.is_empty());
+    assert_ne!(signed.raw, "");
 
     broker_task.abort();
 }
