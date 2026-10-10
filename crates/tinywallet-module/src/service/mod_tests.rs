@@ -161,6 +161,50 @@ fn a_bitcoin_request_returns_one_payload_per_selected_input() {
         assert_eq!(payload.scheme, Scheme::Secp256k1Prehash);
         assert_eq!(payload.bytes_hex.len(), 64, "a sighash is 32 bytes");
     }
+
+    let signatures = unsigned
+        .payloads
+        .iter()
+        .map(|payload| host_sign(&payload.bytes_hex, key.secret_bytes()))
+        .collect();
+    let signed = attach_signature(&AttachRequest {
+        transaction: match &unsigned.payloads[0].scheme {
+            Scheme::Secp256k1Prehash => TransactionSpec::Btc {
+                from: key.address().to_string(),
+                to: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string(),
+                amount_sat: 150_000,
+                fee_sat: 2_000,
+                utxos: vec![
+                    Utxo {
+                        txid: "7f3b662ea8b6ff2e0e1a1f9bd0f1c39a6b8ba51e1b0f0e0d0c0b0a0908070605"
+                            .to_string(),
+                        vout: 0,
+                        value: 60_000,
+                    },
+                    Utxo {
+                        txid: "7f3b662ea8b6ff2e0e1a1f9bd0f1c39a6b8ba51e1b0f0e0d0c0b0a0908070605"
+                            .to_string(),
+                        vout: 1,
+                        value: 70_000,
+                    },
+                    Utxo {
+                        txid: "7f3b662ea8b6ff2e0e1a1f9bd0f1c39a6b8ba51e1b0f0e0d0c0b0a0908070605"
+                            .to_string(),
+                        vout: 2,
+                        value: 80_000,
+                    },
+                ],
+            },
+            _ => unreachable!(),
+        },
+        public_key: PublicKey {
+            key_hex: compressed_public(key.secret_bytes()),
+        },
+        signatures,
+    })
+    .unwrap();
+    assert!(signed.raw.starts_with("0x"));
+    assert_eq!(signed.txid, None);
 }
 
 #[test]
@@ -388,6 +432,70 @@ fn the_exported_names_are_the_published_ones() {
     // breaking change that no type system catches.
     assert_eq!(super::BUS_NAME, "ai.tinyhumans.tinywallet.Wallet");
     assert_eq!(super::OBJECT_PATH, "/ai/tinyhumans/tinywallet/Wallet");
+}
+
+#[test]
+fn malformed_secrets_and_wire_values_take_their_named_error_paths() {
+    let invalid_mnemonic = SecretMaterial {
+        mnemonic: "not a valid recovery phrase".to_string(),
+        derivation_path: "m/44'/60'/0'/0/0".to_string(),
+        chain: Chain::Evm,
+    };
+    assert!(matches!(
+        super::derive(&invalid_mnemonic),
+        Err(super::Failure::InvalidInput(_))
+    ));
+
+    let invalid_path = secret(Chain::Evm, "not/a/path");
+    assert!(matches!(
+        super::derive(&invalid_path),
+        Err(super::Failure::InvalidInput(_))
+    ));
+
+    let unhardened_solana_path = secret(Chain::Solana, "m/44'/501'/0/0'");
+    assert!(matches!(
+        super::derive(&unhardened_solana_path),
+        Err(super::Failure::InvalidInput(_))
+    ));
+
+    assert!(matches!(
+        super::public_key_hex(Chain::Evm, &[0; 32]),
+        Err(super::Failure::BuildFailed(_))
+    ));
+    assert!(matches!(
+        super::ed25519_signing_key(&[0; 31]),
+        Err(super::Failure::BuildFailed(_))
+    ));
+    assert!(matches!(
+        super::decode_hex("abc"),
+        Err(super::Failure::InvalidInput(_))
+    ));
+    assert!(matches!(
+        super::decode_hex("gg"),
+        Err(super::Failure::InvalidInput(_))
+    ));
+    assert!(matches!(
+        super::fixed_hex::<2>("0", "fixture"),
+        Err(super::Failure::InvalidInput(_))
+    ));
+    assert!(matches!(
+        super::fixed_hex::<2>("zzzz", "fixture"),
+        Err(super::Failure::InvalidInput(_))
+    ));
+
+    let mut bad_amount = evm_spec();
+    if let TransactionSpec::Evm { value_wei, .. } = &mut bad_amount {
+        *value_wei = "not an integer".to_string();
+    }
+    assert!(matches!(
+        build_unsigned(&SigningRequest {
+            transaction: bad_amount,
+            public_key: PublicKey {
+                key_hex: compressed_public(&evm_key())
+            },
+        }),
+        Err(super::Failure::InvalidInput(_))
+    ));
 }
 
 #[test]
