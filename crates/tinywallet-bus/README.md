@@ -20,3 +20,8 @@ Host integrations must use module calls and wait for a compatible released
 artifact pinned with its verified digest. They must not replace the removed
 re-exports with direct crypto/x402/web3 dependencies. Further web3, budget,
 ledger and x402 execution members remain separate migration work.
+
+Contract 1.2 adds stateless ConstructEvmTransaction for native/ERC-20/contract
+actions, exact signing payloads and host approval facts. Secret fields are
+rejected; fee/calldata/request bounds execute in the module. See
+[construction specification](../../docs/specs/evm-module-construction.md).

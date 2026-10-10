@@ -12,6 +12,8 @@ pub const OBJECT_PATH: &str = "/ai/tinyhumans/tinywallet/Wallet";
 
 /// One constant per member of [`BUS_NAME`].
 pub mod methods {
+    /// Constructs an EVM transaction with exact facts for host approval.
+    pub const CONSTRUCT_EVM_TRANSACTION: &str = "ConstructEvmTransaction";
     /// Reports the bytes a caller must sign for a [`crate::wire::SigningRequest`].
     pub const BUILD_UNSIGNED: &str = "BuildUnsigned";
     /// Assembles the broadcast-ready transaction from a caller's signatures.
@@ -32,6 +34,7 @@ pub mod methods {
 pub const METHODS: &[&str] = &[
     methods::ATTACH_SIGNATURE,
     methods::BUILD_UNSIGNED,
+    methods::CONSTRUCT_EVM_TRANSACTION,
     methods::DERIVE_ACCOUNT,
     methods::EXPORT_KEY,
     methods::SIGN_MESSAGE,

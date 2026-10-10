@@ -92,6 +92,8 @@ const BUILD_FAILED_ERROR: &str = "ai.tinyhumans.tinywallet.Error.BuildFailed";
 /// The served object. Holds nothing: every call is self-contained.
 struct Wallet;
 
+mod construction;
+
 // The interface macro rejects a non-async method, so both methods are async
 // because the dispatch contract says so, not because they await anything. This
 // module performs no I/O at all.
@@ -101,6 +103,14 @@ struct Wallet;
 )]
 #[tinybus::interface(name = "ai.tinyhumans.tinywallet.Wallet")]
 impl Wallet {
+    /// Construct native, ERC-20 or explicit contract transactions and exact approval facts.
+    async fn construct_evm_transaction(
+        &self,
+        request: tinywallet_bus::wire::EvmConstructionRequest,
+    ) -> BusResult<tinywallet_bus::wire::ConstructedEvmTransaction> {
+        construction::construct(&request).map_err(into_bus_error)
+    }
+
     /// Validate an address using the module's compiled chain rules.
     async fn validate_address(
         &self,
@@ -733,8 +743,12 @@ fn decode_hex(value: &str) -> Result<Vec<u8>, Failure> {
     (0..body.len())
         .step_by(2)
         .map(|index| {
-            u8::from_str_radix(&body[index..index + 2], 16)
-                .map_err(|_| Failure::InvalidInput("call data is not hex".to_string()))
+            u8::from_str_radix(
+                body.get(index..index + 2)
+                    .ok_or_else(|| Failure::InvalidInput("call data is not hex".to_string()))?,
+                16,
+            )
+            .map_err(|_| Failure::InvalidInput("call data is not hex".to_string()))
         })
         .collect()
 }
@@ -808,6 +822,7 @@ mod exports {
             "ExportKey",
             "SignMessage",
             "ValidateAddress",
+            "ConstructEvmTransaction",
         ],
         signals = [],
         requires = [],

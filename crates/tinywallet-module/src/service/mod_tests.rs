@@ -1129,3 +1129,70 @@ async fn module_builds_and_attaches_a_bitcoin_fixture_without_a_node() {
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn module_constructs_native_and_erc20_transactions_with_exact_approval_facts()
+-> tinybus::Result<()> {
+    use tinybus::{Connection, broker::Broker, transport::memory::MemoryBus};
+    let bus = MemoryBus::new();
+    let task = Broker::new().spawn(bus.clone());
+    let connection = Connection::connect(bus.connect().await?).await?;
+    super::setup(connection.clone()).await?;
+    let client = Connection::connect(bus.connect().await?).await?;
+    let proxy = client.proxy(super::BUS_NAME, super::OBJECT_PATH, super::BUS_NAME)?;
+    let public = compressed_public(&evm_key());
+    let request = serde_json::json!({
+        "public_key":{"key_hex":public}, "chain_id":1,"nonce":7,
+        "gas_limit":21000,"gas_price_wei":"30000000000",
+        "intent":{"kind":"native_transfer","to":"0x3535353535353535353535353535353535353535","amount_wei":"1000000000000000000"}
+    });
+    let response: serde_json::Value = proxy
+        .call("ConstructEvmTransaction", (request.clone(),))
+        .await?;
+    assert_eq!(response["approval"]["max_fee_wei"], "630000000000000");
+    assert_eq!(
+        response["approval"]["max_native_debit_wei"],
+        "1000630000000000000"
+    );
+    assert_eq!(response["transaction"]["to"], request["intent"]["to"]);
+    assert_eq!(
+        response["unsigned"]["payloads"].as_array().unwrap().len(),
+        1
+    );
+    let mut forbidden = request.clone();
+    forbidden["mnemonic"] = serde_json::json!("public-non-secret-rejected-fixture");
+    let forbidden: tinybus::Result<serde_json::Value> =
+        proxy.call("ConstructEvmTransaction", (forbidden,)).await;
+    assert!(forbidden.is_err());
+    let wrong_arity: tinybus::Result<serde_json::Value> =
+        proxy.call("ConstructEvmTransaction", ()).await;
+    assert!(wrong_arity.is_err());
+    let mut token = request;
+    token["intent"] = serde_json::json!({"kind":"erc20_transfer", "token":"0x1111111111111111111111111111111111111111", "to":"0x3535353535353535353535353535353535353535", "amount_raw":"340282366920938463463374607431768211456"});
+    let response: serde_json::Value = proxy.call("ConstructEvmTransaction", (token,)).await?;
+    assert_eq!(response["transaction"]["value_wei"], "0");
+    assert_eq!(
+        response["approval"]["recipient"],
+        "0x3535353535353535353535353535353535353535"
+    );
+    assert_eq!(
+        response["approval"]["token_amount_raw"],
+        "340282366920938463463374607431768211456"
+    );
+    assert!(
+        response["transaction"]["data_hex"]
+            .as_str()
+            .unwrap()
+            .starts_with("0xa9059cbb")
+    );
+    task.abort();
+    Ok(())
+}
+
+#[test]
+fn multibyte_malformed_hex_returns_invalid_input_without_panicking() {
+    assert!(matches!(
+        super::decode_hex("€a"),
+        Err(super::Failure::InvalidInput(_))
+    ));
+}

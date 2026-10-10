@@ -30,6 +30,7 @@ tinywallet = { path = "../..", default-features = false, features = [
     "tx",
     "wire",
     "eip712",
+    "abi",
 ] }
 # TinyBus provides the typed service interface and the dynamic module host ABI.
 tinybus = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybus", default-features = false, features = [

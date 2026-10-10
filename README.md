@@ -203,3 +203,8 @@ Contract 1.1 adds module-side address validation and removes algorithm re-export
 from the bus crate for the next minor package release. Shared vocabulary moves
 to the bus and implementations re-export it. Hosts call the compiled module;
 see [minimal bus contracts](docs/specs/minimal-bus-contract.md).
+
+Contract 1.2 adds bounded stateless EVM construction with exact host approval
+facts, preserving existing confidential signing. See
+[the construction specification](docs/specs/evm-module-construction.md). RPC,
+quote/payment lifecycle and host artifact integration remain later slices.

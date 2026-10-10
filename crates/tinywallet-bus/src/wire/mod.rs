@@ -476,3 +476,9 @@ pub struct ValidateAddressResponse {
     /// Validation result; it does not prove ownership or available funds.
     pub result: crate::Result<String>,
 }
+
+mod construction;
+pub use construction::{
+    ConstructedEvmTransaction, EvmApprovalFacts, EvmConstructionRequest, EvmIntent,
+    MAX_CALLDATA_BYTES, MAX_CONSTRUCTION_BYTES,
+};

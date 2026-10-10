@@ -44,6 +44,7 @@ const EXPECTED_METHODS: &[&str] = &[
     "ExportKey",
     "SignMessage",
     "ValidateAddress",
+    "ConstructEvmTransaction",
 ];
 
 /// The BIP-39 test vector mnemonic. Never use it for real funds.
@@ -63,6 +64,7 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
     let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
 
     validates_addresses_inside_the_artifact(&proxy).await;
+    constructs_evm_transactions_inside_the_artifact(&proxy).await;
     signs_an_evm_transfer_identically_to_the_library(&proxy).await;
     signs_a_multi_input_bitcoin_spend(&proxy).await;
     signs_a_solana_transfer(&proxy).await;
@@ -508,4 +510,69 @@ async fn validates_addresses_inside_the_artifact(proxy: &tinybus::Proxy) {
         response.result,
         Err(tinywallet_bus::Error::InvalidAddress { .. })
     ));
+}
+
+/// Verify native/token/call construction and signature-ready bytes through the loaded ABI.
+async fn constructs_evm_transactions_inside_the_artifact(proxy: &tinybus::Proxy) {
+    use tinywallet_bus::wire::{ConstructedEvmTransaction, EvmConstructionRequest, EvmIntent};
+    let secret = derive(Chain::Evm, "m/44'/60'/0'/0/0");
+    let mut request = EvmConstructionRequest {
+        public_key: PublicKey {
+            key_hex: hex(&compressed_public(&secret)),
+        },
+        chain_id: 1,
+        nonce: 7,
+        gas_limit: 21000,
+        gas_price_wei: "30000000000".into(),
+        intent: EvmIntent::NativeTransfer {
+            to: "0x3535353535353535353535353535353535353535".into(),
+            amount_wei: "5".into(),
+        },
+    };
+    for intent in [
+        request.intent.clone(),
+        EvmIntent::Erc20Transfer {
+            token: "0x1111111111111111111111111111111111111111".into(),
+            to: "0x3535353535353535353535353535353535353535".into(),
+            amount_raw: "340282366920938463463374607431768211456".into(),
+        },
+        EvmIntent::ContractCall {
+            to: "0x1111111111111111111111111111111111111111".into(),
+            value_wei: "0".into(),
+            data_hex: "0xAaBb".into(),
+        },
+    ] {
+        request.intent = intent;
+        let response: ConstructedEvmTransaction = proxy
+            .call(
+                tinywallet_bus::names::methods::CONSTRUCT_EVM_TRANSACTION,
+                (&request,),
+            )
+            .await
+            .unwrap();
+        let unsigned: UnsignedTransaction = proxy
+            .call(
+                "BuildUnsigned",
+                (SigningRequest {
+                    transaction: response.transaction.clone(),
+                    public_key: request.public_key.clone(),
+                },),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.unsigned, unsigned);
+        assert_eq!(
+            response.approval.sender,
+            "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
+        );
+        assert_eq!(response.approval.max_fee_wei, "630000000000000");
+        let signed = round_trip(proxy, &response.transaction, &secret).await;
+        assert!(signed.raw.starts_with("0x"));
+    }
+    request.public_key.key_hex = "00".repeat(33);
+    let refusal: tinybus::Result<ConstructedEvmTransaction> =
+        proxy.call("ConstructEvmTransaction", (request,)).await;
+    assert!(
+        matches!(refusal,Err(tinybus::Error::MethodFailed{name,..}) if name=="ai.tinyhumans.tinywallet.Error.InvalidInput")
+    );
 }
