@@ -217,6 +217,10 @@ impl crate::protocol::ProxyPolicy for FakeProxyPolicy {
         self.services.lock().unwrap().push(service.to_string());
         builder
     }
+
+    fn allows_direct_connection(&self, _service: &str) -> bool {
+        true
+    }
 }
 
 /// An EVM `exact` requirement on Base for 2500 atomic USDC.

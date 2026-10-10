@@ -12,6 +12,7 @@ use tinytools::{PermissionLevel, Tool, ToolExposure, ToolResult};
 
 use super::*;
 use crate::ledger::{self, PaymentRecord, PaymentStatus, SpendingBudget};
+use crate::protocol::ProxyPolicy;
 use crate::test_support::{
     FakePaymentSigner, FakeProxyPolicy, FakeTransport, ServerConfig, TestServer, challenge,
     challenge_header, evm_requirement, solana_requirement,
@@ -66,6 +67,47 @@ fn tool_with(proxy: Arc<FakeProxyPolicy>) -> X402RequestTool {
 
 fn tool() -> X402RequestTool {
     tool_with(Arc::new(FakeProxyPolicy::default()))
+}
+
+struct StaticGuard(std::sync::Mutex<Option<Result<AuthorizedRequest, RequestAuthorizationError>>>);
+
+#[async_trait::async_trait]
+impl RequestGuard for StaticGuard {
+    fn needs_approval(&self) -> bool {
+        false
+    }
+
+    async fn authorize(
+        &self,
+        _request: &ProposedRequest,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        self.0.lock().unwrap().take().unwrap()
+    }
+}
+
+fn guarded_tool(
+    outcome: Result<AuthorizedRequest, RequestAuthorizationError>,
+    proxy: Arc<dyn ProxyPolicy>,
+) -> X402RequestTool {
+    X402RequestTool::new(
+        Arc::new(FakePaymentSigner::default()),
+        Arc::new(FakeTransport::default()),
+        proxy,
+    )
+    .with_request_guard(Arc::new(StaticGuard(std::sync::Mutex::new(Some(outcome)))))
+}
+
+fn approved(url: &str, host: &str, addrs: Vec<std::net::SocketAddr>) -> AuthorizedRequest {
+    AuthorizedRequest {
+        request: ProposedRequest {
+            url: url.into(),
+            method: reqwest::Method::GET,
+            headers: Vec::new(),
+            body: None,
+        },
+        host: host.into(),
+        addrs,
+    }
 }
 
 fn receipt(success: bool, transaction: &str) -> String {
@@ -136,6 +178,124 @@ fn the_tool_declares_itself_as_a_deferred_write_tool() {
 // ---------------------------------------------------------------------------
 // Refusals before any network call
 // ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn no_guard_or_denied_guard_cannot_make_a_request() {
+    let server = TestServer::start(ServerConfig::default()).await;
+    let unguarded = X402RequestTool::new(
+        Arc::new(FakePaymentSigner::default()),
+        Arc::new(FakeTransport::default()),
+        Arc::new(FakeProxyPolicy::default()),
+    );
+    let result = run(&unguarded, json!({"url": server.url})).await;
+    assert_eq!(
+        text(&result),
+        "[policy-blocked] Network policy is unavailable"
+    );
+
+    let denied = guarded_tool(
+        Err(RequestAuthorizationError::Denied("refused".into())),
+        Arc::new(FakeProxyPolicy::default()),
+    );
+    let result = run(&denied, json!({"url": server.url})).await;
+    assert_eq!(text(&result), "[policy-blocked] refused");
+    assert!(server.seen().is_empty());
+}
+
+#[tokio::test]
+async fn unusable_approved_destinations_fail_before_network() {
+    let server = TestServer::start(ServerConfig::default()).await;
+    let addr: std::net::SocketAddr = server.url.trim_start_matches("http://").parse().unwrap();
+    let cases = [
+        (
+            approved(&server.url, "127.0.0.1", vec![]),
+            "No approved destination",
+        ),
+        (
+            approved("not a URL", "127.0.0.1", vec![addr]),
+            "Invalid approved URL",
+        ),
+        (
+            approved(&server.url, "other.invalid", vec![addr]),
+            "Approved destination does not match URL",
+        ),
+        (
+            approved(
+                &server.url,
+                "127.0.0.1",
+                vec![std::net::SocketAddr::new(addr.ip(), addr.port() ^ 1)],
+            ),
+            "Approved destination does not match URL",
+        ),
+        (
+            approved(
+                &server.url,
+                "127.0.0.1",
+                vec![std::net::SocketAddr::new(
+                    "127.0.0.2".parse().unwrap(),
+                    addr.port(),
+                )],
+            ),
+            "Approved destination does not match URL",
+        ),
+    ];
+    for (target, expected) in cases {
+        let tool = guarded_tool(Ok(target), Arc::new(FakeProxyPolicy::default()));
+        let result = run(&tool, json!({"url": server.url})).await;
+        assert!(result.is_error);
+        assert!(text(&result).contains(expected), "{}", text(&result));
+    }
+    assert!(server.seen().is_empty());
+}
+
+struct ProxyRequired;
+
+impl ProxyPolicy for ProxyRequired {
+    fn apply(&self, builder: reqwest::ClientBuilder, _service: &str) -> reqwest::ClientBuilder {
+        builder
+    }
+}
+
+#[tokio::test]
+async fn proxy_required_host_fails_closed_instead_of_connecting_directly() {
+    let server = TestServer::start(ServerConfig::default()).await;
+    let addr = server.url.trim_start_matches("http://").parse().unwrap();
+    let tool = guarded_tool(
+        Ok(approved(&server.url, "127.0.0.1", vec![addr])),
+        Arc::new(ProxyRequired),
+    );
+    let result = run(&tool, json!({"url": server.url})).await;
+    assert!(result.is_error);
+    assert!(text(&result).contains("Direct connection is not allowed"));
+    assert!(server.seen().is_empty());
+}
+
+#[tokio::test]
+async fn approved_address_is_pinned_and_redirect_is_not_followed() {
+    let destination = TestServer::start(ServerConfig::default()).await;
+    let redirect_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let redirect_addr = redirect_listener.local_addr().unwrap();
+    let destination_url = destination.url.clone();
+    tokio::spawn(async move {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (mut socket, _) = redirect_listener.accept().await.unwrap();
+        let mut request = [0_u8; 2048];
+        let _ = socket.read(&mut request).await.unwrap();
+        let response = format!(
+            "HTTP/1.1 302 Found\r\nLocation: {destination_url}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        );
+        socket.write_all(response.as_bytes()).await.unwrap();
+    });
+    let url = format!("http://approved.invalid:{}", redirect_addr.port());
+    let tool = guarded_tool(
+        Ok(approved(&url, "approved.invalid", vec![redirect_addr])),
+        Arc::new(FakeProxyPolicy::default()),
+    );
+    let result = run(&tool, json!({"url": url})).await;
+    assert!(!result.is_error, "{}", text(&result));
+    assert!(text(&result).starts_with("HTTP 302"), "{}", text(&result));
+    assert!(destination.seen().is_empty());
+}
 
 #[tokio::test]
 async fn a_missing_url_is_reported() {

@@ -53,16 +53,8 @@ pub struct AuthorizedRequest {
     pub addrs: Vec<SocketAddr>,
 }
 
-/// Why a host refused to authorize an agent-directed request.
-#[derive(Debug, thiserror::Error)]
-pub enum RequestAuthorizationError {
-    /// Host policy denied the proposed method, headers, body, or destination.
-    #[error("[policy-blocked] {0}")]
-    Denied(String),
-    /// The host could not produce a usable approved destination.
-    #[error("[policy-blocked] Invalid destination: {0}")]
-    InvalidDestination(String),
-}
+/// Compatibility name for the crate-wide authorization error.
+pub use crate::Error as RequestAuthorizationError;
 
 /// Host policy for agent-directed HTTP and payment requests.
 #[async_trait]
@@ -77,10 +69,7 @@ pub trait RequestGuard: Send + Sync {
     /// Returns [`RequestAuthorizationError::Denied`] when host policy rejects
     /// the request, or [`RequestAuthorizationError::InvalidDestination`] when
     /// it cannot supply a safe destination and approved socket addresses.
-    async fn authorize(
-        &self,
-        request: &ProposedRequest,
-    ) -> Result<AuthorizedRequest, RequestAuthorizationError>;
+    async fn authorize(&self, request: &ProposedRequest) -> crate::Result<AuthorizedRequest>;
 }
 
 /// Agent tool for making x402-paid HTTP requests.
@@ -290,6 +279,12 @@ impl X402RequestTool {
                 .is_ok_and(|ip| target.addrs.iter().any(|addr| addr.ip() != ip))
         {
             return ToolResult::error("[policy-blocked] Approved destination does not match URL");
+        }
+
+        if !self.proxy.allows_direct_connection(PROXY_SERVICE) {
+            return ToolResult::error(
+                "[policy-blocked] Direct connection is not allowed by the host proxy policy",
+            );
         }
 
         // Step 1: initial request to get the 402 challenge.
