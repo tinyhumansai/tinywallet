@@ -1,5 +1,6 @@
 //! [`X402RequestTool`]: make an HTTP request, pay the 402, return the result.
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -27,12 +28,40 @@ const PROXY_SERVICE: &str = "tool.x402_request";
 /// The most response body the tool returns to the model.
 const MAX_BODY_BYTES: usize = 50_000;
 
+/// A URL and the exact addresses approved by the host. The client pins these
+/// addresses so a second DNS lookup cannot change the destination.
+#[derive(Debug)]
+pub struct AuthorizedUrl {
+    /// URL retained for the request authority and TLS server name.
+    pub url: String,
+    /// Host whose DNS answer was vetted by the host.
+    pub host: String,
+    /// Approved socket addresses for that host and port.
+    pub addrs: Vec<SocketAddr>,
+}
+
+/// Host policy for agent-directed HTTP and payment requests.
+#[async_trait]
+pub trait RequestGuard: Send + Sync {
+    /// Whether the host must approve this call before execution.
+    fn needs_approval(&self) -> bool;
+
+    /// Enforce action, rate, privacy and URL policy before any HTTP request.
+    async fn authorize(
+        &self,
+        url: &str,
+        has_body: bool,
+        has_headers: bool,
+    ) -> Result<AuthorizedUrl, String>;
+}
+
 /// Agent tool for making x402-paid HTTP requests.
 #[derive(Clone)]
 pub struct X402RequestTool {
     payments: Arc<dyn PaymentBuilder>,
     proxy: Arc<dyn ProxyPolicy>,
     thread: Arc<dyn ThreadScope>,
+    guard: Option<Arc<dyn RequestGuard>>,
 }
 
 impl std::fmt::Debug for X402RequestTool {
@@ -60,6 +89,7 @@ impl X402RequestTool {
             payments,
             proxy,
             thread: Arc::new(NoThread),
+            guard: None,
         }
     }
 
@@ -74,11 +104,19 @@ impl X402RequestTool {
         self
     }
 
-    fn build_client(&self) -> Result<reqwest::Client, reqwest::Error> {
+    /// Install the host's network policy. Calls without one fail closed.
+    #[must_use]
+    pub fn with_request_guard(mut self, guard: Arc<dyn RequestGuard>) -> Self {
+        self.guard = Some(guard);
+        self
+    }
+
+    fn build_client(&self, target: &AuthorizedUrl) -> Result<reqwest::Client, reqwest::Error> {
         let builder = reqwest::Client::builder()
             .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
             .connect_timeout(Duration::from_secs(10))
-            .redirect(reqwest::redirect::Policy::limited(5));
+            .redirect(reqwest::redirect::Policy::none())
+            .resolve_to_addrs(&target.host, &target.addrs);
         self.proxy.apply(builder, PROXY_SERVICE).build()
     }
 }
@@ -131,6 +169,12 @@ impl Tool for X402RequestTool {
 
     fn permission_level(&self) -> PermissionLevel {
         PermissionLevel::Write
+    }
+
+    fn external_effect_with_args(&self, _args: &serde_json::Value) -> bool {
+        self.guard
+            .as_ref()
+            .is_some_and(|guard| guard.needs_approval())
     }
 
     async fn execute(&self, args: serde_json::Value) -> anyhow::Result<ToolResult> {
@@ -198,12 +242,30 @@ impl X402RequestTool {
     async fn run(&self, call: &Call) -> ToolResult {
         debug!("{LOG_PREFIX} requesting {} {}", call.method, call.url);
 
+        let Some(guard) = &self.guard else {
+            return ToolResult::error("[policy-blocked] Network policy is unavailable");
+        };
+        let target = match guard
+            .authorize(&call.url, call.body.is_some(), !call.headers.is_empty())
+            .await
+        {
+            Ok(target) if !target.addrs.is_empty() => target,
+            Ok(_) => return ToolResult::error("[policy-blocked] No approved destination"),
+            Err(reason) => return ToolResult::error(reason),
+        };
+
         // Step 1: initial request to get the 402 challenge.
-        let client = match self.build_client() {
+        let client = match self.build_client(&target) {
             Ok(c) => c,
             Err(e) => return ToolResult::error(format!("Failed to build HTTP client: {e}")),
         };
-        let initial_response = match call.send(&client, None).await {
+        let authorized_call = Call {
+            url: target.url,
+            method: call.method.clone(),
+            headers: call.headers.clone(),
+            body: call.body.clone(),
+        };
+        let initial_response = match authorized_call.send(&client, None).await {
             Ok(r) => r,
             Err(e) => return ToolResult::error(format!("Initial request failed: {e}")),
         };
@@ -212,7 +274,7 @@ impl X402RequestTool {
         if initial_response.status() != reqwest::StatusCode::PAYMENT_REQUIRED {
             let status = initial_response.status().as_u16();
             debug!("{LOG_PREFIX} got {status} (not 402), returning directly");
-            return format_response(initial_response, &call.url).await;
+            return format_response(initial_response, &authorized_call.url).await;
         }
 
         // Step 2: the challenge must be there.
@@ -226,7 +288,8 @@ impl X402RequestTool {
         }
         debug!("{LOG_PREFIX} got 402 with PAYMENT-REQUIRED header, processing payment");
 
-        self.pay_and_retry(call, &client, &initial_headers).await
+        self.pay_and_retry(&authorized_call, &client, &initial_headers)
+            .await
     }
 
     /// Steps 3 to 6: build and sign the payment, record it, retry with the

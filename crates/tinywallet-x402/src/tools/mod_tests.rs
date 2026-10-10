@@ -19,12 +19,45 @@ use crate::test_support::{
 use crate::thread::ThreadScope;
 use crate::wire::{PaymentRequirements, SettlementResponse};
 
+// Existing socket fixtures deliberately use loopback. Production callers
+// supply their own policy and never use this fixture guard.
+struct FixtureGuard;
+
+#[async_trait::async_trait]
+impl RequestGuard for FixtureGuard {
+    fn needs_approval(&self) -> bool {
+        false
+    }
+
+    async fn authorize(
+        &self,
+        url: &str,
+        _has_body: bool,
+        _has_headers: bool,
+    ) -> Result<AuthorizedUrl, String> {
+        let parsed = reqwest::Url::parse(url).map_err(|e| e.to_string())?;
+        let host = parsed.host_str().ok_or("missing host")?.to_string();
+        let port = parsed.port_or_known_default().ok_or("missing port")?;
+        let addr = std::net::SocketAddr::new(
+            host.parse()
+                .map_err(|e: std::net::AddrParseError| e.to_string())?,
+            port,
+        );
+        Ok(AuthorizedUrl {
+            url: url.into(),
+            host,
+            addrs: vec![addr],
+        })
+    }
+}
+
 fn tool_with(proxy: Arc<FakeProxyPolicy>) -> X402RequestTool {
     X402RequestTool::new(
         Arc::new(FakePaymentSigner::default()),
         Arc::new(FakeTransport::default()),
         proxy,
     )
+    .with_request_guard(Arc::new(FixtureGuard))
 }
 
 fn tool() -> X402RequestTool {
@@ -403,7 +436,8 @@ async fn a_wallet_that_cannot_sign_is_reported() {
         }),
         Arc::new(FakeTransport::default()),
         Arc::new(FakeProxyPolicy::default()),
-    );
+    )
+    .with_request_guard(Arc::new(FixtureGuard));
     let result = run(&tool, json!({"url": server.url})).await;
     assert_eq!(
         text(&result),

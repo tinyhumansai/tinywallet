@@ -16,7 +16,7 @@
 
 mod request;
 
-pub use request::X402RequestTool;
+pub use request::{AuthorizedUrl, RequestGuard, X402RequestTool};
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]
