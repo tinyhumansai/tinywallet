@@ -29,13 +29,22 @@ impl RequestGuard for FixtureGuard {
         false
     }
 
-    async fn authorize(&self, request: &ProposedRequest) -> Result<AuthorizedRequest, String> {
-        let parsed = reqwest::Url::parse(&request.url).map_err(|e| e.to_string())?;
-        let host = parsed.host_str().ok_or("missing host")?.to_string();
-        let port = parsed.port_or_known_default().ok_or("missing port")?;
+    async fn authorize(
+        &self,
+        request: &ProposedRequest,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        let invalid = |reason: &str| RequestAuthorizationError::InvalidDestination(reason.into());
+        let parsed = reqwest::Url::parse(&request.url).map_err(|_| invalid("invalid URL"))?;
+        let host = parsed
+            .host_str()
+            .ok_or_else(|| invalid("missing host"))?
+            .to_string();
+        let port = parsed
+            .port_or_known_default()
+            .ok_or_else(|| invalid("missing port"))?;
         let addr = std::net::SocketAddr::new(
             host.parse()
-                .map_err(|e: std::net::AddrParseError| e.to_string())?,
+                .map_err(|_: std::net::AddrParseError| invalid("invalid IP address"))?,
             port,
         );
         Ok(AuthorizedRequest {

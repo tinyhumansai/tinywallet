@@ -53,6 +53,17 @@ pub struct AuthorizedRequest {
     pub addrs: Vec<SocketAddr>,
 }
 
+/// Why a host refused to authorize an agent-directed request.
+#[derive(Debug, thiserror::Error)]
+pub enum RequestAuthorizationError {
+    /// Host policy denied the proposed method, headers, body, or destination.
+    #[error("[policy-blocked] {0}")]
+    Denied(String),
+    /// The host could not produce a usable approved destination.
+    #[error("[policy-blocked] Invalid destination: {0}")]
+    InvalidDestination(String),
+}
+
 /// Host policy for agent-directed HTTP and payment requests.
 #[async_trait]
 pub trait RequestGuard: Send + Sync {
@@ -60,7 +71,16 @@ pub trait RequestGuard: Send + Sync {
     fn needs_approval(&self) -> bool;
 
     /// Enforce action, rate, privacy and URL policy before any HTTP request.
-    async fn authorize(&self, request: &ProposedRequest) -> Result<AuthorizedRequest, String>;
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RequestAuthorizationError::Denied`] when host policy rejects
+    /// the request, or [`RequestAuthorizationError::InvalidDestination`] when
+    /// it cannot supply a safe destination and approved socket addresses.
+    async fn authorize(
+        &self,
+        request: &ProposedRequest,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError>;
 }
 
 /// Agent tool for making x402-paid HTTP requests.
@@ -125,7 +145,10 @@ impl X402RequestTool {
             .connect_timeout(Duration::from_secs(10))
             .redirect(reqwest::redirect::Policy::none())
             .resolve_to_addrs(&target.host, &target.addrs);
-        self.proxy.apply(builder, PROXY_SERVICE).build()
+        // An HTTP proxy resolves the target itself, bypassing the approved
+        // socket addresses. Keep other host client settings, but force this
+        // guarded request to connect directly to the pinned destination.
+        self.proxy.apply(builder, PROXY_SERVICE).no_proxy().build()
     }
 }
 
@@ -248,7 +271,7 @@ impl X402RequestTool {
         let target = match guard.authorize(call).await {
             Ok(target) if !target.addrs.is_empty() => target,
             Ok(_) => return ToolResult::error("[policy-blocked] No approved destination"),
-            Err(reason) => return ToolResult::error(reason),
+            Err(reason) => return ToolResult::error(reason.to_string()),
         };
         let Ok(approved_url) = reqwest::Url::parse(&target.request.url) else {
             return ToolResult::error("[policy-blocked] Invalid approved URL");

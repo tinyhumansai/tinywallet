@@ -16,7 +16,9 @@
 
 mod request;
 
-pub use request::{AuthorizedRequest, ProposedRequest, RequestGuard, X402RequestTool};
+pub use request::{
+    AuthorizedRequest, ProposedRequest, RequestAuthorizationError, RequestGuard, X402RequestTool,
+};
 
 #[cfg(test)]
 #[path = "mod_tests.rs"]
