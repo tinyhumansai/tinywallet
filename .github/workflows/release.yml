@@ -256,5 +256,5 @@ jobs:
       version: ${{ needs.release-target.outputs.next_version }}
       module-crate: tinywallet-module
       extra-packaged-files: '["docs/specs/tinybus-module.md"]'
-      include-distros: false
+      include-distros: true
       publish-crates-io: false

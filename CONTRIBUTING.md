@@ -97,7 +97,9 @@ three operating systems. `scripts/build-module.sh` and
 `scripts/build-module.ps1` create an attested module package for a native
 release target; `scripts/verify-module.sh --archive <path>` and
 `scripts/verify-module.ps1 -Archive <path>` load the packaged artifact and run
-the same end-to-end checks.
+the same end-to-end checks. `scripts/test-distro.sh <image> ...` builds and
+verifies the package inside the Fedora or Arch image used by the release
+matrix.
 
 The reusable workflow contract and supported release targets are documented
 in [tinyhumansai/.github](https://github.com/tinyhumansai/.github/blob/main/docs/module-ci-contract.md).
