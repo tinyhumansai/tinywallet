@@ -3,6 +3,10 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
+if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+  pwsh -NoProfile -File scripts/test-e2e.ps1
+  exit
+fi
 target="${CARGO_TARGET_DIR:-$root/target}"
 case "$(uname -s)" in
   Darwin) name="libtinywallet_module.dylib" ;;
