@@ -15,8 +15,8 @@
 //!   behind the [`PaymentSigner`](crypto::PaymentSigner) seam.
 //! - [`tools`] — the `x402_request` agent tool.
 //!
-//! It depends on `tinywallet-crypto` and never on `tinywallet-bus`, so the bus
-//! can re-export from here without a cycle.
+//! It depends on `tinywallet-crypto`, which re-exports shared bus vocabulary.
+//! The bus never imports x402 algorithms.
 //!
 //! # Rail-neutral versus crypto-specific
 //!

@@ -76,18 +76,19 @@ pub mod tron;
     allow(unused_variables)
 )]
 pub fn validate(chain: Chain, address: &str) -> Result<String> {
-    match chain {
+    let validator: Option<fn(&str) -> Result<String>> = match chain {
         #[cfg(feature = "btc")]
-        Chain::Btc => btc::validate(address),
+        Chain::Btc => Some(btc::validate),
         #[cfg(feature = "evm")]
-        Chain::Evm => evm::validate(address),
+        Chain::Evm => Some(evm::validate),
         #[cfg(feature = "solana")]
-        Chain::Solana => solana::validate(address),
+        Chain::Solana => Some(solana::validate),
         #[cfg(feature = "tron")]
-        Chain::Tron => tron::validate(address),
-        #[cfg(not(all(feature = "btc", feature = "evm", feature = "solana", feature = "tron")))]
-        other => Err(crate::Error::ChainNotCompiled { chain: other }),
-    }
+        Chain::Tron => Some(tron::validate),
+        _ => None,
+    };
+    let validator = validator.ok_or(crate::Error::ChainNotCompiled { chain })?;
+    validator(address)
 }
 
 #[cfg(test)]

@@ -24,6 +24,8 @@ pub mod methods {
     pub const SIGN_MESSAGE: &str = "SignMessage";
     /// Exports the private key for a derivation path. Confidential.
     pub const EXPORT_KEY: &str = "ExportKey";
+    /// Validates a recipient or Bitcoin sender address inside the module.
+    pub const VALIDATE_ADDRESS: &str = "ValidateAddress";
 }
 
 /// Every member of [`BUS_NAME`], in the interface's sorted dispatch order.
@@ -34,6 +36,7 @@ pub const METHODS: &[&str] = &[
     methods::EXPORT_KEY,
     methods::SIGN_MESSAGE,
     methods::SIGN_TRANSACTION,
+    methods::VALIDATE_ADDRESS,
 ];
 
 /// The members that carry a recovery phrase or a private key.

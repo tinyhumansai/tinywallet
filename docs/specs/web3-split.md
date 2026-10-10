@@ -1,6 +1,7 @@
 # Splitting `tinywallet-bus` into contract, crypto and x402 crates
 
-Status: Accepted (PR 1 implemented; PR 2 pending)
+Status: Historical split specification. The contract dependency and compatibility
+shim rules below are superseded by [minimal bus contracts](minimal-bus-contract.md).
 
 ## Problem
 

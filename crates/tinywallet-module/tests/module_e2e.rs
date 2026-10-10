@@ -43,6 +43,7 @@ const EXPECTED_METHODS: &[&str] = &[
     "SignTransaction",
     "ExportKey",
     "SignMessage",
+    "ValidateAddress",
 ];
 
 /// The BIP-39 test vector mnemonic. Never use it for real funds.
@@ -61,6 +62,7 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
 
     let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
 
+    validates_addresses_inside_the_artifact(&proxy).await;
     signs_an_evm_transfer_identically_to_the_library(&proxy).await;
     signs_a_multi_input_bitcoin_spend(&proxy).await;
     signs_a_solana_transfer(&proxy).await;
@@ -469,4 +471,41 @@ async fn refuses_a_confidential_call_to_an_unattested_module(proxy: &tinybus::Pr
         .await
         .expect("the same call unflagged is an ordinary call and must succeed");
     assert!(signed.raw.starts_with("0x"), "{}", signed.raw);
+}
+
+async fn validates_addresses_inside_the_artifact(proxy: &tinybus::Proxy) {
+    use tinywallet_bus::wire::{ValidateAddressRequest, ValidateAddressResponse};
+    for (chain, address) in [
+        (Chain::Evm, "0x3535353535353535353535353535353535353535"),
+        (Chain::Solana, "11111111111111111111111111111111"),
+        (Chain::Tron, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"),
+    ] {
+        let response: ValidateAddressResponse = proxy
+            .call(
+                "ValidateAddress",
+                (ValidateAddressRequest {
+                    chain,
+                    address: address.into(),
+                    sender: false,
+                },),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.result.unwrap(), address);
+    }
+    let response: ValidateAddressResponse = proxy
+        .call(
+            "ValidateAddress",
+            (ValidateAddressRequest {
+                chain: Chain::Evm,
+                address: "invalid".into(),
+                sender: false,
+            },),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        response.result,
+        Err(tinywallet_bus::Error::InvalidAddress { .. })
+    ));
 }

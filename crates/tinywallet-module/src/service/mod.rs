@@ -97,11 +97,23 @@ struct Wallet;
 // module performs no I/O at all.
 #[allow(
     clippy::unused_async,
-    clippy::unused_async_trait_impl,
     reason = "tinybus::interface requires every method to be `async fn`"
 )]
 #[tinybus::interface(name = "ai.tinyhumans.tinywallet.Wallet")]
 impl Wallet {
+    /// Validate an address using the module's compiled chain rules.
+    async fn validate_address(
+        &self,
+        request: tinywallet_bus::wire::ValidateAddressRequest,
+    ) -> BusResult<tinywallet_bus::wire::ValidateAddressResponse> {
+        let result = if request.sender && request.chain == Chain::Btc {
+            tinywallet::address::btc::validate_sender(&request.address)
+        } else {
+            tinywallet::address::validate(request.chain, &request.address)
+        };
+        Ok(tinywallet_bus::wire::ValidateAddressResponse { result })
+    }
+
     /// Report the bytes a caller must sign for `request`.
     async fn build_unsigned(&self, request: SigningRequest) -> BusResult<UnsignedTransaction> {
         build_unsigned(&request).map_err(into_bus_error)
@@ -795,6 +807,7 @@ mod exports {
             "SignTransaction",
             "ExportKey",
             "SignMessage",
+            "ValidateAddress",
         ],
         signals = [],
         requires = [],

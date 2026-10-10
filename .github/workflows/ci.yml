@@ -57,7 +57,12 @@ jobs:
       # zero ("nothing to print") for one that only a dev-dependency pulls in,
       # which is the passing case. The root crate is the positive control: if it
       # ever stopped reporting `bitcoin` the guard below would pass vacuously.
-      - name: Host-linked crates pull no signing stack
+      - name: Bus normal and build dependencies are contract-only
+        run: |
+          python3 scripts/check_bus_boundaries_tests.py
+          python3 scripts/check-bus-boundaries.py
+
+      - name: Implementation crates pull no signing stack
         shell: bash
         run: |
           set -euo pipefail
