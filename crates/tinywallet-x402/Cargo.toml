@@ -83,7 +83,7 @@ tempfile = "3"
 tinywallet = { path = "../..", default-features = false, features = ["key", "solana"] }
 # Local secp256k1 / ed25519 signing for `FakePaymentSigner`, and to recover the
 # signer from an EIP-3009 signature in tests.
-k256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
+k256 = { version = "0.14", default-features = false, features = ["ecdsa"] }
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 
 [features]
