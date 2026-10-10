@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   module-ci:
-    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@932658c
+    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@932658c08803feaff3896588da6c20a441f498f9
     with:
       coverage-command: scripts/check-coverage.sh
       msrv-build-targets: |
