@@ -45,7 +45,7 @@ anyhow = { version = "1", optional = true }
 reqwest = { version = "0.13", default-features = false, optional = true }
 # The PAYMENT-REQUIRED / PAYMENT-SIGNATURE / PAYMENT-RESPONSE headers are
 # base64-encoded JSON.
-base64 = { version = "0.22", optional = true }
+base64 = { version = "0.23", optional = true }
 # Hex for EIP-3009 signatures and nonces and the Solana memo nonce.
 hex = { version = "0.4", optional = true }
 # Base58 for Solana account keys and the recent blockhash.
