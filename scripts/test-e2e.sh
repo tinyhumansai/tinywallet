@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+target="${CARGO_TARGET_DIR:-$root/target}"
+case "$(uname -s)" in
+  Darwin) name="libtinywallet_module.dylib" ;;
+  Linux) name="libtinywallet_module.so" ;;
+  *) echo "test-e2e.sh requires a Unix runner" >&2; exit 1 ;;
+esac
+
+cargo build --locked --release --package tinywallet-module
+stage="$target/tinywallet-module-e2e"
+rm -rf "$stage"
+mkdir -p "$stage"
+install -m 755 "$target/release/$name" "$stage/$name"
+if command -v sha256sum >/dev/null 2>&1; then
+  hash="$(sha256sum "$stage/$name" | awk '{print $1}')"
+else
+  hash="$(shasum -a 256 "$stage/$name" | awk '{print $1}')"
+fi
+printf '"%s" = "%s"\n' "$name" "$hash" > "$stage/modules.toml"
+TINYWALLET_TEST_MODULE="$stage/$name" cargo test --locked --release \
+  --package tinywallet-module --test module_e2e -- --ignored

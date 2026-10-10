@@ -87,3 +87,17 @@ shape they imply.
 
 Do not report vulnerabilities through public issues. Follow the process in
 [SECURITY.md](SECURITY.md).
+# Module CI and release scripts
+
+The loadable TinyWallet module is built and tested by the shared
+TinyHumans module workflows. Run `scripts/test-e2e.sh` on Linux or macOS, or
+`pwsh -File scripts/test-e2e.ps1` on Windows, to build the release cdylib and
+exercise it through TinyBus. The CI workflow runs this loader suite on all
+three operating systems. `scripts/build-module.sh` and
+`scripts/build-module.ps1` create an attested module package for a native
+release target; `scripts/verify-module.sh --archive <path>` and
+`scripts/verify-module.ps1 -Archive <path>` load the packaged artifact and run
+the same end-to-end checks.
+
+The reusable workflow contract and supported release targets are documented
+in [tinyhumansai/.github](https://github.com/tinyhumansai/.github/blob/main/docs/module-ci-contract.md).

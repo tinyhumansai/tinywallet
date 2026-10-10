@@ -11,227 +11,56 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # Lint levels live in `[lints]` in Cargo.toml so local and CI runs agree;
-  # don't add a blanket RUSTFLAGS here.
-  CARGO_TERM_COLOR: always
-
 jobs:
-  rust:
-    name: Rust
+  module-ci:
+    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@4dc33967e0910911ccb3b49f1202a6ad39c6bc1a
+    with:
+      coverage-command: scripts/check-coverage.sh
+      msrv-build-command: |
+        cargo build --all-targets --all-features \
+          --package tinywallet --package tinywallet-crypto \
+          --package tinywallet-bus
+        cargo build --all-targets --package tinywallet-x402 \
+          --no-default-features --features wire,eip712,abi,ledger
+        cargo build --all-targets --package tinywallet-web3
+      module-e2e-command: >-
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          pwsh -File scripts/test-e2e.ps1;
+        else
+          scripts/test-e2e.sh;
+        fi
+      feature-test-command: cargo test --locked --workspace --all-features
+
+  wallet-dependency-boundaries:
+    name: Wallet dependency boundaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          # This job executes repository code (cargo build/test); don't persist
-          # the token in git config.
           persist-credentials: false
-          submodules: true
-
+          submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Build
-        run: cargo build --all-targets --all-features
-
-      - name: Test
-        run: cargo test --all-features
-
-      - name: Test default features
-        run: cargo test
-
-      # The host-linked crates must stay free of every signing and key
-      # derivation library, so a host that takes them links no native build.
-      # `cargo tree -i` prints an inverse tree on stdout when the package is a
-      # normal (non-dev) dependency, and nothing otherwise. Its exit status is
-      # not a signal: it is non-zero for a package absent from the lockfile but
-      # zero ("nothing to print") for one that only a dev-dependency pulls in,
-      # which is the passing case. The root crate is the positive control: if it
-      # ever stopped reporting `bitcoin` the guard below would pass vacuously.
       - name: Host-linked crates pull no signing stack
         shell: bash
         run: |
           set -euo pipefail
           if [ -z "$(cargo tree -e normal -i bitcoin -p tinywallet --all-features 2>/dev/null)" ]; then
-            echo "control failed: tinywallet no longer depends on bitcoin, so this guard proves nothing" >&2
+            echo "control failed: tinywallet no longer depends on bitcoin" >&2
             exit 1
           fi
-          status=0
           for crate in tinywallet-crypto tinywallet-x402 tinywallet-bus tinywallet-web3; do
             for dep in bitcoin k256 coins-bip32 coins-bip39; do
               if [ -n "$(cargo tree -e normal -i "$dep" -p "$crate" --all-features 2>/dev/null)" ]; then
                 echo "$crate depends on $dep; it must stay signing-free" >&2
-                status=1
+                exit 1
               fi
             done
           done
-          exit "$status"
-
-      # The rail-neutral half of `tinywallet-web3` (the quote store and the
-      # scope seam) must not name a chain, so a card rail can reuse it without
-      # touching the crypto code. `grep` exits 1 when nothing matches, which is
-      # the passing case.
       - name: Rail-neutral web3 modules name no chain
         shell: bash
         run: |
           set -uo pipefail
-          if grep -rnE 'tinywallet_crypto|WalletChain|EvmNetwork' \
-            crates/tinywallet-web3/src/quote crates/tinywallet-web3/src/seams; then
+          if grep -rnE 'tinywallet_crypto|WalletChain|EvmNetwork' crates/tinywallet-web3/src/quote crates/tinywallet-web3/src/seams; then
             echo "quote/ and seams/ must stay free of crypto vocabulary" >&2
             exit 1
           fi
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
-
-      - name: Enforce per-file line coverage
-        shell: bash
-        run: |
-          set -euo pipefail
-          report="target/coverage.json"
-          cargo llvm-cov --all-features --all-targets --json --output-path "$report"
-
-          # Anchored at the workspace root: this repo is vendored inside other
-          # checkouts, so an unanchored "/vendor/" match would exclude the
-          # crate's own sources when it is built from one of those paths.
-          below_threshold="$(jq -r --arg root "$PWD" '
-            .data[0].files[]
-            | select(.filename | contains("/src/"))
-            # Vendored submodules carry code from another repository, whose
-            # coverage is not this one to enforce. They only entered the report
-            # when the module crate made tinybus part of the build graph.
-            # (No apostrophes here: the whole jq program is single-quoted.)
-            | select(.filename | startswith($root + "/vendor/") | not)
-            | select(.summary.lines.percent < 90)
-            | "\(.filename): \(.summary.lines.percent)%"
-          ' "$report")"
-
-          if [[ -n "$below_threshold" ]]; then
-            echo "Files below 90% line coverage:" >&2
-            echo "$below_threshold" >&2
-            exit 1
-          fi
-
-
-  module-e2e:
-    name: TinyBus module E2E
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          submodules: true
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Build the loadable module
-        run: cargo build --locked --release --package tinywallet-module
-
-      # The only test that exercises the real cdylib, the ABI and manifest
-      # gates, the dynamic loader and a broker routing frames. It asserts that
-      # signing through the module equals signing in-process, byte for byte.
-      - name: Load the module and sign on every chain
-        env:
-          TINYWALLET_TEST_MODULE: ${{ github.workspace }}/target/release/libtinywallet_module.so
-        run: cargo test --locked --release --package tinywallet-module --test module_e2e -- --ignored
-
-  docs:
-    name: Docs
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          submodules: true
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Build documentation
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps --all-features
-
-  msrv:
-    name: Minimum supported Rust version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          submodules: true
-
-      - name: Read rust-version from Cargo.toml
-        id: msrv
-        run: |
-          set -euo pipefail
-          msrv="$(cargo metadata --format-version 1 --no-deps \
-            | jq -r '.packages[0].rust_version')"
-          if [[ -z "$msrv" || "$msrv" == "null" ]]; then
-            echo "package.rust-version is not set in Cargo.toml" >&2
-            exit 1
-          fi
-          echo "version=$msrv" >> "$GITHUB_OUTPUT"
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ steps.msrv.outputs.version }}
-
-      - uses: Swatinem/rust-cache@v2
-
-      # Scoped to the published library on purpose. `tinywallet-module` is
-      # `publish = false` and depends on tinybus, whose macros use let-chains
-      # and so need a newer compiler than this crate promises its consumers.
-      # Holding the module to the library's MSRV would either fail here or
-      # force the library's MSRV up for a crate nobody depends on.
-      #
-      # The three sibling library crates are published-style dependencies of the
-      # root crate and share its MSRV, so they are built here too.
-      #
-      # `tinywallet-x402` and `tinywallet-web3` are built below with the
-      # features that fit the declared MSRV, not with `--all-features`: their
-      # `tools` features pull in `tinytools`, which needs 1.88 (let-chains), and
-      # x402's `pay` feature pulls in `reqwest`, whose `yoke-derive` 0.8.3 does
-      # not compile on 1.85. The stable jobs above build every feature.
-      - name: Build with the declared MSRV
-        run: |
-          cargo build --all-targets --all-features \
-            --package tinywallet \
-            --package tinywallet-crypto \
-            --package tinywallet-bus
-
-      - name: Build x402 with the declared MSRV (no `pay`, no `tools`)
-        run: |
-          cargo build --all-targets --package tinywallet-x402 \
-            --no-default-features --features wire,eip712,abi,ledger
-
-      - name: Build the wallet flows with the declared MSRV (no `tools`)
-        run: cargo build --all-targets --package tinywallet-web3
-
-  supply-chain:
-    name: Supply chain
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          submodules: true
-
-      - name: Check advisories, licenses, bans, and sources
-        uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          command: check all
