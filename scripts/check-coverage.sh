@@ -15,8 +15,8 @@ if [[ -n "$below" ]]; then
   jq -r --arg file "$PWD/crates/tinywallet-module/src/service/mod.rs" '
     .data[0].files[]
     | select(.filename == $file)
-    | .regions[]
-    | select(.[4] == 0)
+    | (.segments // [])[]
+    | select(.[3] == true and .[2] == 0)
     | .[0]
   ' "$report" | sort -un | paste -sd, - | sed 's/^/Uncovered service lines: /' >&2
   exit 1
