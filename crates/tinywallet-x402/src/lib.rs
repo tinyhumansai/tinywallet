@@ -49,6 +49,8 @@ pub mod abi;
 pub mod crypto;
 #[cfg(feature = "eip712")]
 pub mod eip712;
+#[cfg(feature = "tools")]
+pub mod error;
 #[cfg(feature = "ledger")]
 pub mod ledger;
 #[cfg(feature = "pay")]
@@ -59,6 +61,9 @@ pub mod thread;
 pub mod tools;
 #[cfg(feature = "wire")]
 pub mod wire;
+
+#[cfg(feature = "tools")]
+pub use error::{Error, Result};
 
 #[cfg(all(test, feature = "pay"))]
 mod test_support;
