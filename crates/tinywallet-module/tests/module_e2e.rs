@@ -106,9 +106,22 @@ async fn refuses_a_confidential_call_to_an_unattested_module() {
 
     let artifact = std::env::var_os("TINYWALLET_TEST_MODULE")
         .expect("TINYWALLET_TEST_MODULE must point at the built cdylib");
+    // The normal E2E artifact sits beside modules.toml so its digest is
+    // allowlisted. Copy it into a directory without that manifest to exercise
+    // the deliberately un-attested load_file path.
+    let artifact = std::path::PathBuf::from(artifact);
+    let untrusted_dir = std::env::temp_dir().join(format!(
+        "tinywallet-unattested-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir(&untrusted_dir).expect("create un-attested fixture directory");
+    let untrusted_artifact = untrusted_dir.join(
+        artifact.file_name().expect("module artifact has a filename"),
+    );
+    std::fs::copy(&artifact, &untrusted_artifact).expect("copy un-attested test module");
     let (module, client, broker_task) = test_support::start_bus().await.unwrap();
     module
-        .load_file(artifact)
+        .load_file(&untrusted_artifact)
         .expect("module loads without admission");
     test_support::wait_until_serving(&client, BUS_NAME, Duration::from_secs(5))
         .await
