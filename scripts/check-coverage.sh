@@ -12,5 +12,12 @@ below="$(jq -r --arg root "$PWD" '
 if [[ -n "$below" ]]; then
   echo "Files below 90% line coverage:" >&2
   echo "$below" >&2
+  jq -r --arg file "$PWD/crates/tinywallet-module/src/service/mod.rs" '
+    .data[0].files[]
+    | select(.filename == $file)
+    | .regions[]
+    | select(.[4] == 0)
+    | .[0]
+  ' "$report" | sort -un | paste -sd, - | sed 's/^/Uncovered service lines: /' >&2
   exit 1
 fi
