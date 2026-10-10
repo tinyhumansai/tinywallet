@@ -711,3 +711,85 @@ fn a_message_signature_equals_what_the_transaction_path_produces() {
     .unwrap();
     assert_eq!(direct, via_payload);
 }
+
+#[tokio::test]
+async fn bus_service_methods_cover_the_public_wire_handlers() {
+    use tinywallet::wire::{ExportRequest, SignMessageRequest, SignRequest};
+
+    let wallet = super::Wallet;
+    let key = evm_key();
+    let public_key = PublicKey {
+        key_hex: compressed_public(&key),
+    };
+    let spec = evm_spec();
+
+    let unsigned = wallet
+        .build_unsigned(SigningRequest {
+            transaction: spec.clone(),
+            public_key: public_key.clone(),
+        })
+        .await
+        .unwrap();
+    let signed = wallet
+        .attach_signature(AttachRequest {
+            transaction: spec.clone(),
+            public_key,
+            signatures: vec![host_sign(&unsigned.payloads[0].bytes_hex, &key)],
+        })
+        .await
+        .unwrap();
+    assert!(signed.raw.starts_with("0x"));
+
+    let material = secret(Chain::Evm, "m/44'/60'/0'/0/0");
+    let account = wallet.derive_account(material.clone()).await.unwrap();
+    assert_eq!(
+        account.address,
+        "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
+    );
+
+    let one_shot = wallet
+        .sign_transaction(SignRequest {
+            secret: material.clone(),
+            transaction: spec,
+        })
+        .await
+        .unwrap();
+    assert_eq!(one_shot, signed);
+
+    let exported = wallet
+        .export_key(ExportRequest { secret: material })
+        .await
+        .unwrap();
+    assert_eq!(exported.address, account.address);
+    assert_eq!(exported.secret_key_hex, hex(&key));
+
+    let message_signature = wallet
+        .sign_message(SignMessageRequest {
+            secret: secret(Chain::Evm, "m/44'/60'/0'/0/0"),
+            message_hex: hex(&[0x42; 32]),
+            scheme: Scheme::Secp256k1Prehash,
+        })
+        .await
+        .unwrap();
+    assert!(matches!(message_signature, Signature::Secp256k1 { .. }));
+
+    let rejected = wallet
+        .export_key(ExportRequest {
+            secret: SecretMaterial {
+                mnemonic: "invalid phrase must not leak".to_string(),
+                derivation_path: "m/44'/60'/0'/0/0".to_string(),
+                chain: Chain::Evm,
+            },
+        })
+        .await
+        .unwrap_err();
+    assert_eq!(
+        rejected.wire_name(),
+        "ai.tinyhumans.tinywallet.Error.InvalidInput"
+    );
+    assert!(
+        !rejected
+            .to_string()
+            .contains("invalid phrase must not leak")
+    );
+}
