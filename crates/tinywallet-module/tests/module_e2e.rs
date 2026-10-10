@@ -78,6 +78,76 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
     broker_task.abort();
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires TINYWALLET_TEST_MODULE to point at the built cdylib"]
+async fn refuses_a_confidential_call_to_an_unattested_module() {
+    // TinyBus keeps a loaded module mapped for the process lifetime, so run
+    // this scenario in a child test process. That leaves the parent process's
+    // one admitted-module E2E free to test the separate allowlisted path.
+    if std::env::var_os("TINYWALLET_UNATTESTED_CHILD").is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "refuses_a_confidential_call_to_an_unattested_module",
+                "--ignored",
+            ])
+            .env("TINYWALLET_UNATTESTED_CHILD", "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "unattested child test failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+
+    let artifact = std::env::var_os("TINYWALLET_TEST_MODULE")
+        .expect("TINYWALLET_TEST_MODULE must point at the built cdylib");
+    let (module, client, broker_task) = test_support::start_bus().await.unwrap();
+    module
+        .load_file(artifact)
+        .expect("module loads without admission");
+    test_support::wait_until_serving(&client, BUS_NAME, Duration::from_secs(5))
+        .await
+        .unwrap();
+
+    let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
+    let request = serde_json::json!({
+        "secret": {
+            "mnemonic": VECTOR,
+            "derivation_path": "m/44'/60'/0'/0/0",
+            "chain": "evm",
+        },
+        "transaction": {
+            "kind": "evm",
+            "to": "0x3535353535353535353535353535353535353535",
+            "value_wei": "1000000000000000000",
+            "data_hex": "0x",
+            "nonce": 9,
+            "gas_limit": 21_000,
+            "gas_price_wei": "20000000000",
+            "chain_id": 1,
+        },
+    });
+
+    let error = proxy
+        .call_confidential::<SignedTransaction>("SignTransaction", (request.clone(),))
+        .await
+        .expect_err("an unattested module must not receive a recovery phrase");
+    assert!(
+        error.to_string().to_lowercase().contains("attest"),
+        "expected an attestation refusal, got: {error}"
+    );
+    let signed: SignedTransaction = proxy
+        .call("SignTransaction", (request,))
+        .await
+        .expect("ordinary nonconfidential calls remain available");
+    assert!(!signed.raw.is_empty());
+
+    broker_task.abort();
+}
+
 /// Check the loaded manifest against the module and wire contracts.
 fn assert_manifest_contract(loaded: &tinybus::module::ModuleInfo) {
     assert_eq!(loaded.name, "tinywallet-module");
