@@ -1114,7 +1114,7 @@ async fn module_builds_and_attaches_a_bitcoin_fixture_without_a_node() {
         .await
         .unwrap();
     assert!(signed.txid.is_none());
-    assert!(!signed.raw.is_empty());
+    assert_ne!(signed.raw, "");
     let mut unfunded = transaction;
     if let TransactionSpec::Btc { utxos, .. } = &mut unfunded {
         utxos.clear();

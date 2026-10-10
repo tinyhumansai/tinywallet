@@ -102,6 +102,10 @@ mod construction;
     reason = "tinybus::interface requires every method to be `async fn`"
 )]
 #[tinybus::interface(name = "ai.tinyhumans.tinywallet.Wallet")]
+#[expect(
+    clippy::unused_async_trait_impl,
+    reason = "the generated TinyBus async trait requires async methods for synchronous cryptographic operations"
+)]
 impl Wallet {
     /// Construct native, ERC-20 or explicit contract transactions and exact approval facts.
     async fn construct_evm_transaction(
