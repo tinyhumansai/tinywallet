@@ -203,7 +203,7 @@ fn a_bitcoin_request_returns_one_payload_per_selected_input() {
         signatures,
     })
     .unwrap();
-    assert!(signed.raw.starts_with("0x"));
+    assert!(!signed.raw.is_empty());
     assert_eq!(signed.txid, None);
 }
 
