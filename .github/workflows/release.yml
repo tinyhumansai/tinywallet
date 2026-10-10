@@ -250,7 +250,7 @@ jobs:
     name: Build and verify module release
     needs: release-target
     if: ${{ needs.release-target.result == 'success' }}
-    uses: tinyhumansai/.github/.github/workflows/module-release.yml@5b815fcadc51d7836579c193ff25f1f733105e06
+    uses: tinyhumansai/.github/.github/workflows/module-release.yml@325f72acd97b5901399759d906d73e4c199b5cd7
     with:
       tag: ${{ needs.release-target.outputs.tag }}
       version: ${{ needs.release-target.outputs.next_version }}
