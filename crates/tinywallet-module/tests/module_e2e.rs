@@ -19,13 +19,12 @@
 use std::time::Duration;
 
 use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
-use tinybus::Connection;
-use tinybus::broker::Broker;
-use tinybus::module::{ModuleHost, ModuleState};
-use tinybus::transport::memory::MemoryBus;
+use tinybus::module::ModuleState;
+use tinybus::test_support;
 use tinywallet::wire::{
-    AttachRequest, PublicKey, Scheme, Signature, SignedTransaction, SigningRequest,
-    TransactionSpec, UnsignedTransaction,
+    AttachRequest, DerivedAccount, ExportRequest, ExportedKey, PublicKey, Scheme, SecretMaterial,
+    SignMessageRequest, SignRequest, Signature, SignedTransaction, SigningRequest, TransactionSpec,
+    UnsignedTransaction,
 };
 use tinywallet::{Chain, tx};
 use tinywallet_module::{BUS_NAME, OBJECT_PATH};
@@ -55,40 +54,120 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
     // One test rather than four: TinyBus never unloads a module, and a second
     // load of the same artifact would collide on the well-known name, so every
     // chain is exercised against the one admitted instance.
-    let (client, modules, broker_task) = admit_module();
-    let client = client.await;
-    wait_until_serving(&client).await;
+    let (modules, client, broker_task) = test_support::start_bus().await.unwrap();
+    let loaded =
+        test_support::admit_module(&modules, "TINYWALLET_TEST_MODULE", "tinywallet-module")
+            .expect("digest-pinned module should load");
+    assert_manifest_contract(&loaded);
+    test_support::wait_until_serving(&client, BUS_NAME, Duration::from_secs(5))
+        .await
+        .unwrap();
 
     let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
 
     signs_an_evm_transfer_identically_to_the_library(&proxy).await;
     signs_a_multi_input_bitcoin_spend(&proxy).await;
     signs_a_solana_transfer(&proxy).await;
+    derives_an_account_without_returning_its_secret(&proxy).await;
+    signs_a_transaction_confidentially_inside_the_module(&proxy).await;
+    exports_a_key_only_through_the_confidential_method(&proxy).await;
+    signs_an_opaque_message_confidentially(&proxy).await;
     refuses_a_request_the_module_cannot_build(&proxy).await;
-    refuses_a_confidential_call_to_an_unattested_module(&proxy).await;
 
     assert!(matches!(modules.list()[0].state, ModuleState::Ready));
     broker_task.abort();
 }
 
-/// Load the built artifact and check its manifest against the interface.
-fn admit_module() -> (
-    impl std::future::Future<Output = Connection>,
-    ModuleHost,
-    tokio::task::JoinHandle<tinybus::Result<()>>,
-) {
-    let artifact =
-        std::env::var_os("TINYWALLET_TEST_MODULE").expect("TINYWALLET_TEST_MODULE must be set");
-    let bus = MemoryBus::new();
-    let broker = Broker::new();
-    let broker_task = broker.spawn(bus.clone());
-    let modules = ModuleHost::new(broker);
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires TINYWALLET_TEST_MODULE to point at the built cdylib"]
+async fn refuses_a_confidential_call_to_an_unattested_module() {
+    // TinyBus keeps a loaded module mapped for the process lifetime, so run
+    // this scenario in a child test process. That leaves the parent process's
+    // one admitted-module E2E free to test the separate allowlisted path.
+    if std::env::var_os("TINYWALLET_UNATTESTED_CHILD").is_none() {
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "refuses_a_confidential_call_to_an_unattested_module",
+                "--ignored",
+            ])
+            .env("TINYWALLET_UNATTESTED_CHILD", "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "unattested child test failed (status {}):\nstdout:\n{}\nstderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
 
-    let loaded = modules.load_file(artifact).expect("module should load");
+    let artifact = std::env::var_os("TINYWALLET_TEST_MODULE")
+        .expect("TINYWALLET_TEST_MODULE must point at the built cdylib");
+    // The normal E2E artifact sits beside modules.toml so its digest is
+    // allowlisted. Copy it into a directory without that manifest to exercise
+    // the deliberately un-attested load_file path.
+    let artifact = std::path::PathBuf::from(artifact);
+    let untrusted_dir = std::env::temp_dir().join(format!(
+        "tinywallet-unattested-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir(&untrusted_dir).expect("create un-attested fixture directory");
+    let untrusted_artifact = untrusted_dir.join(
+        artifact.file_name().expect("module artifact has a filename"),
+    );
+    std::fs::copy(&artifact, &untrusted_artifact).expect("copy un-attested test module");
+    let (module, client, broker_task) = test_support::start_bus().await.unwrap();
+    module
+        .load_file(&untrusted_artifact)
+        .expect("module loads without admission");
+    test_support::wait_until_serving(&client, BUS_NAME, Duration::from_secs(5))
+        .await
+        .unwrap();
+
+    let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
+    let request = serde_json::json!({
+        "secret": {
+            "mnemonic": VECTOR,
+            "derivation_path": "m/44'/60'/0'/0/0",
+            "chain": "evm",
+        },
+        "transaction": {
+            "kind": "evm",
+            "to": "0x3535353535353535353535353535353535353535",
+            "value_wei": "1000000000000000000",
+            "data_hex": "0x",
+            "nonce": 9,
+            "gas_limit": 21_000,
+            "gas_price_wei": "20000000000",
+            "chain_id": 1,
+        },
+    });
+
+    let error = proxy
+        .call_confidential::<SignedTransaction>("SignTransaction", (request.clone(),))
+        .await
+        .expect_err("an unattested module must not receive a recovery phrase");
+    assert!(
+        error.to_string().to_lowercase().contains("attest"),
+        "expected an attestation refusal, got: {error}"
+    );
+    let signed: SignedTransaction = proxy
+        .call("SignTransaction", (request,))
+        .await
+        .expect("ordinary nonconfidential calls remain available");
+    assert_ne!(signed.raw, "");
+
+    broker_task.abort();
+}
+
+/// Check the loaded manifest against the module and wire contracts.
+fn assert_manifest_contract(loaded: &tinybus::module::ModuleInfo) {
     assert_eq!(loaded.name, "tinywallet-module");
     assert_eq!(loaded.manifest.bus_name.as_str(), BUS_NAME);
     assert_eq!(loaded.manifest.object_path.as_str(), OBJECT_PATH);
-
     let declared: Vec<&str> = loaded
         .manifest
         .provides
@@ -112,33 +191,6 @@ fn admit_module() -> (
         tinywallet_bus::METHODS,
         "the manifest and the published contract name different members"
     );
-
-    let connect = async move {
-        Connection::connect(bus.connect().await.unwrap())
-            .await
-            .unwrap()
-    };
-    (connect, modules, broker_task)
-}
-
-/// Wait for the module to claim its well-known name.
-async fn wait_until_serving(client: &Connection) {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            if client
-                .list_names()
-                .await
-                .unwrap()
-                .iter()
-                .any(|name| name.as_str() == BUS_NAME)
-            {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("module should become ready");
 }
 
 /// The load-bearing case: through the bus must equal in-process.
@@ -418,55 +470,104 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
-/// The guard, proven against the real loader.
-///
-/// This module is loaded from a bare path with no `modules.toml` beside it, so
-/// nobody vouched for its bytes and the broker must refuse to carry a secret to
-/// it — even though the artifact is genuine, the name resolves, and the very
-/// same method would succeed if it were attested.
-///
-/// It is the negative half that makes the confidential flow worth anything. A
-/// positive result alone would be equally consistent with a broker that carried
-/// every confidential message to anyone who asked.
-async fn refuses_a_confidential_call_to_an_unattested_module(proxy: &tinybus::Proxy) {
-    let request = serde_json::json!({
-        "secret": {
-            "mnemonic": VECTOR,
-            "derivation_path": "m/44'/60'/0'/0/0",
-            "chain": "evm",
-        },
-        "transaction": {
-            "kind": "evm",
-            "to": "0x3535353535353535353535353535353535353535",
-            "value_wei": "1000000000000000000",
-            "data_hex": "0x",
-            "nonce": 9,
-            "gas_limit": 21_000,
-            "gas_price_wei": "20000000000",
-            "chain_id": 1,
-        },
-    });
-
-    let error = proxy
-        .call_confidential::<SignedTransaction>("SignTransaction", (request.clone(),))
+/// Derivation discloses only the public account information.
+async fn derives_an_account_without_returning_its_secret(proxy: &tinybus::Proxy) {
+    let material = secret_material("m/44'/60'/0'/0/0");
+    let expected = tinywallet::key::derive(Chain::Evm, VECTOR, &material.derivation_path).unwrap();
+    let actual: DerivedAccount = proxy
+        .call_confidential("DeriveAccount", (material,))
         .await
-        .expect_err("an unattested module must not receive a recovery phrase");
-
-    // The specific error matters: "not attested" and "no such name" send an
-    // operator to fix different things, and the module *is* installed here.
-    let rendered = error.to_string();
-    assert!(
-        rendered.contains("NotAttested") || rendered.to_lowercase().contains("attest"),
-        "expected an attestation refusal, got: {rendered}"
+        .unwrap();
+    assert_eq!(actual.address, expected.address());
+    assert_eq!(
+        actual.public_key.key_hex,
+        hex(&compressed_public(expected.secret_bytes()))
     );
+}
 
-    // The refusal is about confidentiality, not about the method or the
-    // arguments: the identical call without the flag is carried and answered.
-    // Without this the test would also pass if `SignTransaction` were simply
-    // broken or unadvertised.
-    let signed = proxy
-        .call::<SignedTransaction>("SignTransaction", (request,))
+/// The one-call flow returns the same broadcast transaction as local signing.
+async fn signs_a_transaction_confidentially_inside_the_module(proxy: &tinybus::Proxy) {
+    let spec = evm_spec();
+    let secret = derive(Chain::Evm, "m/44'/60'/0'/0/0");
+    let actual: SignedTransaction = proxy
+        .call_confidential(
+            "SignTransaction",
+            (SignRequest {
+                secret: secret_material("m/44'/60'/0'/0/0"),
+                transaction: spec,
+            },),
+        )
         .await
-        .expect("the same call unflagged is an ordinary call and must succeed");
-    assert!(signed.raw.starts_with("0x"), "{}", signed.raw);
+        .unwrap();
+    let expected = tx::evm::LegacyTransaction {
+        nonce: 9,
+        gas_price: 20_000_000_000,
+        gas_limit: 21_000,
+        to: Some("0x3535353535353535353535353535353535353535".to_string()),
+        value: 1_000_000_000_000_000_000,
+        data: Vec::new(),
+        chain_id: 1,
+    }
+    .sign(&secret)
+    .unwrap();
+    assert_eq!(actual.raw, format!("0x{}", hex(&expected)));
+}
+
+/// Raw key export is available only on its named confidential member.
+async fn exports_a_key_only_through_the_confidential_method(proxy: &tinybus::Proxy) {
+    let material = secret_material("m/44'/60'/0'/0/0");
+    let expected = tinywallet::key::derive(Chain::Evm, VECTOR, &material.derivation_path).unwrap();
+    let actual: ExportedKey = proxy
+        .call_confidential("ExportKey", (ExportRequest { secret: material },))
+        .await
+        .unwrap();
+    assert_eq!(actual.secret_key_hex, hex(expected.secret_bytes()));
+    assert_eq!(actual.address, expected.address());
+}
+
+/// The module signs the exact digest and returns the host wire signature.
+async fn signs_an_opaque_message_confidentially(proxy: &tinybus::Proxy) {
+    let digest = [0x42; 32];
+    let actual: Signature = proxy
+        .call_confidential(
+            "SignMessage",
+            (SignMessageRequest {
+                secret: secret_material("m/44'/60'/0'/0/0"),
+                message_hex: hex(&digest),
+                scheme: Scheme::Secp256k1Prehash,
+            },),
+        )
+        .await
+        .unwrap();
+    let key = SecretKey::from_slice(&derive(Chain::Evm, "m/44'/60'/0'/0/0")).unwrap();
+    let (recovery_id, compact) = Secp256k1::signing_only()
+        .sign_ecdsa_recoverable(&Message::from_digest(digest), &key)
+        .serialize_compact();
+    assert_eq!(
+        actual,
+        Signature::Secp256k1 {
+            rs_hex: hex(&compact),
+            recovery_id: u8::try_from(recovery_id.to_i32()).unwrap(),
+        }
+    );
+}
+
+fn secret_material(derivation_path: &str) -> SecretMaterial {
+    SecretMaterial {
+        mnemonic: VECTOR.to_string(),
+        derivation_path: derivation_path.to_string(),
+        chain: Chain::Evm,
+    }
+}
+
+fn evm_spec() -> TransactionSpec {
+    TransactionSpec::Evm {
+        to: "0x3535353535353535353535353535353535353535".to_string(),
+        value_wei: "1000000000000000000".to_string(),
+        data_hex: "0x".to_string(),
+        nonce: 9,
+        gas_limit: 21_000,
+        gas_price_wei: "20000000000".to_string(),
+        chain_id: 1,
+    }
 }

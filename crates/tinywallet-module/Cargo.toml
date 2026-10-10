@@ -64,6 +64,13 @@ zeroize = "1"
 workspace = true
 
 [dev-dependencies]
+# The loader E2E admits the built module from its adjacent digest manifest and
+# uses TinyBus's shared lifecycle helpers.
+tinybus = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybus", default-features = false, features = [
+    "macros",
+    "modules",
+    "test-support",
+] }
 # The loader E2E builds request documents directly rather than through the wire
 # types, so a rename on either side shows up as the contract change it is.
 serde_json = "1"
