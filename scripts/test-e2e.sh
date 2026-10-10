@@ -8,10 +8,16 @@ if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
   exit
 fi
 target="${CARGO_TARGET_DIR:-$root/target}"
-case "$(uname -s)" in
-  Darwin) name="libtinywallet_module.dylib" ;;
-  Linux) name="libtinywallet_module.so" ;;
-  *) echo "test-e2e.sh requires a Unix runner" >&2; exit 1 ;;
+[[ "$target" == /* ]] || target="$root/$target"
+mkdir -p "$target"
+target="$(cd "$target" && pwd -P)"
+[[ "$target" == "$root"/* ]] || { echo "CARGO_TARGET_DIR must stay inside the repository" >&2; exit 2; }
+host="$(rustc -vV | sed -n 's/^host: //p')"
+case "$host" in
+  *-apple-darwin) name="libtinywallet_module.dylib" ;;
+  *-linux-gnu) name="libtinywallet_module.so" ;;
+  *-windows-*) echo "test-e2e.sh requires a Unix runner" >&2; exit 1 ;;
+  *) echo "unsupported E2E host target: $host" >&2; exit 2 ;;
 esac
 
 cargo build --locked --release --package tinywallet-module

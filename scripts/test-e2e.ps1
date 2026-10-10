@@ -2,6 +2,10 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $root
 $target = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $root 'target' }
+New-Item -ItemType Directory -Force $target | Out-Null
+$target = (Resolve-Path -LiteralPath $target).Path
+$rootPrefix = $root.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'CARGO_TARGET_DIR must stay inside the repository' }
 $stage = Join-Path $target 'tinywallet-module-e2e'
 
 cargo build --locked --release --package tinywallet-module

@@ -54,12 +54,12 @@ jobs:
       next_version: ${{ steps.version.outputs.next_version }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           submodules: true
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
         with:
           components: rustfmt, clippy
 
@@ -250,7 +250,7 @@ jobs:
     name: Build and verify module release
     needs: release-target
     if: ${{ needs.release-target.result == 'success' }}
-    uses: tinyhumansai/.github/.github/workflows/module-release.yml@5d2f6551709ecc2148ad4a75d8d42874d8f6de4b
+    uses: tinyhumansai/.github/.github/workflows/module-release.yml@7f9ae5b5f2ddeb953fca5be7cc7cc1e4ef1c8555
     with:
       tag: ${{ needs.release-target.outputs.tag }}
       version: ${{ needs.release-target.outputs.next_version }}

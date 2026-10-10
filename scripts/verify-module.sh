@@ -8,7 +8,20 @@ archive="${1:?usage: verify-module.sh --archive <module-archive>}"
 work="$(mktemp -d "${TMPDIR:-/tmp}/tinywallet-module-verify.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 case "$archive" in
-  *.tar.gz) tar -xzf "$archive" -C "$work" ;;
+  *.tar.gz)
+    members="$(tar -tzf "$archive")"
+    while IFS= read -r member; do
+      case "$member" in
+        /*|../*|*/../*|*/..) echo "archive member escapes the extraction directory: $member" >&2; exit 2 ;;
+      esac
+    done <<<"$members"
+    if tar -tvzf "$archive" | awk 'substr($0, 1, 1) !~ /^[-d]$/ { exit 1 }'; then
+      tar -xzf "$archive" -C "$work"
+    else
+      echo "archive contains a link or special file" >&2
+      exit 2
+    fi
+    ;;
   *) echo "unsupported module archive: $archive" >&2; exit 2 ;;
 esac
 case "$(uname -s)" in
