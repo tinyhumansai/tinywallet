@@ -37,3 +37,17 @@ fn hex_lower(bytes: &[u8]) -> String {
         out
     })
 }
+
+/// Derive an EIP-55 address from a validated SEC1 public key, without private material.
+/// # Errors
+/// Rejects malformed encodings and points outside the secp256k1 curve.
+pub fn address_from_public_key(public: &[u8]) -> Result<String> {
+    let public = coins_bip32::ecdsa::VerifyingKey::from_sec1_bytes(public)
+        .map_err(|_| super::Error::InvalidPublicKey)?;
+    let encoded = public.to_encoded_point(false);
+    let bytes: [u8; 65] = encoded
+        .as_bytes()
+        .try_into()
+        .map_err(|_| super::Error::InvalidPublicKey)?;
+    Ok(address_from_public(&bytes))
+}
