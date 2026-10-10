@@ -51,7 +51,7 @@ hex = "0.4"
 # Base58 for Solana public keys and the blockhash TronGrid-style APIs return.
 bs58 = "0.5"
 # Base64 for the Solana `sendTransaction` payload.
-base64 = "0.22"
+base64 = "0.23"
 # SHA-256 for the Solana program-derived-address search that names an
 # Associated Token Account.
 sha2 = "0.11"
