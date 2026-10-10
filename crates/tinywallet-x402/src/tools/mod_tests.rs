@@ -29,13 +29,8 @@ impl RequestGuard for FixtureGuard {
         false
     }
 
-    async fn authorize(
-        &self,
-        url: &str,
-        _has_body: bool,
-        _has_headers: bool,
-    ) -> Result<AuthorizedUrl, String> {
-        let parsed = reqwest::Url::parse(url).map_err(|e| e.to_string())?;
+    async fn authorize(&self, request: &ProposedRequest) -> Result<AuthorizedRequest, String> {
+        let parsed = reqwest::Url::parse(&request.url).map_err(|e| e.to_string())?;
         let host = parsed.host_str().ok_or("missing host")?.to_string();
         let port = parsed.port_or_known_default().ok_or("missing port")?;
         let addr = std::net::SocketAddr::new(
@@ -43,8 +38,8 @@ impl RequestGuard for FixtureGuard {
                 .map_err(|e: std::net::AddrParseError| e.to_string())?,
             port,
         );
-        Ok(AuthorizedUrl {
-            url: url.into(),
+        Ok(AuthorizedRequest {
+            request: request.clone(),
             host,
             addrs: vec![addr],
         })
