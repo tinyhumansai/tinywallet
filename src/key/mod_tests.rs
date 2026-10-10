@@ -297,3 +297,27 @@ fn debug_never_prints_key_material() {
         "leaked the secret as a byte slice"
     );
 }
+
+#[cfg(feature = "evm")]
+#[test]
+fn public_evm_address_matches_key_derivation_and_rejects_invalid_points() {
+    let key=derive(crate::Chain::Evm,"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about","m/44'/60'/0'/0/0").unwrap();
+    let public = coins_bip32::ecdsa::SigningKey::from_slice(key.secret_bytes())
+        .unwrap()
+        .verifying_key()
+        .to_encoded_point(true);
+    assert_eq!(
+        super::evm_address_from_public_key(public.as_bytes()).unwrap(),
+        key.address()
+    );
+    for invalid in [&[][..], &[0; 33][..], &[255; 65][..]] {
+        assert!(matches!(
+            super::evm_address_from_public_key(invalid),
+            Err(Error::InvalidPublicKey)
+        ));
+    }
+    assert_eq!(
+        Error::InvalidPublicKey.to_string(),
+        "invalid SEC1 public key"
+    );
+}

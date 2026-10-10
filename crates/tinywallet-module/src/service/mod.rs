@@ -92,16 +92,42 @@ const BUILD_FAILED_ERROR: &str = "ai.tinyhumans.tinywallet.Error.BuildFailed";
 /// The served object. Holds nothing: every call is self-contained.
 struct Wallet;
 
+mod construction;
+
 // The interface macro rejects a non-async method, so both methods are async
 // because the dispatch contract says so, not because they await anything. This
 // module performs no I/O at all.
 #[allow(
     clippy::unused_async,
-    clippy::unused_async_trait_impl,
     reason = "tinybus::interface requires every method to be `async fn`"
 )]
 #[tinybus::interface(name = "ai.tinyhumans.tinywallet.Wallet")]
+#[expect(
+    clippy::unused_async_trait_impl,
+    reason = "the generated TinyBus async trait requires async methods for synchronous cryptographic operations"
+)]
 impl Wallet {
+    /// Construct native, ERC-20 or explicit contract transactions and exact approval facts.
+    async fn construct_evm_transaction(
+        &self,
+        request: tinywallet_bus::wire::EvmConstructionRequest,
+    ) -> BusResult<tinywallet_bus::wire::ConstructedEvmTransaction> {
+        construction::construct(&request).map_err(into_bus_error)
+    }
+
+    /// Validate an address using the module's compiled chain rules.
+    async fn validate_address(
+        &self,
+        request: tinywallet_bus::wire::ValidateAddressRequest,
+    ) -> BusResult<tinywallet_bus::wire::ValidateAddressResponse> {
+        let result = if request.sender && request.chain == Chain::Btc {
+            tinywallet::address::btc::validate_sender(&request.address)
+        } else {
+            tinywallet::address::validate(request.chain, &request.address)
+        };
+        Ok(tinywallet_bus::wire::ValidateAddressResponse { result })
+    }
+
     /// Report the bytes a caller must sign for `request`.
     async fn build_unsigned(&self, request: SigningRequest) -> BusResult<UnsignedTransaction> {
         build_unsigned(&request).map_err(into_bus_error)
@@ -721,8 +747,12 @@ fn decode_hex(value: &str) -> Result<Vec<u8>, Failure> {
     (0..body.len())
         .step_by(2)
         .map(|index| {
-            u8::from_str_radix(&body[index..index + 2], 16)
-                .map_err(|_| Failure::InvalidInput("call data is not hex".to_string()))
+            u8::from_str_radix(
+                body.get(index..index + 2)
+                    .ok_or_else(|| Failure::InvalidInput("call data is not hex".to_string()))?,
+                16,
+            )
+            .map_err(|_| Failure::InvalidInput("call data is not hex".to_string()))
         })
         .collect()
 }
@@ -795,6 +825,8 @@ mod exports {
             "SignTransaction",
             "ExportKey",
             "SignMessage",
+            "ValidateAddress",
+            "ConstructEvmTransaction",
         ],
         signals = [],
         requires = [],

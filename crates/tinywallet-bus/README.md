@@ -1,21 +1,27 @@
 # tinywallet-bus
 
-The TinyBus wire contract for TinyWallet: the bus name and object path, the
-member names, the request and response types (`wire`), and the contract version
-rule. It links no chain, signing or key-derivation library.
+The minimal TinyBus contract for TinyWallet: names, version, shared chain
+identifiers, error vocabulary, transfer types and request/result DTOs. Normal
+and build dependencies are limited to serde and thiserror plus their derive
+closure. No feature links crypto, x402, web3, transport or native libraries.
 
-## Compat re-exports
+Contract 1.1 adds `ValidateAddress`. It returns the trimmed address or the same
+structured errors as the implementation, including Bitcoin's narrower sender
+rule. Validation runs inside the compiled artifact. Existing transaction and
+confidential signing operations retain their arities and wire forms.
 
-Before 0.6 this crate also held the chain rules. They moved:
+The previous algorithm re-exports (`address`, `asset`, `rpc`, `tx`, `eip712`,
+`abi`) are removed as promised for the next minor package release. Legacy
+feature names remain accepted for transition, but they enable no behavior.
+Implementations re-export `Chain`, `UnknownChain`, `Error`, `Result`, and
+`TronTransfer` from this crate, preserving shared type identity and JSON forms.
 
-| Old path | Now in |
-| --- | --- |
-| `address`, `asset`, `chain`, `rpc`, `tx`, `Chain`, `Error`, `Result` | `tinywallet-crypto` |
-| `eip712`, `abi` | `tinywallet-x402` (features `eip712`, `abi`) |
-| `wire::TronTransfer` | `tinywallet-crypto::TronTransfer` |
+Host integrations must use module calls and wait for a compatible released
+artifact pinned with its verified digest. They must not replace the removed
+re-exports with direct crypto/x402/web3 dependencies. Further web3, budget,
+ledger and x402 execution members remain separate migration work.
 
-The old paths still resolve through re-exports so existing hosts keep compiling.
-**They are compat re-exports and are removed in the next minor release.** Depend
-on the owning crate directly. The feature names are unchanged and forward to the
-owner. This crate takes `tinywallet-x402` with default features off, so it can
-never enable anything heavier than `eip712` and `abi`.
+Contract 1.2 adds stateless ConstructEvmTransaction for native/ERC-20/contract
+actions, exact signing payloads and host approval facts. Secret fields are
+rejected; fee/calldata/request bounds execute in the module. See
+[construction specification](../../docs/specs/evm-module-construction.md).

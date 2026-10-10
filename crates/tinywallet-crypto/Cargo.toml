@@ -16,6 +16,9 @@ publish = false
 # no `k256`, no `coins-*`. Every dependency here is a hash, a codec, or serde.
 # CI asserts the absence with `cargo tree -e normal -i bitcoin`.
 [dependencies]
+# Shared serialized vocabulary; implementation re-exports these exact types.
+tinywallet-bus = { path = "../tinywallet-bus", default-features = false }
+
 # Derive macros for the crate-wide error type in `src/error/mod.rs`.
 thiserror = "2"
 # Base58 (Solana) and base58check (Tron) address decoding. `check` brings in
@@ -61,7 +64,7 @@ btc = ["dep:bs58", "dep:bech32", "dep:sha2"]
 # Serde derives on the crate's core types (`Chain`, `TronTransfer`). A named
 # gate rather than relying on `dep:serde` being implied, because
 # `#[cfg(feature = "serde")]` has to name something that actually exists.
-serde = ["dep:serde", "serde/derive"]
+serde = ["dep:serde", "serde/derive", "tinywallet-bus/serde"]
 # EVM address validation. Dependency-free: an EVM address is 20 hex-encoded
 # bytes, so the whole format is spelled out in `src/address/evm.rs`.
 evm = []

@@ -65,6 +65,10 @@ pub enum Error {
     #[error("invalid BIP-39 mnemonic")]
     InvalidMnemonic,
 
+    /// A public SEC1 encoding does not represent a secp256k1 point.
+    #[error("invalid SEC1 public key")]
+    InvalidPublicKey,
+
     /// The derivation path is not well-formed.
     #[error("invalid derivation path '{path}': {reason}")]
     InvalidPath {
@@ -247,3 +251,6 @@ fn seed_from_mnemonic(mnemonic: &str) -> Result<Zeroizing<Vec<u8>>> {
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod test;
+
+#[cfg(feature = "evm")]
+pub use evm::address_from_public_key as evm_address_from_public_key;

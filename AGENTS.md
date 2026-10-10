@@ -50,16 +50,16 @@ docs/
 
 | Crate | Owns | Must not depend on |
 | --- | --- | --- |
-| `tinywallet-crypto` | `Chain`, `Error`, addresses, reference data, `rpc::Transport`, Tron verification, `TronTransfer` | the bus, x402, `bitcoin`, `k256`, `coins-*` |
+| `tinywallet-crypto` | addresses, reference data, `rpc::Transport`, Tron verification; re-exports shared bus vocabulary | x402, `bitcoin`, `k256`, `coins-*` |
 | `tinywallet-x402` | x402 wire types, EIP-712, ABI calldata; later the ledger, protocol and tools | the bus, `bitcoin`, `k256`, `coins-*` |
 | `tinywallet-web3` | the wallet, swap, bridge and dapp flows, their host seams and (feature `tools`) their agent tools | `bitcoin`, `k256`, `coins-*`; keys never enter it |
-| `tinywallet-bus` | names, contract version, wire types, one-release compat re-exports | anything heavier than x402's `eip712` and `abi` |
+| `tinywallet-bus` | names, contract version, identifiers, errors and wire types | any implementation, transport, runtime or native library |
 | `tinywallet` (root) | `key/`, `tx/`, `client/`; the only place `bitcoin` lives | |
 | `tinywallet-module` | the TinyBus `cdylib` adapter | |
 
 Put a change in the crate that owns it, not the one that re-exports it. The
-`tinywallet-bus` re-exports of chain modules are compat shims removed in the next
-minor release; do not add new ones. CI fails if crypto, x402, web3 or the bus gain a
+`tinywallet-bus` contract contains only shared vocabulary. Never import or
+re-export implementation algorithms from it, including through optional features. CI fails if crypto, x402, web3 or the bus gain a
 `bitcoin`, `k256` or `coins-*` dependency. The design is in
 [`docs/specs/web3-split.md`](docs/specs/web3-split.md).
 

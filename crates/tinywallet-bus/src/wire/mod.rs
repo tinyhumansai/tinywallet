@@ -41,7 +41,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use tinywallet_crypto::Chain;
+use crate::Chain;
 
 /// Bytes a host must sign, and how.
 ///
@@ -247,7 +247,7 @@ pub enum TransactionSpec {
 /// Re-exported from `tinywallet-crypto`, which owns it so the Tron verifier can
 /// take it without depending on this crate. The path and the JSON encoding are
 /// unchanged.
-pub use tinywallet_crypto::TronTransfer;
+pub use crate::TronTransfer;
 
 impl TransactionSpec {
     /// Which chain this transaction belongs to.
@@ -458,3 +458,27 @@ pub struct SignMessageRequest {
     /// by changing an unrelated field.
     pub scheme: Scheme,
 }
+
+/// Address validation facts requested from the compiled module.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValidateAddressRequest {
+    /// Chain whose address rules apply.
+    pub chain: Chain,
+    /// Address to validate.
+    pub address: String,
+    /// Apply the narrower Bitcoin sender rule instead of recipient validation.
+    #[serde(default)]
+    pub sender: bool,
+}
+/// Validated trimmed address or the existing structured error vocabulary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValidateAddressResponse {
+    /// Validation result; it does not prove ownership or available funds.
+    pub result: crate::Result<String>,
+}
+
+mod construction;
+pub use construction::{
+    ConstructedEvmTransaction, EvmApprovalFacts, EvmConstructionRequest, EvmIntent,
+    MAX_CALLDATA_BYTES, MAX_CONSTRUCTION_BYTES,
+};
