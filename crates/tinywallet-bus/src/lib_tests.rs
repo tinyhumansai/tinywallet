@@ -134,6 +134,22 @@ fn storage_needs_publish_only_the_x402_ledger_resources() {
 }
 
 #[test]
+fn storage_needs_debug_redacts_secret_prefixes() {
+    let needs = super::StorageNeeds {
+        collections: &[],
+        blob_prefixes: &[],
+        stream_prefixes: &[],
+        secret_prefixes: &["private-key/"],
+    };
+
+    let rendered = format!("{needs:?}");
+
+    assert!(rendered.contains("secret_prefixes"));
+    assert!(rendered.contains("[REDACTED]"));
+    assert!(!rendered.contains("private-key/"));
+}
+
+#[test]
 #[cfg(feature = "storage")]
 fn storage_collection_inventory_matches_the_x402_ledger() {
     let collections = super::storage::collections();
