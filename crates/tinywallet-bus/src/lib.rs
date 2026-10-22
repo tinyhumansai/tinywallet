@@ -51,7 +51,9 @@ pub use names::{
     OBJECT_PATH,
 };
 pub use storage_names::{BUDGETS_COLLECTION, PAYMENTS_STREAM};
-pub use storage_needs::{X402_BUDGET_COLLECTION, X402_PAYMENTS_STREAM_PREFIX, storage_needs};
+pub use storage_needs::{
+    StorageNeeds, X402_BUDGET_COLLECTION, X402_PAYMENTS_STREAM_PREFIX, storage_needs,
+};
 pub use version::{CONTRACT_VERSION, is_compatible};
 
 #[cfg(test)]

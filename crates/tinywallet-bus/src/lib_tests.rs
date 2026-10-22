@@ -134,6 +134,15 @@ fn storage_needs_publish_only_the_x402_ledger_resources() {
 }
 
 #[test]
+#[cfg(feature = "storage")]
+fn storage_collection_inventory_matches_the_x402_ledger() {
+    let collections = super::storage::collections();
+
+    assert_eq!(collections.len(), 1);
+    assert_eq!(collections[0].name, super::X402_BUDGET_COLLECTION);
+}
+
+#[test]
 fn the_identity_matches_the_path_the_module_serves() {
     // Both spellings appear in the module's `serve_at` / `request_name` pair,
     // and a host that guesses one of them gets `NameHasNoOwner` at call time.
