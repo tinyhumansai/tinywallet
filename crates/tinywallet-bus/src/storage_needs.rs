@@ -7,7 +7,7 @@ use tinystoragedrivers_bus_contract::CollectionSpec;
 
 /// The storage resources the x402 ledger requests from its host.
 ///
-/// This is TinyWallet's host-facing declaration, not a TinyStorageDrivers
+/// This is `TinyWallet`'s host-facing declaration, not a `TinyStorageDrivers`
 /// contract type. TSD v2 publishes the individual storage types and ports but
 /// no aggregate `StorageNeeds` type.
 #[derive(Clone, Copy, Default, PartialEq, Eq)]

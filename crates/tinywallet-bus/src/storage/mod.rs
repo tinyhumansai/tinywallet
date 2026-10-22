@@ -17,7 +17,7 @@ pub use super::storage_names::{
 pub use payment::{StoredPayment, StoredPaymentStatus};
 pub use readiness::StorageMigrationReady;
 
-/// Collections the host should ensure in TinyWallet's module storage scope.
+/// Collections the host should ensure in `TinyWallet`'s module storage scope.
 #[must_use]
 pub fn collections() -> Vec<CollectionSpec> {
     vec![CollectionSpec {
