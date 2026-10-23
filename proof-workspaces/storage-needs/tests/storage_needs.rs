@@ -1,10 +1,8 @@
 //! An excluded downstream consumer of the published storage-needs contract.
 
-use tinystoragedrivers_bus::StorageNeeds;
-
 #[test]
-fn declaration_uses_the_canonical_type_and_only_wallet_ledger_resources() {
-    let needs: StorageNeeds<'static> = tinywallet_bus::storage_needs();
+fn declaration_uses_the_wallet_contract_type_and_only_ledger_resources() {
+    let needs: tinywallet_bus::StorageNeeds<'static> = tinywallet_bus::storage_needs();
 
     assert_eq!(needs.collections.len(), 1);
     let collection = &needs.collections[0];

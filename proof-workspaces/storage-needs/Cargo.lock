@@ -127,7 +127,6 @@ dependencies = [
 name = "tinywallet-storage-needs-consumer"
 version = "0.0.0"
 dependencies = [
- "tinystoragedrivers-bus",
  "tinywallet-bus",
 ]
 

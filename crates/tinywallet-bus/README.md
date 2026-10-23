@@ -11,7 +11,8 @@ client, or transport.
 
 The data-only bus contract, including all features, supports Rust 1.85. The
 excluded storage-needs consumer independently checks the published names and
-canonical TinyStorageDrivers type at that same floor.
+TinyWallet-owned declaration (which uses TinyStorageDrivers' `CollectionSpec`)
+at that same floor.
 
 Network enums in the bus are identifiers only. RPC endpoints, explorer URLs,
 Solana mint addresses, and display labels remain implementation-owned reference
@@ -86,9 +87,11 @@ shape. The module parses the challenge, selects the payment chain, and uses
 only the matching confidential secret; hosts do not parse payment challenges.
 
 The bus exposes `storage_needs()` for the x402 ledger's host-facing storage
-declaration. It uses the data-only `tinystoragedrivers-bus` type and requests
-the current `wallet.budgets` collection and `wallet.payments` stream. Those
-names come from the same bus-owned constants as the stored record vocabulary.
+declaration. TinyWallet owns the aggregate `StorageNeeds` type because
+TinyStorageDrivers v2 publishes no such aggregate; its collection schema uses
+the data-only `tinystoragedrivers-bus` `CollectionSpec`. It requests the current
+`wallet.budgets` collection and `wallet.payments` stream. Those names come from
+the same bus-owned constants as the stored record vocabulary.
 The bus also defines the data-only `StorageMigrationReady` record stored at
 `wallet.budgets/migration_ready`; its required schema version and payment-import
 epoch let a module reject a missing or stale host migration attestation. The

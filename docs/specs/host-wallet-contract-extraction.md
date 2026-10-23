@@ -17,9 +17,10 @@ behavior.
 
 ## Storage requirements
 
-The bus publishes the x402 ledger's host-facing `StorageNeeds` declaration
-using the canonical TinyStorageDrivers bus type. It names the ledger's current
-stored resources:
+The bus publishes the x402 ledger's host-facing `StorageNeeds` declaration,
+owned by TinyWallet because TinyStorageDrivers v2 has no aggregate type. Its
+collection schemas use TinyStorageDrivers' canonical `CollectionSpec` type.
+It names the ledger's current stored resources:
 
 - a document collection named `wallet.budgets`;
 - a stream prefix named `wallet.payments`.

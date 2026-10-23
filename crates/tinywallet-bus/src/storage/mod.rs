@@ -7,6 +7,8 @@
 mod payment;
 mod readiness;
 
+use tinystoragedrivers_bus_contract::CollectionSpec;
+
 pub use super::storage_names::{
     BUDGETS_COLLECTION, BUDGETS_VERSION, HOLDS_ID, LEGACY_BUDGET_COLLECTION,
     LEGACY_PAYMENTS_STREAM, MIGRATION_READY_ID, OWNER, PAYMENTS_IMPORT_EPOCH, PAYMENTS_STREAM,
@@ -14,6 +16,17 @@ pub use super::storage_names::{
 };
 pub use payment::{StoredPayment, StoredPaymentStatus};
 pub use readiness::StorageMigrationReady;
+
+/// Collections the host should ensure in `TinyWallet`'s module storage scope.
+#[must_use]
+pub fn collections() -> Vec<CollectionSpec> {
+    vec![CollectionSpec {
+        name: BUDGETS_COLLECTION.to_owned(),
+        indexes: Vec::new(),
+        ttl_field: None,
+        search: None,
+    }]
+}
 
 #[cfg(test)]
 #[path = "readiness_tests.rs"]
