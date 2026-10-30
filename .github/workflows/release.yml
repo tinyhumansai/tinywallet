@@ -2,10 +2,21 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Ordinary tag release or reviewed OpenHuman epic release
+        type: choice
+        required: true
+        default: standard
+        options: [standard, reviewed-epic]
       tag:
         description: Existing version tag (vX.Y.Z) committed through a reviewed PR
         type: string
         required: true
+      reviewed_pr:
+        description: Positive canonical PR number for reviewed-epic mode; zero is reserved for the standard path
+        type: string
+        required: false
+        default: '0'
   push:
     tags: ['v*']
 permissions: {}
@@ -33,6 +44,7 @@ jobs:
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
   module-release:
     needs: resolve
+    if: github.event_name == 'push' || inputs.mode == 'standard'
     permissions:
       contents: write
     uses: tinyhumansai/.github/.github/workflows/module-release.yml@4adc1080fb495098e7af1aade82ed7e6e3c69bb7
@@ -40,3 +52,45 @@ jobs:
       tag: ${{ needs.resolve.outputs.tag }}
       version: ${{ needs.resolve.outputs.version }}
       module-crate: tinywallet-module
+
+  validate-reviewed-dispatch:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'reviewed-epic'
+    needs: [resolve]
+    permissions: {}
+    outputs:
+      reviewed_pr: ${{ steps.validate.outputs.reviewed_pr }}
+    runs-on: ubuntu-latest
+    steps:
+      - id: validate
+        env:
+          REVIEWED_PR: ${{ inputs.reviewed_pr }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REPOSITORY:-}" == "tinyhumansai/tinywallet" ]] || {
+            echo "reviewed releases run only in tinyhumansai/tinywallet" >&2
+            exit 2
+          }
+          [[ "${GITHUB_REF:-}" == "refs/heads/epic/8056-modules-wiring" ]] || {
+            echo "reviewed releases run only from epic/8056-modules-wiring" >&2
+            exit 2
+          }
+          [[ "${REVIEWED_PR:-}" =~ ^[1-9][0-9]*$ ]] || {
+            echo "reviewed_pr must be a positive integer" >&2
+            exit 2
+          }
+          printf 'reviewed_pr=%s\n' "$REVIEWED_PR" >> "$GITHUB_OUTPUT"
+
+  module-reviewed-release:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'reviewed-epic'
+    needs: [resolve, validate-reviewed-dispatch]
+    permissions:
+      contents: write
+      pull-requests: read
+      checks: read
+      actions: read
+    uses: tinyhumansai/.github/.github/workflows/module-reviewed-epic-release.yml@6ed83b04aab2d8977ec62e966cb914531e534fa4
+    with:
+      tag: ${{ needs.resolve.outputs.tag }}
+      version: ${{ needs.resolve.outputs.version }}
+      reviewed-pr: ${{ fromJSON(needs.validate-reviewed-dispatch.outputs.reviewed_pr || '0') }}

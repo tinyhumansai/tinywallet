@@ -35,6 +35,7 @@ members = [
     "crates/tinywallet-crypto",
     "crates/tinywallet-x402",
     "crates/tinywallet-bus",
+    "crates/tinywallet-client",
     "crates/tinywallet-web3",
     "crates/tinywallet-module",
 ]
@@ -59,11 +60,14 @@ resolver = "3"
 # one package and `tinytools::Tool` stays one type. Keep the rev equal to the
 # tinytools gitlink tinyagents pins.
 tinytools = { git = "https://github.com/tinyhumansai/tinytools", rev = "41cc80ac9acf37a14f20be94f60ee552749f1540" }
+# TinyBus host SDK used by the separately shipped typed client crate. Pin the
+# fork revision that matches the vendored ABI and TSD's bus transport.
+tinybus = { version = "=0.3.12", git = "https://github.com/senamakel/tinybus", rev = "85345114f3066e94d5d70161ea8dc43252b83ae6", default-features = false, features = ["macros", "modules"] }
 # Runtime-neutral contracts shared with the host's stable TSD release.
-tinystoragedrivers-types = { version = "2.1.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "bf1f0a97fbe6165a6edd9521659c7f6859700761" }
-tinystoragedrivers-api = { version = "2.1.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "bf1f0a97fbe6165a6edd9521659c7f6859700761" }
+tinystoragedrivers-types = { version = "2.1.2", git = "https://github.com/senamakel/tinystoragedrivers", rev = "c447da3" }
+tinystoragedrivers-api = { version = "2.1.2", git = "https://github.com/senamakel/tinystoragedrivers", rev = "c447da3" }
 # The module connects to host-owned storage through the TinyBus adapter.
-tinystoragedrivers-busproxy = { version = "2.1.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "bf1f0a97fbe6165a6edd9521659c7f6859700761" }
+tinystoragedrivers-busproxy = { version = "2.1.2", git = "https://github.com/senamakel/tinystoragedrivers", rev = "c447da3" }
 
 [dependencies]
 # The wire contract. Split out so a host that has moved signing into the
@@ -108,7 +112,7 @@ coins-bip32 = { version = "0.17", optional = true }
 # Keccak-256 for the EVM and Tron addresses key derivation produces.
 #
 # PINNED TO 0.10, and not by accident — do not let dependabot move it.
-# `coins-bip32` 0.8 (via `coins-core`) depends on `sha3` 0.10 and is not going
+# `coins-bip32` (via `coins-core`) depends on `sha3` 0.10 and is not going
 # to move, so 0.10 is already in the graph of every consumer that enables
 # `key`. Asking for 0.12 here does not replace it, it ADDS a second copy: cargo
 # cannot unify across a major, so a host ends up compiling `sha3` twice plus
@@ -244,6 +248,11 @@ workspace = true
 # tinystoragedrivers names tinybus by git rev; point that source at the vendored
 # checkout so the module and the storage client share one `Connection` type.
 [patch."https://github.com/tinyhumansai/tinybus"]
+tinybus = { path = "vendor/tinybus/crates/tinybus" }
+tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }
+tinybus-macros = { path = "vendor/tinybus/crates/tinybus-macros" }
+
+[patch."https://github.com/senamakel/tinybus"]
 tinybus = { path = "vendor/tinybus/crates/tinybus" }
 tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }
 tinybus-macros = { path = "vendor/tinybus/crates/tinybus-macros" }

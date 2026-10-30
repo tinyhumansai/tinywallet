@@ -90,16 +90,23 @@ The repository builds six libraries and one loadable module.
 | `tinywallet-crypto` | the `Chain` enum, address validation, reference data, the `rpc::Transport` seam, and the Tron protobuf reader and verification | hashes and codecs only — no native build |
 | `tinywallet-x402` | the x402 wire types, EIP-712 hashing and ERC-20 calldata (`wire`, `eip712`, `abi`) | `tinywallet-crypto`, keccak, serde |
 | `tinywallet-web3` | the wallet, swap, bridge and dapp flows and their agent tools (`tools`), behind host seams: `WalletSigner`, `WalletAccounts`, `RpcEndpoints`, `Web3Backend`, `QuoteScope` | `tinywallet-crypto`, `tinywallet-bus` (`wire`), `tinywallet-x402` (`abi`) — never `bitcoin`, `k256` or `coins-*` |
-| `tinywallet-bus` | identifiers, errors, transfers, wire DTOs, member names and contract version | serde, thiserror only |
+| `tinywallet-bus` | identifiers, errors, transfers, wire DTOs, member names, storage collections and contract version | serde, thiserror and TinyStorageDrivers types |
+| `tinywallet-client` | typed host calls for wallet, ERC-20, Web3 and x402 members | `tinybus` and `tinywallet-bus`; no wallet implementation |
 | `tinywallet` (root) | key derivation, transaction building and signing, chain queries; re-exports the crates above | `bitcoin` and its native `secp256k1` build, `coins-bip39`, `ed25519-dalek` |
 | `tinywallet-module` | the TinyBus adapter, built as a `cdylib` | all of the above |
 
-Hosts use `tinywallet-bus` alone and execute validation, transaction and payment
-behavior through the compiled module. The bus depends only on serde and
-thiserror. Implementations consume and re-export the same shared vocabulary,
-so `tinywallet::Chain` and `tinywallet_bus::Chain` are identical types. The
-root library retains its historical implementation paths for library users;
-hosts do not import those algorithms. See
+Hosts use `tinywallet-client` for typed module calls and execute validation,
+transaction and payment behavior through the compiled module. The client
+depends on TinyBus and the wire contract, but none of the wallet implementation
+crates. Its confidential methods use TinyBus strict attestation against the
+host registry's paired archive and library pins. TinyWallet returns sanitized
+error kinds on that path; callers needing the detailed remote wire name and
+message can use the regular-call failure's explicit fields, whose Debug and
+Display remain redacted. The bus contract itself remains transport-free.
+Implementations consume and re-export the same shared vocabulary, so
+`tinywallet::Chain` and `tinywallet_bus::Chain` are identical types. The root
+library retains its historical implementation paths for library users; hosts
+do not import those algorithms. See
 [the minimal contract specification](docs/specs/minimal-bus-contract.md).
 
 ## Layout
@@ -110,6 +117,9 @@ crates/tinywallet-bus/src/
 ├── names/              # BUS_NAME, OBJECT_PATH, one constant per member
 ├── version/            # CONTRACT_VERSION and its binding rule
 └── wire/               # the host/module request and response types
+crates/tinywallet-client/src/
+├── lib.rs              # typed call facade and strict confidential routing
+└── lib_tests.rs        # routing, wire-shape and error-redaction tests
 crates/tinywallet-crypto/src/
 ├── lib.rs
 ├── error/              # crate-wide `Error` and `Result<T>`
@@ -158,9 +168,21 @@ git submodule update --init --recursive
 
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-features
+bash scripts/test-features.sh
 cargo run --example basic
 ```
+
+On Windows, use `scripts/test-features.ps1`. The feature runners stage the
+locally built wallet module before all-feature tests run; a bare
+`cargo test --all-features` does not prepare the native fixture.
+
+`scripts/test-e2e.sh` (or `scripts/test-e2e.ps1`) also stages the built wallet
+module as a locally pinned archive and library, then runs the typed client's
+verified-peer and separate-process unattested tests. Running either native
+client test target directly requires the same `TINYWALLET_CLIENT_TEST_*`
+artifact variables; the target fails when they are missing. The dedicated
+runner also executes `attested_errors`, which verifies detailed `InvalidInput`
+preservation over strict delivery.
 
 Run the gated builds too — they are the only thing that catches code that
 compiles only when a feature is on. The lib tests are feature-aware, so the

@@ -13,32 +13,6 @@ const NOT_INITIALISED: &str = "x402 payment ledger not initialized";
 
 static GLOBAL_LEDGER: Mutex<Option<PaymentLedger>> = Mutex::new(None);
 
-/// Storage a module-style host provisioned for later [`init_global`] calls that
-/// do not carry their own handles (the `TinyBus` module configures the ledger
-/// over a wire request that can only name a session and a budget).
-static PROVISIONED: Mutex<Option<LedgerStorage>> = Mutex::new(None);
-
-/// Provision the storage the next module-driven ledger will persist through,
-/// replacing any earlier one.
-pub fn provision_storage(storage: LedgerStorage) {
-    *PROVISIONED.lock().unwrap_or_else(PoisonError::into_inner) = Some(storage);
-    debug!("{LOG_PREFIX} ledger storage provisioned");
-}
-
-/// The provisioned storage, if the host has provided one.
-#[must_use]
-pub fn provisioned_storage() -> Option<LedgerStorage> {
-    PROVISIONED
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
-}
-
-/// Forget the provisioned storage.
-pub fn clear_provisioned_storage() {
-    *PROVISIONED.lock().unwrap_or_else(PoisonError::into_inner) = None;
-}
-
 /// Run `f`, which blocks on storage (and on the ledger mutex), without holding
 /// an async worker hostage.
 ///

@@ -20,9 +20,6 @@ serde = { version = "1", optional = true }
 serde_json = { version = "1", optional = true }
 # Error vocabulary derives; no crypto execution crosses this dependency.
 thiserror = "2"
-# Hosts read the module's collection declarations from this contract without
-# linking the implementation or its migration behavior.
-tinystoragedrivers-types = { workspace = true }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }

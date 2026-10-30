@@ -70,10 +70,7 @@ mod types;
 
 #[cfg(test)]
 pub(crate) use global::{TEST_LOCK, reset_global};
-pub use global::{
-    clear_global, clear_provisioned_storage, init_global, provision_storage, provisioned_storage,
-    with_ledger, with_ledger_mut,
-};
+pub use global::{clear_global, init_global, with_ledger, with_ledger_mut};
 pub use persist::{HOLD_RENEW_EVERY, LedgerStorage};
 pub use reservation::{Reservation, reserve};
 pub use schema::collections;

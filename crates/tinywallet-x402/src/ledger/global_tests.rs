@@ -39,11 +39,3 @@ async fn the_global_ledger_lifecycle_runs_on_a_multi_thread_runtime() {
     clear_global();
     assert!(with_ledger(|_| ()).is_err());
 }
-
-#[test]
-fn provisioned_storage_can_be_set_and_cleared() {
-    provision_storage(LedgerStorage::memory());
-    assert!(provisioned_storage().is_some());
-    clear_provisioned_storage();
-    assert!(provisioned_storage().is_none());
-}

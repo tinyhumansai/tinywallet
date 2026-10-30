@@ -63,6 +63,46 @@ impl Chain {
     }
 }
 
+/// Resolve the endpoint key for a chain selected by a host.
+///
+/// EVM requires a chain ID that appears in [`crate::wire::EvmNetwork::ALL`].
+/// The chain ID is ignored for Bitcoin, Solana, and Tron. This function only
+/// identifies the endpoint; it does not resolve a URL or perform transport.
+///
+/// # Examples
+///
+/// ```
+/// # #[cfg(feature = "wire")]
+/// # {
+/// use tinywallet_bus::chain::{endpoint_key, Chain};
+/// use tinywallet_bus::wire::{EvmNetwork, RpcEndpointKey};
+/// assert_eq!(
+///     endpoint_key(Chain::Evm, Some(1)),
+///     Some(RpcEndpointKey::Evm {
+///         network: EvmNetwork::EthereumMainnet,
+///     })
+/// );
+/// # }
+/// ```
+#[cfg(feature = "wire")]
+#[must_use]
+pub fn endpoint_key(
+    chain: Chain,
+    evm_chain_id: Option<u64>,
+) -> Option<crate::wire::RpcEndpointKey> {
+    use crate::wire::{EvmNetwork, RpcEndpointKey};
+
+    match chain {
+        Chain::Evm => EvmNetwork::ALL
+            .into_iter()
+            .find(|network| Some(network.chain_id()) == evm_chain_id)
+            .map(|network| RpcEndpointKey::Evm { network }),
+        Chain::Btc => Some(RpcEndpointKey::Btc),
+        Chain::Solana => Some(RpcEndpointKey::Solana),
+        Chain::Tron => Some(RpcEndpointKey::Tron),
+    }
+}
+
 impl fmt::Display for Chain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())

@@ -41,6 +41,12 @@ configuration of its own.
 
 ## Payment safety
 
+The module declares its storage requirements through
+`tinywallet_bus::storage::collections()`. The host provisions those collection
+specs in the caller's authenticated scope and serves a scoped `Storage` handle
+to the module over the TSD v2 bus. The ledger owns its schema and legacy data
+migration; it opens only after receiving that host-provisioned storage handle.
+
 - **Budget reservation.** `handle_402_and_pay` checks the daily and monthly caps
   and holds the amount (`ledger::reserve`) in one critical section *before*
   signing, so concurrent payments cannot together overspend. The hold is a
@@ -84,8 +90,9 @@ configuration of its own.
 ## Constraints
 
 - Not `bitcoin`, `k256` or `coins-*` in the normal dependency graph (CI guard).
-- The ledger owns one process-wide handle; hosts choose the budget when they
-  call `ledger::init_global`.
+- The ledger owns one process-wide handle. Both direct callers and the module
+  initialize it with `ledger::init_global`; the module passes the scoped
+  storage handle provided by its host.
 - `tools` needs a compiler new enough for `tinytools` (1.88), and `ledger` for
   the stable `tinystoragedrivers-api` / `tinystoragedrivers-types` contracts
   (1.88), matching this crate's declared minimum. The other features build on

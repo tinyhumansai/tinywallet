@@ -25,8 +25,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD as BASE64;
 use bitcoin::secp256k1::{Message, Secp256k1, SecretKey};
 use sha2::{Digest, Sha256};
 use tinybus::Connection;
@@ -45,10 +43,7 @@ use tinywallet_bus::wire::{
     NativeWalletPrepareTransferRequest, NativeWalletServiceHandle, NetworkRequest,
     PrepareTransferParams, RpcEndpointKey, SecretMaterial, SolanaCluster, WalletAccountsResponse,
     WalletBackendRequest, WalletBackendResponse, WalletChain, Web3CloseRequest, Web3ServiceHandle,
-    X402CloseRequest, X402ConfigResponse, X402ConfigureRequest, X402DetailedSpendingSummary,
-    X402ListPaymentsRequest, X402ListPaymentsResponse, X402PaymentStatus,
-    X402PreparePaymentRequest, X402RecordPaymentRequest, X402ServiceHandle, X402SummaryRequest,
-    X402UpdateBudgetRequest,
+    X402ConfigResponse, X402ConfigureRequest, X402ServiceHandle,
 };
 use tinywallet_module::{BUS_NAME, HOST_INTERFACE, HOST_OBJECT_PATH, OBJECT_PATH};
 
@@ -124,9 +119,9 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
         approved_native,
         native_transport_networks,
         submitted_tx,
-        approved_x402,
-        x402_approved,
-        x402_gate,
+        _,
+        _,
+        _,
         modules,
         broker_task,
         staged,
@@ -135,7 +130,7 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
 
     let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
     let x402_configured = proxy
-        .call(
+        .call::<X402ServiceHandle>(
             "X402Configure",
             (X402ConfigureRequest {
                 config: X402ConfigResponse {
@@ -147,20 +142,14 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
                 },
             },),
         )
-        .await
-        .map(|handle: X402ServiceHandle| handle);
+        .await;
     // This fixture has no storage host, so x402 must fail closed instead of
     // silently switching to process-local state.
-    let x402_service = match x402_configured {
-        Ok(handle) => Some(handle),
-        Err(error) => {
-            assert!(
-                error.to_string().contains("X402OperationFailed"),
-                "an unprovisioned artifact must fail x402 closed: {error}"
-            );
-            None
-        }
-    };
+    let error = x402_configured.expect_err("unprovisioned storage must fail x402 closed");
+    assert!(
+        error.to_string().contains("X402OperationFailed"),
+        "an unprovisioned artifact must fail x402 closed: {error}"
+    );
     let mut web3_service: Web3ServiceHandle = proxy.call("Web3Configure", ((),)).await.unwrap();
 
     // The new native engine crosses the compiled module ABI, not a copied host
@@ -552,405 +541,6 @@ async fn the_built_module_signs_every_chain_over_a_real_broker() {
         .unwrap_err();
     assert!(stale_quote.to_string().contains("Web3OperationFailed"));
 
-    if let Some(mut x402_service) = x402_service {
-        let challenge = BASE64.encode(
-            serde_json::to_vec(&serde_json::json!({
-                "x402Version": 2,
-                "resource": {"url": "https://fixture.test/resource"},
-                "accepts": [{
-                    "scheme": "exact",
-                    "network": "eip155:1",
-                    "amount": "100",
-                    "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-                    "payTo": "0x0000000000000000000000000000000000000002",
-                    "maxTimeoutSeconds": 60,
-                    "extra": {"name": "USD Coin", "version": "2"}
-                }],
-                "extensions": {}
-            }))
-            .unwrap(),
-        );
-        x402_approved.store(false, Ordering::SeqCst);
-        let denied = proxy
-            .call_confidential::<serde_json::Value>(
-                "X402PreparePayment",
-                (X402PreparePaymentRequest {
-                    service: x402_service.clone(),
-                    url: "https://fixture.test/resource".to_string(),
-                    payment_required: challenge.clone(),
-                    owner: None,
-                    additional_secrets: Vec::new(),
-                    secret: SecretMaterial {
-                        mnemonic: VECTOR.to_string(),
-                        derivation_path: "m/44'/60'/0'/0/0".to_string(),
-                        chain: Chain::Evm,
-                    },
-                },),
-            )
-            .await
-            .unwrap_err();
-        assert!(denied.to_string().contains("X402OperationFailed"));
-        let denied_summary: serde_json::Value = proxy
-            .call(
-                "X402SpendingSummary",
-                (X402SummaryRequest {
-                    service: x402_service.clone(),
-                },),
-            )
-            .await
-            .unwrap();
-        assert_eq!(denied_summary["reserved_atomic"], 0);
-        x402_approved.store(true, Ordering::SeqCst);
-        let mut expensive_challenge: serde_json::Value =
-            serde_json::from_slice(&BASE64.decode(&challenge).unwrap()).unwrap();
-        expensive_challenge["accepts"][0]["amount"] = serde_json::json!("1000001");
-        let expensive_challenge = BASE64.encode(serde_json::to_vec(&expensive_challenge).unwrap());
-        let too_expensive = proxy
-            .call_confidential::<serde_json::Value>(
-                "X402PreparePayment",
-                (X402PreparePaymentRequest {
-                    service: x402_service.clone(),
-                    url: "https://fixture.test/resource".to_string(),
-                    payment_required: expensive_challenge,
-                    owner: None,
-                    additional_secrets: Vec::new(),
-                    secret: SecretMaterial {
-                        mnemonic: VECTOR.to_string(),
-                        derivation_path: "m/44'/60'/0'/0/0".to_string(),
-                        chain: Chain::Evm,
-                    },
-                },),
-            )
-            .await
-            .unwrap_err();
-        assert!(too_expensive.to_string().contains("X402OperationFailed"));
-        let budget_summary: serde_json::Value = proxy
-            .call(
-                "X402SpendingSummary",
-                (X402SummaryRequest {
-                    service: x402_service.clone(),
-                },),
-            )
-            .await
-            .unwrap();
-        assert_eq!(budget_summary["reserved_atomic"], 0);
-        assert_eq!(
-            approved_x402
-                .lock()
-                .unwrap()
-                .as_ref()
-                .unwrap()
-                .amount_atomic,
-            100,
-            "an over-budget payment must be rejected before host authorization"
-        );
-        let payment: serde_json::Value = proxy
-            .call_confidential(
-                "X402PreparePayment",
-                (X402PreparePaymentRequest {
-                    service: x402_service.clone(),
-                    url: "https://fixture.test/resource".to_string(),
-                    payment_required: challenge.clone(),
-                    owner: None,
-                    additional_secrets: Vec::new(),
-                    secret: SecretMaterial {
-                        mnemonic: VECTOR.to_string(),
-                        derivation_path: "m/44'/60'/0'/0/0".to_string(),
-                        chain: Chain::Evm,
-                    },
-                },),
-            )
-            .await
-            .unwrap();
-        assert_ne!(payment["payment_header"].as_str().unwrap(), "");
-        let approved_payment = approved_x402.lock().unwrap().clone().unwrap();
-        assert_eq!(approved_payment.url, "https://fixture.test/resource");
-        assert_eq!(approved_payment.amount_atomic, 100);
-        assert_eq!(approved_payment.network, "eip155:1");
-        assert_eq!(
-            approved_payment.asset,
-            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-        );
-        assert_eq!(
-            approved_payment.recipient,
-            "0x0000000000000000000000000000000000000002"
-        );
-
-        proxy
-            .call::<()>(
-                "X402RecordPayment",
-                (X402RecordPaymentRequest {
-                    service: x402_service.clone(),
-                    payment_id: payment["payment_id"].as_str().unwrap().to_string(),
-                    response_status: 200,
-                    settlement_response: None,
-                },),
-            )
-            .await
-            .unwrap();
-        let spending: serde_json::Value = proxy
-            .call(
-                "X402SpendingSummary",
-                (X402SummaryRequest {
-                    service: x402_service.clone(),
-                },),
-            )
-            .await
-            .unwrap();
-        assert_eq!(spending["session_total_atomic"], 0);
-        assert_eq!(spending["reserved_atomic"], 100);
-
-        let history: X402ListPaymentsResponse = proxy
-            .call(
-                "X402ListPayments",
-                (X402ListPaymentsRequest {
-                    service: x402_service.clone(),
-                    limit: 10,
-                },),
-            )
-            .await
-            .unwrap();
-        assert_eq!(history.payments.len(), 1);
-        assert_eq!(history.payments[0].id, payment["payment_id"]);
-        assert_eq!(history.payments[0].status, X402PaymentStatus::Pending);
-        assert_eq!(history.payments[0].session_id, "module-e2e");
-        assert_eq!(history.payments[0].amount_display, "0.000100 USDC");
-
-        let updated_budget: tinywallet_bus::wire::X402SpendingSummary = proxy
-            .call(
-                "X402UpdateBudget",
-                (X402UpdateBudgetRequest {
-                    service: x402_service.clone(),
-                    per_request_max_atomic: Some(500),
-                    daily_max_atomic: None,
-                    monthly_max_atomic: None,
-                },),
-            )
-            .await
-            .unwrap();
-        assert_eq!(updated_budget.per_request_max_atomic, 500);
-        assert_eq!(updated_budget.daily_max_atomic, 10_000_000);
-        assert_eq!(updated_budget.reserved_atomic, 100);
-
-        let detailed: X402DetailedSpendingSummary = proxy
-            .call(
-                "X402SpendingSummaryDetailed",
-                (X402SummaryRequest {
-                    service: x402_service.clone(),
-                },),
-            )
-            .await
-            .unwrap();
-        assert_eq!(detailed.session_count, 0);
-        assert_eq!(detailed.reserved_atomic, 100);
-
-        let settlement = BASE64.encode(
-            serde_json::to_vec(&serde_json::json!({
-                "success": true,
-                "transaction": "0x1111111111111111111111111111111111111111111111111111111111111111",
-                "network": "eip155:1"
-            }))
-            .unwrap(),
-        );
-        proxy
-            .call::<()>(
-                "X402RecordPayment",
-                (X402RecordPaymentRequest {
-                    service: x402_service.clone(),
-                    payment_id: payment["payment_id"].as_str().unwrap().to_string(),
-                    response_status: 200,
-                    settlement_response: Some(settlement),
-                },),
-            )
-            .await
-            .unwrap();
-        let settled: serde_json::Value = proxy
-            .call(
-                "X402SpendingSummary",
-                (X402SummaryRequest {
-                    service: x402_service.clone(),
-                },),
-            )
-            .await
-            .unwrap();
-        assert_eq!(settled["session_total_atomic"], 100);
-        assert_eq!(settled["reserved_atomic"], 0);
-
-        // Hold an old prepare after it has reserved its amount and entered the
-        // host approval callback. Reconfiguration must wait for that call to
-        // finish. Its exported authorization remains durably budgeted when the
-        // same workspace is reopened under a new session, while the old service
-        // handle becomes unavailable.
-        let old_service = x402_service.clone();
-        let pending_service = old_service.clone();
-        x402_gate.blocked.store(true, Ordering::SeqCst);
-        let prepare_proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
-        let prepare = tokio::spawn(async move {
-            prepare_proxy
-                .call_confidential::<serde_json::Value>(
-                    "X402PreparePayment",
-                    (X402PreparePaymentRequest {
-                        service: pending_service,
-                        url: "https://fixture.test/resource".to_string(),
-                        payment_required: challenge,
-                        owner: None,
-                        additional_secrets: Vec::new(),
-                        secret: SecretMaterial {
-                            mnemonic: VECTOR.to_string(),
-                            derivation_path: "m/44'/60'/0'/0/0".to_string(),
-                            chain: Chain::Evm,
-                        },
-                    },),
-                )
-                .await
-        });
-        x402_gate.started.notified().await;
-        let configure_proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
-        let staged_workspace = staged.path().join("workspace").display().to_string();
-        let configure = tokio::spawn(async move {
-            configure_proxy
-                .call::<X402ServiceHandle>(
-                    "X402Configure",
-                    (X402ConfigureRequest {
-                        config: X402ConfigResponse {
-                            workspace_dir: staged_workspace,
-                            session_id: "module-e2e-switched-user".to_string(),
-                            per_request_max_atomic: 1_000_000,
-                            daily_max_atomic: 10_000_000,
-                            monthly_max_atomic: 100_000_000,
-                        },
-                    },),
-                )
-                .await
-        });
-        tokio::task::yield_now().await;
-        x402_gate.resume.notify_one();
-        let pending = prepare.await.unwrap().unwrap();
-        x402_service = configure.await.unwrap().unwrap();
-        x402_gate.blocked.store(false, Ordering::SeqCst);
-        assert_ne!(x402_service, old_service);
-        let old_summary = proxy
-            .call::<serde_json::Value>(
-                "X402SpendingSummary",
-                (X402SummaryRequest {
-                    service: old_service.clone(),
-                },),
-            )
-            .await
-            .unwrap_err();
-        assert!(old_summary.to_string().contains("X402OperationFailed"));
-        let new_summary: serde_json::Value = proxy
-            .call(
-                "X402SpendingSummary",
-                (X402SummaryRequest {
-                    service: x402_service.clone(),
-                },),
-            )
-            .await
-            .unwrap();
-        assert_eq!(new_summary["reserved_atomic"], 100);
-        assert_eq!(new_summary["session_total_atomic"], 0);
-        let stale_record = proxy
-            .call::<()>(
-                "X402RecordPayment",
-                (X402RecordPaymentRequest {
-                    service: old_service,
-                    payment_id: pending["payment_id"].as_str().unwrap().to_string(),
-                    response_status: 200,
-                    settlement_response: None,
-                },),
-            )
-            .await
-            .unwrap_err();
-        assert!(stale_record.to_string().contains("X402OperationFailed"));
-        let legacy_address: serde_json::Value = proxy
-            .call(
-                "ValidateAddress",
-                (tinywallet_bus::wire::ValidateAddressRequest {
-                    chain: Chain::Evm,
-                    address: "0x0000000000000000000000000000000000000001".to_string(),
-                    sender: false,
-                },),
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            legacy_address["result"]["Ok"],
-            "0x0000000000000000000000000000000000000001"
-        );
-
-        let solana_challenge = BASE64.encode(
-            serde_json::to_vec(&serde_json::json!({
-                "x402Version": 2,
-                "resource": {"url": "https://fixture.test/solana-resource"},
-                "accepts": [{
-                    "scheme": "exact",
-                    "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-                    "amount": "100",
-                    "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-                    "payTo": "11111111111111111111111111111111",
-                    "maxTimeoutSeconds": 60,
-                    "extra": {
-                        "feePayer": "EwWqGE4ZFKLofuestmU4LDdK7XM1N4ALgdZccwYugwGd",
-                        "memo": "module-chain-secret-fixture"
-                    }
-                }],
-                "extensions": {}
-            }))
-            .unwrap(),
-        );
-        let selected_payment: serde_json::Value = proxy
-            .call_confidential(
-                "X402PreparePayment",
-                (X402PreparePaymentRequest {
-                    service: x402_service.clone(),
-                    url: "https://fixture.test/solana-resource".to_string(),
-                    payment_required: solana_challenge,
-                    owner: None,
-                    secret: SecretMaterial {
-                        mnemonic: VECTOR.to_string(),
-                        derivation_path: "m/44'/60'/0'/0/0".to_string(),
-                        chain: Chain::Evm,
-                    },
-                    additional_secrets: vec![SecretMaterial {
-                        mnemonic: VECTOR.to_string(),
-                        derivation_path: "m/44'/501'/0'/0'".to_string(),
-                        chain: Chain::Solana,
-                    }],
-                },),
-            )
-            .await
-            .expect("module must select the Solana secret after parsing the challenge");
-        assert_eq!(
-            selected_payment["network"],
-            "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
-        );
-        assert_eq!(
-            approved_x402.lock().unwrap().as_ref().unwrap().network,
-            "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-            "the actual parsed chain must reach the normal approval callback"
-        );
-
-        proxy
-            .call::<()>(
-                "X402Close",
-                (X402CloseRequest {
-                    service: x402_service.clone(),
-                },),
-            )
-            .await
-            .unwrap();
-        let closed = proxy
-            .call::<serde_json::Value>(
-                "X402SpendingSummary",
-                (X402SummaryRequest {
-                    service: x402_service,
-                },),
-            )
-            .await
-            .unwrap_err();
-        assert!(closed.to_string().contains("HostUnavailable"));
-    }
     host_bad_response.store(true, Ordering::SeqCst);
     let error = proxy
         .call::<serde_json::Value>("Web3Routes", ((),))
