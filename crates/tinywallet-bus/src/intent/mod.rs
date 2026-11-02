@@ -52,7 +52,7 @@ pub fn native_intent_matches_quote(
                 }
                 match quote.kind {
                     PreparedKind::NativeTransfer => {
-                        to == &quote.to_address
+                        to.eq_ignore_ascii_case(&quote.to_address)
                             && value_wei == &quote.amount_raw
                             && data_hex.is_empty()
                     }
@@ -84,15 +84,23 @@ pub fn native_intent_matches_quote(
                 transfer,
                 ..
             } => {
-                if quote.chain != WalletChain::Tron || expected_to != &quote.to_address {
+                if quote.chain != WalletChain::Tron {
                     return false;
                 }
                 match (quote.kind, transfer) {
                     (PreparedKind::NativeTransfer, TronTransfer::Native { amount_sun }) => {
-                        quote.amount_raw.parse::<u64>().ok() == Some(*amount_sun)
+                        expected_to == &quote.to_address
+                            && quote.amount_raw.parse::<u64>().ok() == Some(*amount_sun)
                     }
+                    // A TRC-20 transfer pays the token contract; the recipient
+                    // and amount travel in the call parameter.
                     (PreparedKind::TokenTransfer, TronTransfer::Trc20 { parameter_hex }) => {
-                        valid_hex(parameter_hex)
+                        quote.token_address.as_deref() == Some(expected_to.as_str())
+                            && trc20_parameter_matches(
+                                parameter_hex,
+                                &quote.to_address,
+                                &quote.amount_raw,
+                            )
                     }
                     _ => false,
                 }
@@ -227,6 +235,45 @@ fn evm_transfer_data_matches(data: &str, recipient: &str, amount: &str) -> bool 
         .or_else(|| data.strip_prefix("0X"))
         .unwrap_or(data);
     actual.eq_ignore_ascii_case(&expected)
+}
+
+/// The TRC-20 `transfer(address,uint256)` parameter (no selector) for paying
+/// `amount` to the base58check Tron address `recipient`.
+fn trc20_parameter_matches(parameter: &str, recipient: &str, amount: &str) -> bool {
+    let (Some(address), Some(amount_word)) =
+        (tron_address_body_hex(recipient), decimal_u256_word(amount))
+    else {
+        return false;
+    };
+    parameter.eq_ignore_ascii_case(&format!("{address:0>64}{amount_word}"))
+}
+
+/// The 20 address bytes after the `0x41` prefix of a base58check Tron address,
+/// as lowercase hex. The checksum is not rechecked: the quote's address was
+/// validated when it was prepared, and this crate links no hashing.
+fn tron_address_body_hex(address: &str) -> Option<String> {
+    const ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let mut bytes = [0u8; 25];
+    for digit in address.bytes() {
+        let mut carry = u16::try_from(ALPHABET.iter().position(|&known| known == digit)?).ok()?;
+        for byte in bytes.iter_mut().rev() {
+            let value = u16::from(*byte) * 58 + carry;
+            *byte = (value & 0xff) as u8;
+            carry = value >> 8;
+        }
+        if carry != 0 {
+            return None;
+        }
+    }
+    if bytes[0] != 0x41 {
+        return None;
+    }
+    let mut hex = String::with_capacity(40);
+    for byte in &bytes[1..21] {
+        hex.push(char::from(HEX[usize::from(byte >> 4)]));
+        hex.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    Some(hex)
 }
 
 fn decimal_u256_word(decimal: &str) -> Option<String> {

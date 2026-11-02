@@ -113,6 +113,15 @@ fn native_evm_transfer_uses_the_quoted_network_and_empty_calldata() {
         &quote,
         &evm_intent("recipient", "42", "", 1)
     ));
+    // EIP-55 checksum casing does not change the address.
+    assert!(super::native_intent_matches_quote(
+        &quote,
+        &evm_intent("RECIPIENT", "42", "", 1)
+    ));
+    assert!(!super::native_intent_matches_quote(
+        &quote,
+        &evm_intent("recipient2", "42", "", 1)
+    ));
     assert!(!super::native_intent_matches_quote(
         &quote,
         &evm_intent("recipient", "42", "0x", 1)
@@ -241,40 +250,80 @@ fn native_solana_and_tron_transfers_match_chain_specific_amounts() {
     ));
 }
 
+const TRON_USDT: &str = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
+const TRON_RECIPIENT: &str = "TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH";
+/// `transfer(TRON_RECIPIENT, 25)` without the selector.
+const TRC20_PAY_25: &str = "000000000000000000000000c8599111f29c1e1e061265b4af93ea1f274ad78a\
+                            0000000000000000000000000000000000000000000000000000000000000019";
+
+fn trc20_intent(expected_to: &str, parameter_hex: &str) -> NativeWalletExecutionIntent {
+    NativeWalletExecutionIntent::Transaction {
+        transaction: TransactionSpec::Tron {
+            raw_data_hex: "00".into(),
+            expected_to: expected_to.into(),
+            expected_txid: "txid".into(),
+            transfer: TronTransfer::Trc20 {
+                parameter_hex: parameter_hex.into(),
+            },
+        },
+    }
+}
+
 #[test]
-fn native_token_signing_intents_reject_malformed_hex_and_wrong_quote_kinds() {
-    let tron_quote = prepared_quote(
+fn trc20_intents_bind_the_token_recipient_and_amount() {
+    let mut tron_quote = prepared_quote(
         "tron-token",
         WalletChain::Tron,
         PreparedKind::TokenTransfer,
         "25",
-        "recipient",
+        TRON_RECIPIENT,
     );
-    let valid_tron = NativeWalletExecutionIntent::Transaction {
-        transaction: TransactionSpec::Tron {
-            raw_data_hex: "00".into(),
-            expected_to: "recipient".into(),
-            expected_txid: "txid".into(),
-            transfer: TronTransfer::Trc20 {
-                parameter_hex: "deadbeef".into(),
-            },
-        },
-    };
-    assert!(super::native_intent_matches_quote(&tron_quote, &valid_tron));
-    for parameter_hex in ["", "abc", "0xgg"] {
-        let malformed = NativeWalletExecutionIntent::Transaction {
-            transaction: TransactionSpec::Tron {
-                raw_data_hex: "00".into(),
-                expected_to: "recipient".into(),
-                expected_txid: "txid".into(),
-                transfer: TronTransfer::Trc20 {
-                    parameter_hex: parameter_hex.into(),
-                },
-            },
-        };
-        assert!(!super::native_intent_matches_quote(&tron_quote, &malformed));
+    tron_quote.token_address = Some(TRON_USDT.into());
+    assert!(super::native_intent_matches_quote(
+        &tron_quote,
+        &trc20_intent(TRON_USDT, TRC20_PAY_25)
+    ));
+    assert!(super::native_intent_matches_quote(
+        &tron_quote,
+        &trc20_intent(TRON_USDT, &TRC20_PAY_25.to_ascii_uppercase())
+    ));
+
+    let wrong_amount = TRC20_PAY_25.replace("019", "01a");
+    let wrong_recipient = TRC20_PAY_25.replace("c8599111", "c8599112");
+    for (expected_to, parameter_hex) in [
+        (TRON_USDT, wrong_amount.as_str()),
+        (TRON_USDT, wrong_recipient.as_str()),
+        // Another token contract, or the recipient itself as the call target.
+        ("TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH", TRC20_PAY_25),
+        (TRON_USDT, "deadbeef"),
+        (TRON_USDT, ""),
+        (TRON_USDT, "0xgg"),
+    ] {
+        assert!(
+            !super::native_intent_matches_quote(
+                &tron_quote,
+                &trc20_intent(expected_to, parameter_hex)
+            ),
+            "{expected_to} {parameter_hex}"
+        );
     }
 
+    let mut no_token = tron_quote.clone();
+    no_token.token_address = None;
+    assert!(!super::native_intent_matches_quote(
+        &no_token,
+        &trc20_intent(TRON_USDT, TRC20_PAY_25)
+    ));
+    let mut bad_recipient = tron_quote;
+    bad_recipient.to_address = "recipient".into();
+    assert!(!super::native_intent_matches_quote(
+        &bad_recipient,
+        &trc20_intent(TRON_USDT, TRC20_PAY_25)
+    ));
+}
+
+#[test]
+fn native_token_signing_intents_reject_malformed_hex_and_wrong_quote_kinds() {
     let solana_token_quote = prepared_quote(
         "solana-token",
         WalletChain::Solana,
