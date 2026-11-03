@@ -15,8 +15,13 @@ git submodule update --init --recursive
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo build --all-targets --all-features
-cargo test --all-features
+bash scripts/test-features.sh
 ```
+
+On Windows, run `scripts/test-features.ps1`. These runners exclude the
+`tinywallet-client` native integration tests, then run the client's library
+tests. Use `scripts/test-e2e.sh` or `scripts/test-e2e.ps1` for tests that need
+the wallet module staged.
 
 The bundled example should also run:
 
@@ -55,7 +60,7 @@ regardless.
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings`
 - [ ] `cargo build --all-targets --all-features`
-- [ ] `cargo test --all-features`
+- [ ] `bash scripts/test-features.sh` (or `scripts/test-features.ps1` on Windows)
 - [ ] tests added or updated for behavior changes
 - [ ] documentation updated for public API, architecture, or usage changes
 - [ ] the pull request is focused on one logical change

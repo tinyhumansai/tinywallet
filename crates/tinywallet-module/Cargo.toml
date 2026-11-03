@@ -46,12 +46,12 @@ tinywallet = { path = "../..", default-features = false, features = [
     "abi",
 ] }
 # TinyBus provides the typed service interface and the dynamic module host ABI.
-tinybus = { version = ">=0.3.6, <0.4", git = "https://github.com/tinyhumansai/tinybus", rev = "6ce06bc674e4f4d718aa51e643ef62c1f372e270", default-features = false, features = [
+tinybus = { version = "=0.3.12", git = "https://github.com/senamakel/tinybus", rev = "85345114f3066e94d5d70161ea8dc43252b83ae6", default-features = false, features = [
     "macros",
     "modules",
 ] }
 # The module-side SDK owns its runtime and exports the stable C entrypoints.
-tinybus-module = { version = ">=0.3.6, <0.4", git = "https://github.com/tinyhumansai/tinybus", rev = "6ce06bc674e4f4d718aa51e643ef62c1f372e270" }
+tinybus-module = { version = "=0.3.12", git = "https://github.com/senamakel/tinybus", rev = "85345114f3066e94d5d70161ea8dc43252b83ae6" }
 # The module runtime drives asynchronous host callbacks and serializes service
 # lifecycle changes against in-flight operations.
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
@@ -101,7 +101,7 @@ workspace = true
 
 [dev-dependencies]
 # Testkit-backed module storage fixtures exercise the host's v2 storage ports.
-tinystoragedrivers-testkit = { version = "2.1.0", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "bf1f0a97fbe6165a6edd9521659c7f6859700761" }
+tinystoragedrivers-testkit = { version = "2.1.2", git = "https://github.com/senamakel/tinystoragedrivers", rev = "c447da3" }
 # Encodes and decodes the Solana transaction fixtures in native tests.
 base64 = "0.23"
 # The native lifecycle fixture stages and hashes the actual cdylib to attest it.
@@ -110,7 +110,7 @@ sha2 = "0.11"
 tempfile = "3"
 # The loader E2E admits the built module from its adjacent digest manifest and
 # uses TinyBus's shared lifecycle helpers.
-tinybus = { version = ">=0.3.6, <0.4", git = "https://github.com/tinyhumansai/tinybus", rev = "6ce06bc674e4f4d718aa51e643ef62c1f372e270", default-features = false, features = [
+tinybus = { version = "=0.3.12", git = "https://github.com/senamakel/tinybus", rev = "85345114f3066e94d5d70161ea8dc43252b83ae6", default-features = false, features = [
     "macros",
     "modules",
     "test-support",

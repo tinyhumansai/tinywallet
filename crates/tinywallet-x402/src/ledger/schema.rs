@@ -87,7 +87,8 @@ async fn migrate_budgets(documents: &dyn DocumentStore) -> tinystoragedrivers_ty
     let Some(legacy) = documents.get(LEGACY_BUDGET_COLLECTION, HOLDS_ID).await? else {
         return Ok(());
     };
-    let holds = renamed_holds(&legacy.doc).unwrap_or_default();
+    let holds = renamed_holds(&legacy.doc)
+        .ok_or_else(|| StorageError::invalid_input("legacy budget holds document is malformed"))?;
     let migrated = json!({ "holds": holds.clone() });
     match documents.get(BUDGETS_COLLECTION, HOLDS_ID).await? {
         Some(existing) if budget_target_matches(&existing, &migrated, legacy.meta.expires_ms) => {

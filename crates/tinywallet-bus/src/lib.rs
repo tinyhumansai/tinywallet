@@ -21,9 +21,12 @@
 //! The `serde` feature derives wire serialization; `wire` enables call DTOs.
 //! Legacy feature names remain accepted but never enable implementation code.
 
+#[cfg(feature = "wire")]
+pub mod intent;
 pub mod mnemonic;
 pub mod names;
 pub mod storage;
+mod storage_names;
 #[cfg(feature = "wire")]
 pub mod tools;
 pub mod version;
@@ -46,6 +49,7 @@ pub use names::{
     BUS_NAME, CONFIDENTIAL_METHODS, HOST_INTERFACE, HOST_METHODS, HOST_OBJECT_PATH, METHODS,
     OBJECT_PATH,
 };
+pub use storage_names::{BUDGETS_COLLECTION, PAYMENTS_STREAM};
 pub use version::{CONTRACT_VERSION, is_compatible};
 
 #[cfg(test)]

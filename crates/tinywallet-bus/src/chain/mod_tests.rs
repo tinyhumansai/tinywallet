@@ -6,6 +6,9 @@ use std::str::FromStr;
 
 use super::{Chain, UnknownChain};
 
+#[cfg(feature = "wire")]
+use crate::wire::{EvmNetwork, RpcEndpointKey};
+
 #[test]
 fn as_str_round_trips_through_from_str() {
     for chain in Chain::ALL {
@@ -53,5 +56,30 @@ fn an_unknown_name_is_reported_with_the_input() {
     assert_eq!(
         Chain::from_str("dogecoin").unwrap_err(),
         UnknownChain("dogecoin".to_string())
+    );
+}
+
+#[cfg(feature = "wire")]
+#[test]
+fn endpoint_keys_cover_known_chains_and_reject_unknown_evm_ids() {
+    for network in EvmNetwork::ALL {
+        assert_eq!(
+            super::endpoint_key(Chain::Evm, Some(network.chain_id())),
+            Some(RpcEndpointKey::Evm { network })
+        );
+    }
+    assert_eq!(super::endpoint_key(Chain::Evm, None), None);
+    assert_eq!(super::endpoint_key(Chain::Evm, Some(u64::MAX)), None);
+    assert_eq!(
+        super::endpoint_key(Chain::Btc, Some(u64::MAX)),
+        Some(RpcEndpointKey::Btc)
+    );
+    assert_eq!(
+        super::endpoint_key(Chain::Solana, None),
+        Some(RpcEndpointKey::Solana)
+    );
+    assert_eq!(
+        super::endpoint_key(Chain::Tron, None),
+        Some(RpcEndpointKey::Tron)
     );
 }

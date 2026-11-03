@@ -119,6 +119,16 @@ fn the_contract_accepts_its_own_version_and_newer_minors() {
 }
 
 #[test]
+fn storage_declarations_are_available_from_the_bus_contract() {
+    let names = super::storage_collections()
+        .into_iter()
+        .map(|collection| collection.name)
+        .collect::<Vec<_>>();
+
+    assert_eq!(names, ["wallet.budgets", "wallet.migrations"]);
+}
+
+#[test]
 fn the_identity_matches_the_path_the_module_serves() {
     // Both spellings appear in the module's `serve_at` / `request_name` pair,
     // and a host that guesses one of them gets `NameHasNoOwner` at call time.
@@ -183,16 +193,6 @@ fn the_method_list_is_sorted_complete_and_free_of_duplicates() {
             "{member} is missing from METHODS"
         );
     }
-}
-
-#[test]
-fn storage_declarations_are_available_from_the_bus_contract() {
-    let names = super::storage_collections()
-        .into_iter()
-        .map(|collection| collection.name)
-        .collect::<Vec<_>>();
-
-    assert_eq!(names, ["wallet.budgets", "wallet.migrations"]);
 }
 
 #[cfg(feature = "wire")]

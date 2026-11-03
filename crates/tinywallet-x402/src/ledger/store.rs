@@ -70,7 +70,14 @@ impl PaymentLedger {
         session_id: &str,
         budget: SpendingBudget,
     ) -> Result<Self, String> {
-        let persist = Persist::open(storage)?;
+        Self::from_persist(Persist::open(storage)?, session_id, budget)
+    }
+
+    fn from_persist(
+        persist: Persist,
+        session_id: &str,
+        budget: SpendingBudget,
+    ) -> Result<Self, String> {
         let (records, next_offset) = persist.read_from(0)?;
         debug!(
             "{LOG_PREFIX} loaded {} existing payment records",

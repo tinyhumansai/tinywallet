@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
 report="target/coverage.json"
-cargo llvm-cov --workspace --all-features --all-targets --json --output-path "$report"
+cargo llvm-cov --workspace --exclude tinywallet-client --all-features --all-targets --json --output-path "$report"
 below="$(jq -r --arg root "$PWD" '
   .data[0].files[]
   | select(.filename | contains("/src/"))

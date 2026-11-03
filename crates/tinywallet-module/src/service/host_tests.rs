@@ -83,3 +83,19 @@ async fn missing_host_is_reported_without_fallback() {
     assert_ne!(error, "");
     broker_task.abort();
 }
+
+#[tokio::test]
+async fn missing_storage_host_fails_closed_for_the_payment_ledger() {
+    let bus = tinybus::transport::memory::MemoryBus::new();
+    let broker = tinybus::broker::Broker::new();
+    let broker_task = broker.spawn(bus.clone());
+    let connection = Connection::connect(bus.connect().await.unwrap())
+        .await
+        .unwrap();
+    let callbacks = HostCallbacks::new(&connection).unwrap();
+
+    let error = callbacks.ledger_storage().await.unwrap_err();
+
+    assert!(error.contains("x402 ledger storage is unavailable"));
+    broker_task.abort();
+}

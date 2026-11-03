@@ -1,0 +1,43 @@
+[package]
+name = "tinywallet-client"
+version = "0.27.0"
+edition = "2024"
+rust-version = "1.88"
+license = "GPL-3.0-only"
+description = "Typed TinyBus host client for the TinyWallet module."
+repository = "https://github.com/tinyhumansai/tinywallet"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tinywallet-bus = { path = "../tinywallet-bus", default-features = false, features = ["wire"] }
+tinybus.workspace = true
+zeroize = "1"
+
+[dev-dependencies]
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt", "sync"] }
+tinybus = { workspace = true, features = ["macros", "modules"] }
+
+[features]
+default = []
+# Exercises the locally built cdylib through its hash-verified TinyBus cache.
+# The feature and runner stage the required archive and distinct library pin.
+native-e2e = []
+[[test]]
+name = "native_e2e"
+path = "tests/native_e2e.rs"
+required-features = ["native-e2e"]
+
+[[test]]
+name = "native_unattested"
+path = "tests/native_unattested.rs"
+required-features = ["native-e2e"]
+
+[[test]]
+name = "attested_errors"
+path = "tests/attested_errors.rs"
+required-features = ["native-e2e"]
+
+[lints]
+workspace = true

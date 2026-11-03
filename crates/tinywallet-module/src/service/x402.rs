@@ -119,8 +119,10 @@ impl X402Runtime {
     ///
     /// # Errors
     ///
-    /// The storage cannot be opened or read. The previous process-wide ledger,
-    /// if any, is left in place.
+    /// The storage cannot be opened or read, or the ledger's own migration
+    /// cannot complete. The previous process-wide ledger, if any, is left in
+    /// place. The host must ensure the wallet collections in this module's
+    /// scope before calling this operation.
     pub(crate) fn new(
         callbacks: HostCallbacks,
         config: X402ConfigResponse,

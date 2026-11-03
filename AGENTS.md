@@ -87,20 +87,26 @@ the crate-wide `Result<T>` from fallible public APIs.
 
 ## Build And Test
 
-Run every command from the repository root. These four are the contract; CI
-runs exactly them, so a green local run should mean a green CI run.
+Run every command from the repository root. CI builds and lints the workspace
+directly. The `tinywallet-client` native integration tests need a staged
+release module, so the feature runner excludes them. Run them with
+`scripts/test-e2e.sh` or `scripts/test-e2e.ps1`.
 
 ```sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo build --all-targets --all-features
-cargo test --all-features
+bash scripts/test-features.sh
 ```
 
 Supporting commands:
 
 - `cargo fmt --all` — format before committing.
 - `cargo test <filter>` — run a focused subset while iterating.
+- `scripts/test-features.sh` (or `scripts/test-features.ps1` on Windows) — run
+  workspace tests excluding `tinywallet-client`, then the client's library
+  tests. A bare `cargo test --all-features` would include native client tests
+  without their staged module and is not the supported full test command.
 - `cargo run --example basic` — run the bundled example.
 - `cargo doc --no-deps --all-features` — build the rustdoc CI also builds with
   `RUSTDOCFLAGS="-D warnings"`.

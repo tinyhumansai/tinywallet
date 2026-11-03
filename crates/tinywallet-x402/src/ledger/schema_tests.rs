@@ -390,7 +390,15 @@ fn host_declarations_are_pure_wallet_collection_specs() {
 
 #[test]
 fn ledger_and_bus_declare_the_same_collections() {
-    assert_eq!(collections(), tinywallet_bus::storage::collections());
+    let bus_names = tinywallet_bus::storage::collections()
+        .into_iter()
+        .map(|collection| collection.name)
+        .collect::<Vec<_>>();
+    let ledger_names = collections()
+        .into_iter()
+        .map(|collection| collection.name)
+        .collect::<Vec<_>>();
+    assert_eq!(ledger_names, bus_names);
 }
 
 #[test]
@@ -790,6 +798,48 @@ fn invalid_legacy_payment_rows_are_skipped_without_changing_the_stream_name_cont
         serde_json::Map::new()
     );
     assert!(super::renamed_holds(&json!({ "holds": [] })).is_none());
+}
+
+#[test]
+fn malformed_legacy_budget_holds_abort_migration_without_marking_it_complete() {
+    let storage = test_storage();
+    let documents = Arc::clone(storage.documents());
+    Blocking::new()
+        .unwrap()
+        .run(async move {
+            documents
+                .put(
+                    "x402_budget",
+                    HOLDS_ID,
+                    json!({ "holds": { "reserved": { "amount": "12", "expires_at_ms": 1_800_000_000_000_i64 } } }),
+                    Precondition::Absent,
+                )
+                .await
+        })
+        .unwrap()
+        .unwrap();
+
+    let documents = Arc::clone(storage.documents());
+    let streams = Arc::clone(storage.streams());
+    let result = Blocking::new()
+        .unwrap()
+        .run(async move { super::migrate(documents.as_ref(), streams.as_ref()).await })
+        .unwrap();
+
+    assert!(result.is_err(), "malformed holds must stop migration");
+    let documents = Arc::clone(storage.documents());
+    let (target, marker) = Blocking::new()
+        .unwrap()
+        .run(async move {
+            Ok::<_, tinystoragedrivers_types::StorageError>((
+                documents.get(BUDGETS_COLLECTION, HOLDS_ID).await?,
+                documents.get("wallet.migrations", "x402").await?,
+            ))
+        })
+        .unwrap()
+        .unwrap();
+    assert!(target.is_none(), "invalid reservations must not be dropped");
+    assert!(marker.is_none(), "a failed migration must remain retryable");
 }
 
 #[test]

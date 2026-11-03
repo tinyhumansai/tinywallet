@@ -4,21 +4,20 @@
 
 use super::*;
 
-use tinystoragedrivers_types::CollectionSpec;
-
 #[test]
 fn every_stored_item_is_wallet_owned_and_module_scoped() {
-    let collections = storage_collections();
+    let collections = storage_collections()
+        .into_iter()
+        .map(|collection| collection.name)
+        .collect::<Vec<_>>();
     for collection in &collections {
-        assert!(
-            collection.name.starts_with("wallet."),
-            "{}",
-            collection.name
-        );
+        assert!(collection.starts_with("wallet."), "{}", collection);
     }
-    assert!(
-        collections
-            .iter()
-            .any(|item| *item == CollectionSpec::new("wallet.budgets"))
+    assert_eq!(
+        collections,
+        vec![
+            "wallet.budgets".to_string(),
+            "wallet.migrations".to_string()
+        ]
     );
 }
