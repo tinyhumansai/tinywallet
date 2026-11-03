@@ -47,6 +47,16 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertNotIn("git push", self.workflow)
         self.assertNotIn("cargo package", self.workflow)
 
+    def test_release_runs_only_the_main_tag_path(self):
+        """Releases come only from official main: no reviewed-epic mode remains."""
+        inputs = self.workflow.split("    inputs:\n", 1)[1].split("  push:\n", 1)[0]
+        self.assertEqual(re.findall(r"(?m)^      (\w+):$", inputs), ["tag"])
+        jobs = re.findall(r"(?m)^  ([\w-]+):$", self.workflow.split("\njobs:\n", 1)[1])
+        self.assertEqual(jobs, ["resolve", "module-release"])
+        for epic_only in ("reviewed-epic", "reviewed_pr", "inputs.mode", "epic/"):
+            self.assertNotIn(epic_only, self.workflow)
+        self.assertEqual(self.workflow.count("uses: tinyhumansai/.github/"), 1)
+
     def test_module_build_accepts_versioned_host_labels_without_paths(self):
         result = subprocess.run(
             [

@@ -60,7 +60,6 @@ jobs:
         run: |
           python3 scripts/check_bus_boundaries_tests.py
           python3 scripts/release_workflow_tests.py
-          python3 scripts/test_reviewed_release_workflow.py
           python3 scripts/test_native_e2e_topology.py
           python3 scripts/check-bus-boundaries.py
       - name: Implementation crates pull no signing stack
