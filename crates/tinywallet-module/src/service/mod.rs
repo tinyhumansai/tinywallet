@@ -447,6 +447,26 @@ impl Wallet {
             .map_err(native_wallet_operation_failed)
     }
 
+    /// Read catalogued token balances (SPL mints on Solana) for the
+    /// configured accounts. Contract 1.15.
+    async fn native_wallet_token_balances(
+        &self,
+        request: tinywallet_bus::wire::NativeWalletServiceRequest,
+    ) -> BusResult<Vec<tinywallet_bus::wire::TokenBalanceInfo>> {
+        let active = self.native.read().await;
+        let Some(active) = active.as_ref() else {
+            return Err(host_unavailable());
+        };
+        active
+            .require_handle(&request.service)
+            .map_err(native_wallet_operation_failed)?;
+        active
+            .engine
+            .token_balances()
+            .await
+            .map_err(native_wallet_operation_failed)
+    }
+
     /// Validate and store an owner-scoped transfer quote inside the module.
     async fn native_wallet_prepare_transfer(
         &self,
@@ -1537,6 +1557,7 @@ mod exports {
             "NativeWalletSupportedAssets",
             "NativeWalletChainStatus",
             "NativeWalletBalances",
+            "NativeWalletTokenBalances",
             "NativeWalletPrepareTransfer",
             "NativeWalletExecutePrepared",
             "NativeWalletTxStatus",

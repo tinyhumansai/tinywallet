@@ -893,3 +893,109 @@ async fn an_erc20_transfer_pays_the_contract_zero_with_the_recipient_in_calldata
         other => panic!("expected an EVM spec, got {other:?}"),
     }
 }
+
+const MAINNET_USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const DEVNET_USDC: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
+
+fn parsed_token_account(mint: &str, amount: &str) -> Value {
+    json!({
+        "pubkey": "TokenAccount1111111111111111111111111111111",
+        "account": {
+            "data": {
+                "program": "spl-token",
+                "parsed": {
+                    "type": "account",
+                    "info": {
+                        "mint": mint,
+                        "owner": sample_address(WalletChain::Solana),
+                        "tokenAmount": {"amount": amount, "decimals": 6, "uiAmountString": "x"}
+                    }
+                }
+            }
+        }
+    })
+}
+
+#[tokio::test]
+async fn token_balances_sum_every_spl_account_of_the_catalog_usdc_mint() {
+    let rig = Rig::new();
+    rig.transport.on_rpc(
+        "getTokenAccountsByOwner",
+        json!({
+            "context": {"slot": 1},
+            "value": [
+                parsed_token_account(MAINNET_USDC, "1500000"),
+                parsed_token_account(MAINNET_USDC, "250000"),
+            ]
+        }),
+    );
+
+    let rows = rig.engine.token_balances().await.unwrap();
+
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    let usdc = &rows[0];
+    assert_eq!(usdc.chain, WalletChain::Solana);
+    assert_eq!(usdc.asset_symbol, "USDC");
+    assert_eq!(usdc.token_address, MAINNET_USDC);
+    assert_eq!(usdc.address, sample_address(WalletChain::Solana));
+    assert_eq!(usdc.raw, "1750000");
+    assert_eq!(usdc.formatted, "1.750000");
+    assert_eq!(usdc.provider_status, ProviderStatus::Ready);
+
+    let (method, params) = rig
+        .transport
+        .rpc_calls()
+        .into_iter()
+        .find(|(method, _)| method == "getTokenAccountsByOwner")
+        .unwrap();
+    assert_eq!(method, "getTokenAccountsByOwner");
+    assert_eq!(params[0], sample_address(WalletChain::Solana));
+    assert_eq!(params[1], json!({"mint": MAINNET_USDC}));
+    assert_eq!(params[2], json!({"encoding": "jsonParsed"}));
+}
+
+#[tokio::test]
+async fn token_balances_use_the_devnet_mint_on_devnet_and_read_no_accounts_as_zero() {
+    let rig = Rig::new();
+    rig.endpoints
+        .set_cluster(tinywallet_bus::wire::SolanaCluster::Devnet);
+    rig.transport.on_rpc(
+        "getTokenAccountsByOwner",
+        json!({"context": {"slot": 1}, "value": []}),
+    );
+
+    let rows = rig.engine.token_balances().await.unwrap();
+
+    assert_eq!(rows[0].token_address, DEVNET_USDC);
+    assert_eq!(rows[0].raw, "0");
+    assert_eq!(rows[0].provider_status, ProviderStatus::Ready);
+}
+
+#[tokio::test]
+async fn token_balances_mark_an_unreadable_or_foreign_mint_answer_missing() {
+    let rig = Rig::new();
+    // Nothing scripted: the read fails.
+    let rows = rig.engine.token_balances().await.unwrap();
+    assert_eq!(rows[0].raw, "0");
+    assert_eq!(rows[0].provider_status, ProviderStatus::Missing);
+
+    // An account for another mint is not counted as USDC.
+    let rig = Rig::new();
+    rig.transport.on_rpc(
+        "getTokenAccountsByOwner",
+        json!({"value": [parsed_token_account(DEVNET_USDC, "9")]}),
+    );
+    let rows = rig.engine.token_balances().await.unwrap();
+    assert_eq!(rows[0].raw, "0");
+    assert_eq!(rows[0].provider_status, ProviderStatus::Missing);
+}
+
+#[tokio::test]
+async fn token_balances_need_a_configured_wallet() {
+    let rig = Rig::new();
+    rig.accounts.set(Ok(FakeWalletAccounts::unconfigured()));
+    assert_eq!(
+        rig.engine.token_balances().await.unwrap_err(),
+        WALLET_NOT_CONFIGURED_MESSAGE
+    );
+}

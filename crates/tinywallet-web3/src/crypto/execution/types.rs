@@ -7,7 +7,7 @@ use crate::quote::Quoted;
 pub use tinywallet_bus::wire::{
     BalanceInfo, ChainStatus, ExecutePreparedParams, ExecutionResult, PrepareTransferParams,
     PreparedKind, PreparedStatus, PreparedTransaction, ProviderStatus, SupportedAsset,
-    TxLookupInfo, TxReceiptInfo, TxState, TxStatusInfo,
+    TokenBalanceInfo, TxLookupInfo, TxReceiptInfo, TxState, TxStatusInfo,
 };
 
 /// The owner-bound record held in the implementation's quote store.

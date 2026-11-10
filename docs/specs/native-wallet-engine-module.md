@@ -23,6 +23,7 @@ The native service exposes the current engine surface through typed requests:
 - configure and close one opaque, host-owned-user-scoped service handle;
 - list network defaults and supported assets;
 - query chain readiness and native balances;
+- query catalogued token balances (SPL mints on Solana; contract 1.15);
 - prepare and execute a transfer;
 - read transaction status, receipt, and raw transaction by chain and hash.
 

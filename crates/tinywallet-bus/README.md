@@ -47,6 +47,12 @@ argument schemas for all six wallet, seven Web3 and one x402 tools. The
 implementation crates keep their `tinytools::Tool` adapters and delegate those
 declarations here. A pre-move fixture pins the established tool JSON.
 
+Contract 1.15 adds `NativeWalletTokenBalances`: catalogued token balances
+(today the cluster's USDC SPL mint on Solana, read with
+`getTokenAccountsByOwner` / `jsonParsed` and summed over the owner's token
+accounts) as `TokenBalanceInfo` rows, kept apart from the native
+`BalanceInfo` rows so existing consumers keep one row per network.
+
 Contract 1.7 adds `Web3ConfigureWithEndpoints` alongside the unchanged
 `Web3Configure(())` member. Hosts that need configured RPC overrides pass the
 Solana cluster and overridden endpoint keys, never endpoint URLs. The module
