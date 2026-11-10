@@ -79,6 +79,60 @@ pub(crate) async fn native_balance(engine: &WalletEngine, address: &str) -> Resu
     Ok(u128::from(result.value))
 }
 
+/// Balance of one SPL `mint` held by `owner`, in the mint's atomic units.
+///
+/// Reads `getTokenAccountsByOwner` filtered to the mint with the `jsonParsed`
+/// encoding and sums `tokenAmount.amount` over every token account returned
+/// (the associated account and any others). No accounts is a zero balance.
+pub(crate) async fn token_balance(
+    engine: &WalletEngine,
+    owner: &str,
+    mint: &str,
+) -> Result<u128, String> {
+    validate_solana_address(owner)?;
+    validate_solana_address(mint)?;
+    let result: serde_json::Value = engine
+        .rpc_call(
+            WalletChain::Solana,
+            "getTokenAccountsByOwner",
+            json!([owner, {"mint": mint}, {"encoding": "jsonParsed"}]),
+        )
+        .await?;
+    sum_parsed_token_amounts(&result, mint)
+}
+
+/// Sum `tokenAmount.amount` over a `getTokenAccountsByOwner` (`jsonParsed`)
+/// result, refusing an account for another mint or an unparsable amount.
+pub(crate) fn sum_parsed_token_amounts(
+    result: &serde_json::Value,
+    mint: &str,
+) -> Result<u128, String> {
+    let accounts = result
+        .get("value")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "getTokenAccountsByOwner returned no account list".to_string())?;
+    let mut total: u128 = 0;
+    for entry in accounts {
+        let info = entry
+            .pointer("/account/data/parsed/info")
+            .ok_or_else(|| "getTokenAccountsByOwner returned an unparsed account".to_string())?;
+        if info.get("mint").and_then(serde_json::Value::as_str) != Some(mint) {
+            return Err("getTokenAccountsByOwner returned an account for another mint".into());
+        }
+        let amount = info
+            .pointer("/tokenAmount/amount")
+            .and_then(serde_json::Value::as_str)
+            .and_then(|amount| amount.parse::<u128>().ok())
+            .ok_or_else(|| {
+                "getTokenAccountsByOwner returned an invalid token amount".to_string()
+            })?;
+        total = total
+            .checked_add(amount)
+            .ok_or_else(|| "token balance overflow".to_string())?;
+    }
+    Ok(total)
+}
+
 /// The wallet's Solana public key, as the signer derives it.
 async fn signer_pubkey(engine: &WalletEngine) -> Result<[u8; 32], String> {
     let account = engine.signer.derive_account(WalletChain::Solana).await?;

@@ -110,7 +110,7 @@ fn network_request_keeps_legacy_json_and_omits_unset_endpoint_url() {
 
 #[test]
 fn the_contract_accepts_its_own_version_and_newer_minors() {
-    assert_eq!(CONTRACT_VERSION, (1, 14));
+    assert_eq!(CONTRACT_VERSION, (1, 15));
     assert!(is_compatible(CONTRACT_VERSION));
     assert!(is_compatible((CONTRACT_VERSION.0, CONTRACT_VERSION.1 + 1)));
     assert!(!is_compatible((CONTRACT_VERSION.0 + 1, 0)));
@@ -146,7 +146,7 @@ fn the_method_list_is_sorted_complete_and_free_of_duplicates() {
         METHODS,
         "sorted dispatch order, no repeats"
     );
-    assert_eq!(METHODS.len(), 38);
+    assert_eq!(METHODS.len(), 39);
     for member in [
         names::methods::ATTACH_SIGNATURE,
         names::methods::BUILD_UNSIGNED,
@@ -174,6 +174,7 @@ fn the_method_list_is_sorted_complete_and_free_of_duplicates() {
         names::methods::NATIVE_WALLET_SUPPORTED_ASSETS,
         names::methods::NATIVE_WALLET_CHAIN_STATUS,
         names::methods::NATIVE_WALLET_BALANCES,
+        names::methods::NATIVE_WALLET_TOKEN_BALANCES,
         names::methods::NATIVE_WALLET_PREPARE_TRANSFER,
         names::methods::NATIVE_WALLET_EXECUTE_PREPARED,
         names::methods::NATIVE_WALLET_TX_STATUS,
@@ -284,13 +285,14 @@ fn native_wallet_members_are_additive_and_use_one_typed_argument() {
         methods::NATIVE_WALLET_SUPPORTED_ASSETS,
         methods::NATIVE_WALLET_CHAIN_STATUS,
         methods::NATIVE_WALLET_BALANCES,
+        methods::NATIVE_WALLET_TOKEN_BALANCES,
         methods::NATIVE_WALLET_PREPARE_TRANSFER,
         methods::NATIVE_WALLET_EXECUTE_PREPARED,
         methods::NATIVE_WALLET_TX_STATUS,
         methods::NATIVE_WALLET_TX_RECEIPT,
         methods::NATIVE_WALLET_LOOKUP_TX,
     ];
-    assert_eq!(METHODS.len(), 38);
+    assert_eq!(METHODS.len(), 39);
     assert!(native_members.iter().all(|member| METHODS.contains(member)));
     assert_eq!(HOST_METHODS.len(), 6);
     assert!(HOST_METHODS.contains(&host_methods::AUTHORIZE_NATIVE_WALLET_EXECUTION));
@@ -414,4 +416,30 @@ fn every_confidential_member_is_a_member() {
     assert!(!CONFIDENTIAL_METHODS.contains(&names::methods::ATTACH_SIGNATURE));
     assert!(CONFIDENTIAL_METHODS.contains(&names::methods::GENERATE_MNEMONIC));
     assert!(CONFIDENTIAL_METHODS.contains(&names::methods::DERIVE_MNEMONIC_SEED));
+}
+
+#[cfg(feature = "wire")]
+#[test]
+fn token_balance_rows_serialize_in_camel_case_with_the_mint() {
+    use crate::wire;
+    let row = wire::TokenBalanceInfo {
+        chain: wire::WalletChain::Solana,
+        evm_network: None,
+        address: "Owner".into(),
+        asset_symbol: "USDC".into(),
+        token_address: "Mint".into(),
+        decimals: 6,
+        raw: "1500000".into(),
+        formatted: "1.500000".into(),
+        provider_status: wire::ProviderStatus::Ready,
+    };
+    let value = serde_json::to_value(&row).unwrap();
+    assert_eq!(value["tokenAddress"], "Mint");
+    assert_eq!(value["assetSymbol"], "USDC");
+    assert_eq!(value["providerStatus"], "ready");
+    assert!(value.get("evmNetwork").is_none());
+    assert_eq!(
+        serde_json::from_value::<wire::TokenBalanceInfo>(value).unwrap(),
+        row
+    );
 }

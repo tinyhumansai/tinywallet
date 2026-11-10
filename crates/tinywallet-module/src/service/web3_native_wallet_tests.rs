@@ -108,6 +108,19 @@ async fn native_wallet_configuration_uses_opaque_endpoint_references_and_invalid
         .await
         .unwrap();
     assert_eq!(balances.len(), 6);
+    let tokens = wallet
+        .native_wallet_token_balances(NativeWalletServiceRequest {
+            service: old.clone(),
+        })
+        .await
+        .unwrap();
+    // The devnet catalog's USDC mint, read for the Solana account.
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].asset_symbol, "USDC");
+    assert_eq!(
+        tokens[0].token_address,
+        "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
+    );
 
     // A provider read proves the opaque reference is carried to the host
     // callback while the URL stays inside the host.

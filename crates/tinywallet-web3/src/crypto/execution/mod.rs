@@ -36,7 +36,7 @@ pub(crate) use types::PreparedTransferQuote;
 pub use types::{
     BalanceInfo, ChainStatus, ExecutePreparedParams, ExecutionResult, PrepareTransferParams,
     PreparedKind, PreparedStatus, PreparedTransaction, ProviderStatus, RawBroadcastResult,
-    SupportedAsset, TxLookupInfo, TxReceiptInfo, TxState, TxStatusInfo,
+    SupportedAsset, TokenBalanceInfo, TxLookupInfo, TxReceiptInfo, TxState, TxStatusInfo,
 };
 pub use validate::{hex_to_bytes, hex_to_u128, u128_to_hex};
 

@@ -12,7 +12,7 @@ use crate::crypto::wallet::{WalletAccount, WalletChain, WalletEngine};
 use crate::quote::WALLET_NOT_CONFIGURED_MESSAGE;
 
 use super::LOG_PREFIX;
-use super::types::{BalanceInfo, ChainStatus, ProviderStatus, SupportedAsset};
+use super::types::{BalanceInfo, ChainStatus, ProviderStatus, SupportedAsset, TokenBalanceInfo};
 use super::validate::format_amount;
 
 /// EVM networks surfaced as their own native-balance rows. The single derived
@@ -177,6 +177,64 @@ impl WalletEngine {
             }
         }
         debug!("{LOG_PREFIX} balances returned rows={}", out.len());
+        Ok(out)
+    }
+
+    /// Live balances of the catalogued tokens: today every SPL mint in the
+    /// Solana catalog for the configured cluster (USDC; devnet or mainnet
+    /// mint). One row per token, a provider failure yields a zero row marked
+    /// [`ProviderStatus::Missing`] rather than failing the read.
+    ///
+    /// # Errors
+    ///
+    /// [`WALLET_NOT_CONFIGURED_MESSAGE`] when the wallet is not set up, or the
+    /// host's error if the status cannot be read.
+    pub async fn token_balances(&self) -> Result<Vec<TokenBalanceInfo>, String> {
+        let status = self.accounts.status().await?;
+        if !status.configured {
+            return Err(WALLET_NOT_CONFIGURED_MESSAGE.to_string());
+        }
+        let cluster = self.endpoints.solana_cluster();
+        let mut out = Vec::new();
+        for account in status
+            .accounts
+            .iter()
+            .filter(|account| account.chain == WalletChain::Solana)
+        {
+            for asset in asset_catalog(WalletChain::Solana, cluster) {
+                let Some(mint) = asset.contract_address.clone() else {
+                    continue;
+                };
+                let (raw, provider_status) = match solana::token_balance(
+                    self,
+                    &account.address,
+                    &mint,
+                )
+                .await
+                {
+                    Ok(balance) => (balance, ProviderStatus::Ready),
+                    Err(error) => {
+                        warn!(
+                            "{LOG_PREFIX} token_balances symbol={} falling back to zero: {error}",
+                            asset.symbol
+                        );
+                        (0, ProviderStatus::Missing)
+                    }
+                };
+                out.push(TokenBalanceInfo {
+                    chain: WalletChain::Solana,
+                    evm_network: None,
+                    address: account.address.clone(),
+                    asset_symbol: asset.symbol,
+                    token_address: mint,
+                    decimals: asset.decimals,
+                    raw: raw.to_string(),
+                    formatted: format_amount(raw, asset.decimals),
+                    provider_status,
+                });
+            }
+        }
+        debug!("{LOG_PREFIX} token_balances returned rows={}", out.len());
         Ok(out)
     }
 

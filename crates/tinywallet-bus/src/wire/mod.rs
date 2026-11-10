@@ -62,8 +62,9 @@ pub use wallet::{
     NativeWalletExecuteRequest, NativeWalletExecutionIntent, NativeWalletPrepareTransferRequest,
     NativeWalletServiceHandle, NativeWalletServiceRequest, NativeWalletTransactionRequest,
     PrepareTransferParams, PreparedKind, PreparedStatus, PreparedTransaction, ProviderStatus,
-    RpcEndpointKey, RpcSource, SolanaCluster, SupportedAsset, TxLookupInfo, TxReceiptInfo, TxState,
-    TxStatusInfo, WalletAssetDefinition, WalletChain, WalletNetworkDefaults,
+    RpcEndpointKey, RpcSource, SolanaCluster, SupportedAsset, TokenBalanceInfo, TxLookupInfo,
+    TxReceiptInfo, TxState, TxStatusInfo, WalletAssetDefinition, WalletChain,
+    WalletNetworkDefaults,
 };
 
 use crate::Chain;

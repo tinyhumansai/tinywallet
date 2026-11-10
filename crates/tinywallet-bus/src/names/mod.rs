@@ -94,6 +94,9 @@ pub mod methods {
     pub const NATIVE_WALLET_BALANCES: &str = "NativeWalletBalances";
     /// Prepare a native wallet transfer quote.
     pub const NATIVE_WALLET_PREPARE_TRANSFER: &str = "NativeWalletPrepareTransfer";
+    /// Read catalogued token balances (SPL mints on Solana) for the configured
+    /// accounts. Contract 1.15.
+    pub const NATIVE_WALLET_TOKEN_BALANCES: &str = "NativeWalletTokenBalances";
     /// Execute a prepared native wallet transfer.
     pub const NATIVE_WALLET_EXECUTE_PREPARED: &str = "NativeWalletExecutePrepared";
     /// Read native wallet transaction status.
@@ -141,6 +144,7 @@ pub const METHODS: &[&str] = &[
     methods::NATIVE_WALLET_NETWORK_DEFAULTS,
     methods::NATIVE_WALLET_PREPARE_TRANSFER,
     methods::NATIVE_WALLET_SUPPORTED_ASSETS,
+    methods::NATIVE_WALLET_TOKEN_BALANCES,
     methods::NATIVE_WALLET_TX_RECEIPT,
     methods::NATIVE_WALLET_TX_STATUS,
     methods::SIGN_MESSAGE,

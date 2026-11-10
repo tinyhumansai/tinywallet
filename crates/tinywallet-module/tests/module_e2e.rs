@@ -61,6 +61,7 @@ const EXPECTED_METHODS: &[&str] = &[
     "NativeWalletSupportedAssets",
     "NativeWalletChainStatus",
     "NativeWalletBalances",
+    "NativeWalletTokenBalances",
     "NativeWalletPrepareTransfer",
     "NativeWalletExecutePrepared",
     "NativeWalletTxStatus",

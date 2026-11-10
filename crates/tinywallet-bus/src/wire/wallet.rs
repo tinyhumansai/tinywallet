@@ -465,6 +465,33 @@ pub struct BalanceInfo {
     pub provider_status: ProviderStatus,
 }
 
+/// A token balance row: one catalogued token (an SPL mint on Solana) held by
+/// one wallet account. Native balances stay in [`BalanceInfo`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenBalanceInfo {
+    /// Chain family.
+    pub chain: WalletChain,
+    /// EVM network for EVM rows.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evm_network: Option<EvmNetwork>,
+    /// Account (owner) address.
+    pub address: String,
+    /// Asset symbol from the catalog.
+    pub asset_symbol: String,
+    /// Token contract or mint address.
+    pub token_address: String,
+    /// Smallest-unit decimal places.
+    pub decimals: u8,
+    /// Raw smallest-unit amount, summed over every token account the owner
+    /// holds for this mint.
+    pub raw: String,
+    /// Human-readable amount.
+    pub formatted: String,
+    /// Provider state; `missing` rows read as zero.
+    pub provider_status: ProviderStatus,
+}
+
 /// What a prepared transfer moves.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
