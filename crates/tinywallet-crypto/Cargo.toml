@@ -2,7 +2,7 @@
 name = "tinywallet-crypto"
 version = "0.29.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 license = "GPL-3.0-only"
 description = "Pure crypto-rail primitives for TinyWallet: chains, addresses, reference data, the RPC transport seam, and transaction verification."
 repository = "https://github.com/tinyhumansai/tinywallet"

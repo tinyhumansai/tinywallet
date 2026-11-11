@@ -95,7 +95,7 @@ migration; it opens only after receiving that host-provisioned storage handle.
   storage handle provided by its host.
 - `tools` needs a compiler new enough for `tinytools` (1.88), and `ledger` for
   the stable `tinystoragedrivers-api` / `tinystoragedrivers-types` contracts
-  (1.88), matching this crate's declared minimum. The other features build on
+  (1.89), matching this crate's declared minimum. The other features build on
   that MSRV, except that `pay` pulls `reqwest`, whose `icu` dependencies need a
-  newer compiler than 1.88 with a current lockfile.
+  newer compiler than 1.89 with a current lockfile.
 - Error strings are user-visible and pinned by tests.

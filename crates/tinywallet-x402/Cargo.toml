@@ -2,7 +2,7 @@
 name = "tinywallet-x402"
 version = "0.29.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 license = "GPL-3.0-only"
 description = "The x402 machine-payment protocol for TinyWallet: wire types, EIP-712 and ERC-20 encoding, the payment ledger, the 402 client, and the x402_request agent tool."
 repository = "https://github.com/tinyhumansai/tinywallet"
@@ -95,7 +95,7 @@ tinywallet = { path = "../..", default-features = false, features = ["key", "sol
 k256 = { version = "0.14", default-features = false, features = ["ecdsa"] }
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 # Native ledger migration tests use an in-memory v2 storage implementation.
-tinystoragedrivers-testkit = { version = "2.1.2", git = "https://github.com/senamakel/tinystoragedrivers", rev = "c447da3" }
+tinystoragedrivers-testkit = { version = "2.1.3", git = "https://github.com/tinyhumansai/tinystoragedrivers", rev = "f5a33025b9feaa36fea522cce764fe8c796e5139" }
 
 [features]
 default = ["wire"]

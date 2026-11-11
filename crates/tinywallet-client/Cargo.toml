@@ -2,7 +2,7 @@
 name = "tinywallet-client"
 version = "0.29.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 license = "GPL-3.0-only"
 description = "Typed TinyBus host client for the TinyWallet module."
 repository = "https://github.com/tinyhumansai/tinywallet"

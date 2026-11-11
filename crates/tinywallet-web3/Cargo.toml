@@ -2,7 +2,7 @@
 name = "tinywallet-web3"
 version = "0.29.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 license = "GPL-3.0-only"
 description = "Wallet, swap, bridge and dapp flows for TinyWallet, behind host seams."
 repository = "https://github.com/tinyhumansai/tinywallet"

@@ -6,7 +6,7 @@ x402 ledger's storage collection declarations and stored record vocabulary.
 Collection declarations are bus-owned names, without a storage backend,
 client, or transport dependency.
 
-The bus contract supports Rust 1.88. The excluded collection-contract consumer
+The bus contract supports Rust 1.89. The excluded collection-contract consumer
 checks the public collection names without depending on a storage crate.
 
 Network enums in the bus are identifiers only. RPC endpoints, explorer URLs,
