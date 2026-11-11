@@ -2,7 +2,7 @@
 name = "tinywallet-bus"
 version = "0.29.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 license = "GPL-3.0-only"
 description = "The TinyBus wire contract for TinyWallet: member names, payload types, and contract version."
 repository = "https://github.com/tinyhumansai/tinywallet"

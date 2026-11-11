@@ -26,7 +26,7 @@ echo "$rustup_sha  $installer" | sha256sum --check --status || {
   exit 1
 }
 chmod +x "$installer"
-"$installer" -y --profile minimal --default-toolchain 1.88.0 --no-modify-path
+"$installer" -y --profile minimal --default-toolchain 1.89.0 --no-modify-path
 rm -f "$installer"
 source "$HOME/.cargo/env"
 
