@@ -16,7 +16,7 @@ use crate::wire::{
 /// The longest an EIP-3009 authorization stays valid, whatever
 /// `maxTimeoutSeconds` the server asks for: an unbounded value would sign a
 /// transfer that never expires.
-const MAX_AUTHORIZATION_SECS: u64 = 300;
+pub(super) const MAX_AUTHORIZATION_SECS: u64 = 300;
 
 /// Build an EVM payment using EIP-3009 `transferWithAuthorization`.
 ///
@@ -181,7 +181,7 @@ pub(super) fn evm_payment_payload(
 }
 
 /// The 20 raw bytes of an EVM address.
-fn evm_address_bytes(address: &str) -> Result<[u8; 20], X402Error> {
+pub(super) fn evm_address_bytes(address: &str) -> Result<[u8; 20], X402Error> {
     let validated = tinywallet_crypto::address::evm::validate(address)
         .map_err(|e| X402Error::Protocol(format!("invalid EVM address '{address}': {e}")))?;
     // `validate` guarantees 40 hex digits, so the decode cannot fail; one arm

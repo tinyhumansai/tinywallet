@@ -41,7 +41,15 @@ pub(super) async fn build_upto_payment(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    build_upto_payment_at(signer, transport, challenge, requirement, fresh_nonce(), now).await
+    build_upto_payment_at(
+        signer,
+        transport,
+        challenge,
+        requirement,
+        fresh_nonce(),
+        now,
+    )
+    .await
 }
 
 /// [`build_upto_payment`] with the nonce and the clock given.
@@ -61,7 +69,9 @@ pub(super) async fn build_upto_payment_at(
     let signature = sign_digest(signer, terms.digest(), "Permit2").await?;
 
     let mut client_extensions = Map::new();
-    if let Some(info) = eip2612_permit_info(signer, transport, challenge, requirement, &terms).await? {
+    if let Some(info) =
+        eip2612_permit_info(signer, transport, challenge, requirement, &terms).await?
+    {
         client_extensions.insert(EIP2612_GAS_SPONSORING.to_string(), json!({ "info": info }));
     }
 
@@ -215,7 +225,9 @@ async fn eip2612_permit_info(
         }
         Ok(_) => {}
         Err(error) => {
-            debug!("{LOG_PREFIX} Permit2 allowance unreadable ({error}); signing an EIP-2612 permit");
+            debug!(
+                "{LOG_PREFIX} Permit2 allowance unreadable ({error}); signing an EIP-2612 permit"
+            );
         }
     }
 

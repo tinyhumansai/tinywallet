@@ -58,16 +58,43 @@ pub fn parse_settlement_response(b64_str: &str) -> Result<SettlementResponse, St
     serde_json::from_slice(&json_bytes).map_err(|e| format!("PAYMENT-RESPONSE JSON parse: {e}"))
 }
 
-/// Whether `receipt` settles the payment we sent: a successful receipt for
-/// the same network and, when the receipt names one, the same atomic amount.
+/// Whether `receipt` settles the `exact` payment we sent: a successful receipt
+/// for the same network and, when the receipt names one, the same atomic
+/// amount. See [`settled_amount`] for a payment of any scheme.
 #[must_use]
 pub fn settles(receipt: &SettlementResponse, network: &str, amount_atomic: u64) -> bool {
-    receipt.success
-        && receipt.network == network
-        && receipt
-            .amount
-            .as_deref()
-            .is_none_or(|amount| amount.parse::<u64>() == Ok(amount_atomic))
+    settled_amount(receipt, network, None, amount_atomic).is_some()
+}
+
+/// The atomic amount `receipt` says was charged for a payment signed for
+/// `signed_atomic` under `scheme`, or `None` when it does not settle it.
+///
+/// A receipt settles only when it succeeded on the payment's network. Then:
+///
+/// - `upto`: the reported `amount`, which may be anything from zero to the
+///   signed ceiling. A larger or unreadable amount settles nothing. A receipt
+///   without one (the field is required for `upto`) counts the whole ceiling.
+/// - `exact`, or no scheme recorded: the signed amount, and only if the
+///   receipt names no amount or exactly that one, so a receipt cannot make an
+///   exact payment look cheaper than what was signed.
+#[must_use]
+pub fn settled_amount(
+    receipt: &SettlementResponse,
+    network: &str,
+    scheme: Option<&str>,
+    signed_atomic: u64,
+) -> Option<u64> {
+    if !receipt.success || receipt.network != network {
+        return None;
+    }
+    let reported = receipt.amount.as_deref().map(str::parse::<u64>);
+    match (scheme, reported) {
+        (Some("upto"), None) => Some(signed_atomic),
+        (Some("upto"), Some(Ok(actual))) => (actual <= signed_atomic).then_some(actual),
+        (Some("upto"), Some(Err(_))) => None,
+        (_, None) => Some(signed_atomic),
+        (_, Some(reported)) => (reported == Ok(signed_atomic)).then_some(signed_atomic),
+    }
 }
 
 /// Encode a payment proof as the `PAYMENT-SIGNATURE` header value.
@@ -80,3 +107,7 @@ pub fn encode_payment(payment: &PaymentPayload) -> Result<String, X402Error> {
         .map(|json| B64.encode(json))
         .map_err(|e| X402Error::Protocol(format!("serialize payment: {e}")))
 }
+
+#[cfg(test)]
+#[path = "headers_tests.rs"]
+mod tests;

@@ -22,8 +22,7 @@ use crate::wire::{PaymentProof, PaymentRequired};
 
 const TWITR_UPTO: &str = include_str!("../wire/fixtures/twitr-upto-challenge.json");
 /// The Permit2 nonce of the reference vector.
-const NONCE: &str =
-    "33247007178036348590600198031289925668252061821958005840077069883511451257277";
+const NONCE: &str = "33247007178036348590600198031289925668252061821958005840077069883511451257277";
 /// The deadline of the reference vector, reached with twitr's 300 s timeout.
 const DEADLINE: u64 = 1_740_672_154;
 const NOW: u64 = DEADLINE - 300;
@@ -47,7 +46,10 @@ fn transport(replies: Vec<TransportResult>) -> FakeTransport {
     transport
 }
 
-async fn build(challenge: &PaymentRequired, transport: &FakeTransport) -> Result<PaymentPayload, X402Error> {
+async fn build(
+    challenge: &PaymentRequired,
+    transport: &FakeTransport,
+) -> Result<PaymentPayload, X402Error> {
     build_upto_payment_at(
         &FakePaymentSigner::default(),
         transport,
@@ -102,7 +104,10 @@ async fn the_twitr_challenge_yields_the_reference_payload() {
     let payload = build(&challenge, &transport).await.unwrap();
 
     assert_eq!(payload.x402_version, 2);
-    assert_eq!(payload.resource.as_ref().unwrap().url, challenge.resource.url);
+    assert_eq!(
+        payload.resource.as_ref().unwrap().url,
+        challenge.resource.url
+    );
     assert_eq!(
         serde_json::to_value(&payload.accepted).unwrap(),
         serde_json::from_str::<Value>(TWITR_UPTO).unwrap()["accepts"][0],
@@ -142,7 +147,10 @@ async fn sufficient_allowance_echoes_the_server_extensions_without_a_permit() {
     assert_eq!(calls.len(), 1, "only the allowance is read");
     assert_eq!(calls[0], (NetworkId::evm(8453), "eth_call".to_string()));
     let params = transport.params.lock().unwrap();
-    assert_eq!(params[0][0]["to"], "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+    assert_eq!(
+        params[0][0]["to"],
+        "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    );
     let data = params[0][0]["data"].as_str().unwrap();
     assert!(data.starts_with("0xdd62ed3e") && data.ends_with(PERMIT2_CALLDATA_TAIL));
     assert_eq!(params[0][1], "latest");
@@ -156,16 +164,21 @@ async fn insufficient_allowance_adds_a_signed_eip2612_permit_for_permit2() {
 
     let sponsoring = &payload.extensions["eip2612GasSponsoring"];
     assert_eq!(
-        sponsoring["schema"],
-        challenge.extensions["eip2612GasSponsoring"]["schema"],
+        sponsoring["schema"], challenge.extensions["eip2612GasSponsoring"]["schema"],
         "the server declaration is kept and the client info merged over it"
     );
     assert!(payload.extensions.contains_key("bazaar"));
     let info = &sponsoring["info"];
     assert_eq!(info["from"], EVM_ADDRESS);
     assert_eq!(info["asset"], "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
-    assert_eq!(info["spender"], "0x000000000022D473030F116dDEE9F6B43aC78BA3");
-    assert_eq!(info["amount"], "3600", "the proxy requires value == permitted.amount");
+    assert_eq!(
+        info["spender"],
+        "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+    );
+    assert_eq!(
+        info["amount"], "3600",
+        "the proxy requires value == permitted.amount"
+    );
     assert_eq!(info["nonce"], "7");
     assert_eq!(info["deadline"], DEADLINE.to_string());
     assert_eq!(info["version"], "1");
@@ -212,7 +225,10 @@ async fn an_unreadable_allowance_still_signs_the_permit() {
     });
     let transport = transport(vec![unreachable, word(0)]);
     let payload = build(&twitr(), &transport).await.unwrap();
-    assert_eq!(payload.extensions["eip2612GasSponsoring"]["info"]["nonce"], "0");
+    assert_eq!(
+        payload.extensions["eip2612GasSponsoring"]["info"]["nonce"],
+        "0"
+    );
 }
 
 #[tokio::test]
@@ -244,7 +260,11 @@ async fn no_permit_is_signed_without_the_token_domain() {
     let transport = FakeTransport::default();
     let payload = build(&challenge, &transport).await.unwrap();
     assert!(transport.calls.lock().unwrap().is_empty());
-    assert!(payload.extensions["eip2612GasSponsoring"]["info"].get("signature").is_none());
+    assert!(
+        payload.extensions["eip2612GasSponsoring"]["info"]
+            .get("signature")
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -258,12 +278,20 @@ async fn a_bad_facilitator_or_recipient_is_a_protocol_error() {
             }
             _ => requirement.pay_to = value.into(),
         }
-        let error = build(&challenge, &FakeTransport::default()).await.unwrap_err();
+        let error = build(&challenge, &FakeTransport::default())
+            .await
+            .unwrap_err();
         assert!(matches!(error, X402Error::Protocol(_)), "{field}: {error}");
     }
     let mut challenge = twitr();
-    challenge.accepts[0].extra.as_mut().unwrap().facilitator_address = None;
-    let error = build(&challenge, &FakeTransport::default()).await.unwrap_err();
+    challenge.accepts[0]
+        .extra
+        .as_mut()
+        .unwrap()
+        .facilitator_address = None;
+    let error = build(&challenge, &FakeTransport::default())
+        .await
+        .unwrap_err();
     assert!(error.to_string().contains("facilitatorAddress"), "{error}");
 }
 
@@ -271,7 +299,9 @@ async fn a_bad_facilitator_or_recipient_is_a_protocol_error() {
 async fn the_deadline_is_capped_like_an_eip3009_authorization() {
     let mut challenge = twitr();
     challenge.accepts[0].max_timeout_seconds = 86_400;
-    let payload = build(&challenge, &transport(vec![word(u64::MAX)])).await.unwrap();
+    let payload = build(&challenge, &transport(vec![word(u64::MAX)]))
+        .await
+        .unwrap();
     assert_eq!(
         permit2(&payload).permit2_authorization.deadline,
         (NOW + 300).to_string()
@@ -281,7 +311,8 @@ async fn the_deadline_is_capped_like_an_eip3009_authorization() {
 #[tokio::test]
 async fn crypto_payments_pays_an_upto_requirement_with_a_permit2_proof() {
     let transport = std::sync::Arc::new(transport(vec![word(u64::MAX)]));
-    let payments = CryptoPayments::new(std::sync::Arc::new(FakePaymentSigner::default()), transport);
+    let payments =
+        CryptoPayments::new(std::sync::Arc::new(FakePaymentSigner::default()), transport);
     let challenge = twitr();
     let build = payments
         .build_with_metadata(&challenge, &challenge.accepts[0], PaymentChain::Evm)

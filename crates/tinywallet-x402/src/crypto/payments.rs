@@ -9,6 +9,7 @@ use tinywallet_crypto::rpc::{self, NetworkId, Transport};
 use super::evm_payment::build_evm_payment;
 use super::signer::PaymentSigner;
 use super::solana_payment::{b58_to_32, build_solana_payment};
+use super::upto_payment::build_upto_payment;
 use crate::protocol::{PaymentBuild, PaymentBuilder, X402Error};
 use crate::wire::{PaymentChain, PaymentPayload, PaymentRequired, PaymentRequirements};
 
@@ -59,6 +60,16 @@ impl CryptoPayments {
                 .await?;
                 (payload, Some(last_valid_height))
             }
+            PaymentChain::Evm if requirement.scheme == "upto" => (
+                build_upto_payment(
+                    self.signer.as_ref(),
+                    self.transport.as_ref(),
+                    challenge,
+                    requirement,
+                )
+                .await?,
+                None,
+            ),
             PaymentChain::Evm => (
                 build_evm_payment(self.signer.as_ref(), challenge, requirement).await?,
                 None,
