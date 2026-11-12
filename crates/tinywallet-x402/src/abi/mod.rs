@@ -14,6 +14,10 @@
 
 use crate::eip712::u256_from_decimal;
 
+mod reads;
+
+pub use reads::{decode_uint256, encode_eip2612_nonces, encode_erc20_allowance};
+
 /// `keccak256("transfer(address,uint256)")[..4]`.
 ///
 /// Pinned, and re-derived from the signature in the tests below. Every ERC-20
@@ -40,6 +44,13 @@ pub enum Error {
     /// The amount is not a base-10 integer, or overflows 256 bits.
     #[error("invalid amount: {reason}")]
     InvalidAmount {
+        /// What was wrong with it.
+        reason: String,
+    },
+
+    /// A contract call's reply is not the single word it should return.
+    #[error("invalid call reply: {reason}")]
+    InvalidReply {
         /// What was wrong with it.
         reason: String,
     },
