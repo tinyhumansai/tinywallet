@@ -277,7 +277,35 @@ where
     F: FnOnce(String, PaymentRequirements, PaymentChain, u64) -> Fut,
     Fut: Future<Output = Result<(), String>>,
 {
-    let (challenge, idx, chain) = handle_402(response_headers)?;
+    handle_402_and_pay_on_network(builder, response_headers, request_url, None, authorize).await
+}
+
+/// [`handle_402_and_pay_authorized`], restricted to the options on `network`.
+///
+/// `network` is a CAIP-2 chain id (`eip155:8453`) that an option's network
+/// must equal, or a CAIP-2 namespace (`eip155`, `solana`) it must belong to.
+/// `None` is exactly [`handle_402_and_pay_authorized`]. A caller pins the
+/// network when the server ties the request to the paying account, for
+/// example to an EVM identity it signed in with.
+///
+/// # Errors
+///
+/// As [`handle_402_and_pay_authorized`], plus
+/// [`X402Error::NoPaymentOptionOnNetwork`] when no option is on `network`.
+/// Nothing is held or signed in that case.
+pub async fn handle_402_and_pay_on_network<F, Fut>(
+    builder: &dyn PaymentBuilder,
+    response_headers: &HeaderMap,
+    request_url: &str,
+    network: Option<&str>,
+    authorize: F,
+) -> Result<X402PaymentResult, X402Error>
+where
+    F: FnOnce(String, PaymentRequirements, PaymentChain, u64) -> Fut,
+    Fut: Future<Output = Result<(), String>>,
+{
+    let challenge = parse_402_headers(response_headers)?;
+    let (idx, chain) = select_requirement(&challenge, network)?;
     let requirement = challenge.accepts[idx].clone();
     let amount = parse_amount(&requirement)?;
     ensure_same_origin(&challenge.resource.url, request_url)?;

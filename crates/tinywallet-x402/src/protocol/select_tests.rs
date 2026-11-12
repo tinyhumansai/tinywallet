@@ -80,7 +80,10 @@ fn a_malformed_upto_option_is_never_selected() {
     ];
     for requirement in refused {
         assert!(
-            matches!(pick(vec![requirement.clone()]), Err(X402Error::NoPaymentOption)),
+            matches!(
+                pick(vec![requirement.clone()]),
+                Err(X402Error::NoPaymentOption)
+            ),
             "{requirement:?} must not be selectable"
         );
     }

@@ -15,7 +15,7 @@ use crate::test_support::{
     FakePaymentSigner, FakeTransport, challenge, challenge_header, evm_requirement,
     solana_requirement,
 };
-use crate::wire::{BASE_MAINNET_CAIP2, PaymentPayload, PaymentProof};
+use crate::wire::{BASE_MAINNET_CAIP2, PaymentChain, PaymentPayload, PaymentProof};
 
 const REQUEST_URL: &str = "https://x402.example.test/a";
 

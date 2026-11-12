@@ -72,9 +72,7 @@ fn rank(requirement: &PaymentRequirements) -> Option<(u8, PaymentChain)> {
     match (requirement.scheme.as_str(), chain_of(&requirement.network)?) {
         ("exact", PaymentChain::Solana) => Some((0, PaymentChain::Solana)),
         ("exact", PaymentChain::Evm) => Some((1, PaymentChain::Evm)),
-        ("upto", PaymentChain::Evm) if is_payable_upto(requirement) => {
-            Some((2, PaymentChain::Evm))
-        }
+        ("upto", PaymentChain::Evm) if is_payable_upto(requirement) => Some((2, PaymentChain::Evm)),
         _ => None,
     }
 }
