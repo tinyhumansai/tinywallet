@@ -198,7 +198,8 @@ pub async fn pay_challenge_header(
 pub struct X402PaymentResult {
     /// The `PAYMENT-SIGNATURE` header value.
     pub header_value: String,
-    /// The amount, in atomic units of `asset`.
+    /// The amount signed for, in atomic units of `asset`: the exact price, or
+    /// the ceiling of an `upto` payment. The budget holds this amount.
     pub amount_atomic: u64,
     /// The asset paid in.
     pub asset: String,
@@ -206,6 +207,10 @@ pub struct X402PaymentResult {
     pub recipient: String,
     /// The CAIP-2 network the payment is on.
     pub network: String,
+    /// The x402 scheme signed under. For `upto`, [`amount_atomic`](Self::amount_atomic)
+    /// is the ceiling; the receipt reports what was charged (see
+    /// [`settled_amount`](super::settled_amount)).
+    pub scheme: String,
     /// The URL the payment is for.
     pub url: String,
     /// Expiry of the authorization when its rail has an explicit deadline.
@@ -356,6 +361,7 @@ where
         asset: requirement.asset.clone(),
         recipient: requirement.pay_to.clone(),
         network: requirement.network.clone(),
+        scheme: requirement.scheme.clone(),
         url: request_url.to_string(),
         authorization_valid_until: payment.authorization_valid_until,
         solana_last_valid_block_height: payment.solana_last_valid_block_height,

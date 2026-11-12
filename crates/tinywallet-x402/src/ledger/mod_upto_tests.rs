@@ -41,7 +41,9 @@ fn upto(status: PaymentStatus, amount: u64) -> PaymentRecord {
 fn the_scheme_survives_a_reopen() {
     let storage = LedgerStorage::memory();
     let mut ledger = PaymentLedger::open(storage.clone(), "s", budget()).unwrap();
-    ledger.try_record_payment(upto(PaymentStatus::Pending, 3600)).unwrap();
+    ledger
+        .try_record_payment(upto(PaymentStatus::Pending, 3600))
+        .unwrap();
     drop(ledger);
     let reopened = PaymentLedger::open(storage, "s", budget()).unwrap();
     assert_eq!(
@@ -53,9 +55,10 @@ fn the_scheme_survives_a_reopen() {
 #[test]
 fn settling_below_the_ceiling_releases_the_rest_of_the_budget() {
     for actual in [1200, 0] {
-        let mut ledger =
-            PaymentLedger::open(LedgerStorage::memory(), "s", budget()).unwrap();
-        ledger.try_record_payment(upto(PaymentStatus::Pending, 3600)).unwrap();
+        let mut ledger = PaymentLedger::open(LedgerStorage::memory(), "s", budget()).unwrap();
+        ledger
+            .try_record_payment(upto(PaymentStatus::Pending, 3600))
+            .unwrap();
         assert_eq!(ledger.outstanding_atomic(), 3600);
         assert_eq!(
             ledger.check_budget(10_000 - 3600 + 1).refusal().is_some(),
@@ -63,7 +66,9 @@ fn settling_below_the_ceiling_releases_the_rest_of_the_budget() {
             "the pending ceiling is held"
         );
 
-        ledger.try_record_payment(upto(PaymentStatus::Settled, actual)).unwrap();
+        ledger
+            .try_record_payment(upto(PaymentStatus::Settled, actual))
+            .unwrap();
         assert_eq!(ledger.outstanding_atomic(), 0);
         assert_eq!(ledger.summary().daily_total_atomic, actual);
         assert_eq!(ledger.check_budget(10_000 - actual), BudgetCheck::Allowed);

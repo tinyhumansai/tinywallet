@@ -13,7 +13,7 @@ use tinywallet_crypto::rpc::Transport;
 
 use crate::crypto::{CryptoPayments, PaymentSigner};
 use crate::ledger::{self, PaymentRecord, PaymentStatus};
-use crate::protocol::{PaymentBuilder, ProxyPolicy, handle_402_and_pay, settles};
+use crate::protocol::{PaymentBuilder, ProxyPolicy, handle_402_and_pay, settled_amount};
 use crate::thread::{NoThread, ThreadScope};
 use crate::wire::{
     BASE_MAINNET_CAIP2, BASE_SEPOLIA_CAIP2, ETHEREUM_MAINNET_CAIP2, HEADER_PAYMENT_REQUIRED,
@@ -328,27 +328,31 @@ impl X402RequestTool {
         // Record the pending payment. Every later state is a new line with the
         // same id.
         let record_id = uuid::Uuid::new_v4().to_string();
-        let record = |status: PaymentStatus, tx_signature: Option<String>| PaymentRecord {
-            id: record_id.clone(),
-            url: url.clone(),
-            asset: payment.asset.clone(),
-            amount_atomic: payment.amount_atomic,
-            amount_display: amount_display.clone(),
-            recipient: payment.recipient.clone(),
-            network: payment.network.clone(),
-            tx_signature,
-            status,
-            timestamp: chrono::Utc::now(),
-            authorization_valid_until: payment.authorization_valid_until,
-            solana_last_valid_block_height: payment.solana_last_valid_block_height,
-            authorization_expired_at: None,
-            authorization_expiry_observed_height: None,
-            session_id: session_id.clone(),
-            thread_id: thread_id.clone(),
-            scheme: None,
+        // An `upto` payment holds its signed ceiling while pending and is
+        // recorded at what the receipt says was charged once it settles.
+        let record = |status: PaymentStatus, tx_signature: Option<String>, amount_atomic: u64| {
+            PaymentRecord {
+                id: record_id.clone(),
+                url: url.clone(),
+                asset: payment.asset.clone(),
+                amount_atomic,
+                amount_display: format_usdc(amount_atomic),
+                recipient: payment.recipient.clone(),
+                network: payment.network.clone(),
+                tx_signature,
+                status,
+                timestamp: chrono::Utc::now(),
+                authorization_valid_until: payment.authorization_valid_until,
+                solana_last_valid_block_height: payment.solana_last_valid_block_height,
+                authorization_expired_at: None,
+                authorization_expiry_observed_height: None,
+                session_id: session_id.clone(),
+                thread_id: thread_id.clone(),
+                scheme: Some(payment.scheme.clone()),
+            }
         };
         if reservation
-            .commit_durable(record(PaymentStatus::Pending, None))
+            .commit_durable(record(PaymentStatus::Pending, None, payment.amount_atomic))
             .is_err()
         {
             return ToolResult::error(
@@ -377,7 +381,19 @@ impl X402RequestTool {
             .and_then(|v| v.to_str().ok())
             .and_then(|b64| B64.decode(b64).ok())
             .and_then(|bytes| serde_json::from_slice::<SettlementResponse>(&bytes).ok())
-            .filter(|receipt| settles(receipt, &payment.network, payment.amount_atomic));
+            .and_then(|receipt| {
+                settled_amount(
+                    &receipt,
+                    &payment.network,
+                    Some(&payment.scheme),
+                    payment.amount_atomic,
+                )
+                .map(|charged| (receipt, charged))
+            });
+        let charged_atomic = receipt
+            .as_ref()
+            .map_or(payment.amount_atomic, |(_, charged)| *charged);
+        let amount_display = format_usdc(charged_atomic);
         let settled_status = if receipt.is_some() {
             PaymentStatus::Settled
         } else {
@@ -386,11 +402,11 @@ impl X402RequestTool {
             PaymentStatus::Pending
         };
         let tx_sig = receipt
-            .filter(|receipt| !receipt.transaction.is_empty())
-            .map(|receipt| receipt.transaction);
+            .filter(|(receipt, _)| !receipt.transaction.is_empty())
+            .map(|(receipt, _)| receipt.transaction);
         if settled_status != PaymentStatus::Pending
             && ledger::with_ledger_mut(|ledger| {
-                ledger.try_record_payment(record(settled_status, tx_sig.clone()))
+                ledger.try_record_payment(record(settled_status, tx_sig.clone(), charged_atomic))
             })
             .and_then(|result| result)
             .is_err()

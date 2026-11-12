@@ -83,7 +83,10 @@ async fn an_upto_payment_is_recorded_at_the_amount_actually_charged() {
         let records = records();
         let pending = records.first().unwrap();
         assert_eq!(pending.status, PaymentStatus::Pending);
-        assert_eq!(pending.amount_atomic, 3600, "the ceiling is held until settled");
+        assert_eq!(
+            pending.amount_atomic, 3600,
+            "the ceiling is held until settled"
+        );
         assert_eq!(pending.scheme.as_deref(), Some("upto"));
         let settled = records.last().unwrap();
         assert_eq!(settled.status, PaymentStatus::Settled);
