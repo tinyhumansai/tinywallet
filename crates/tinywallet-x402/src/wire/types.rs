@@ -389,6 +389,20 @@ pub enum PaymentChain {
     Evm,
 }
 
+impl PaymentProof {
+    /// The Unix second after which the signed authorization can no longer be
+    /// used: EIP-3009's `validBefore` or the Permit2 `deadline`. `None` for
+    /// Solana, whose expiry is a block height, and for an unreadable value.
+    #[must_use]
+    pub fn authorization_deadline_secs(&self) -> Option<i64> {
+        match self {
+            Self::Evm(proof) => proof.authorization.valid_before.parse().ok(),
+            Self::Permit2(proof) => proof.permit2_authorization.deadline.parse().ok(),
+            Self::Solana(_) => None,
+        }
+    }
+}
+
 impl PaymentRequirements {
     /// Whether this requirement targets Solana mainnet-beta.
     #[must_use]
