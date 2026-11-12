@@ -24,6 +24,7 @@ fn settled(amount: u64) -> PaymentRecord {
         authorization_expiry_observed_height: None,
         session_id: "session-paging".into(),
         thread_id: None,
+        scheme: None,
     }
 }
 

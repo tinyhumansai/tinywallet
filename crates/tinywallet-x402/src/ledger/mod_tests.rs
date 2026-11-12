@@ -56,6 +56,7 @@ fn record(
         authorization_expiry_observed_height: None,
         session_id: session.into(),
         thread_id: None,
+        scheme: None,
     }
 }
 

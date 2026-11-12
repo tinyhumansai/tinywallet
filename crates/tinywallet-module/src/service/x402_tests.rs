@@ -33,6 +33,7 @@ pub(crate) fn pending_record(
         authorization_expiry_observed_height: None,
         session_id: "coverage-test".to_string(),
         thread_id: None,
+        scheme: None,
     }
 }
 
