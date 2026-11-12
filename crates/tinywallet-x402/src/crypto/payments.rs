@@ -66,15 +66,10 @@ impl CryptoPayments {
                 None,
             ),
         };
-        let authorization_valid_until = match &payload.payload {
-            PaymentProof::Evm(proof) => proof
-                .authorization
-                .valid_before
-                .parse::<i64>()
-                .ok()
-                .and_then(|seconds| chrono::DateTime::from_timestamp(seconds, 0)),
-            PaymentProof::Solana(_) => None,
-        };
+        let authorization_valid_until = payload
+                .payload
+                .authorization_deadline_secs()
+                .and_then(|seconds| chrono::DateTime::from_timestamp(seconds, 0));
         Ok(PaymentBuild {
             payload,
             authorization_valid_until,

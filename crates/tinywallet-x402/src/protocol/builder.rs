@@ -51,15 +51,10 @@ pub trait PaymentBuilder: Send + Sync {
         chain: PaymentChain,
     ) -> Result<PaymentBuild, X402Error> {
         let payload = self.build(challenge, requirement, chain).await?;
-        let authorization_valid_until = match &payload.payload {
-            PaymentProof::Evm(proof) => proof
-                .authorization
-                .valid_before
-                .parse::<i64>()
-                .ok()
-                .and_then(|seconds| DateTime::from_timestamp(seconds, 0)),
-            PaymentProof::Solana(_) => None,
-        };
+        let authorization_valid_until = payload
+                .payload
+                .authorization_deadline_secs()
+                .and_then(|seconds| DateTime::from_timestamp(seconds, 0));
         Ok(PaymentBuild {
             payload,
             authorization_valid_until,
