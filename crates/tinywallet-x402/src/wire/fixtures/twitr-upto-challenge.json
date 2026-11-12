@@ -1,0 +1,378 @@
+{
+  "x402Version": 2,
+  "error": "payment_required",
+  "resource": {
+    "url": "https://twitr.sh/api/tools/x_search",
+    "description": "Search X/Twitter tweets with the full operator set — keyword, exact phrase, from-user, language, date range, media type, minimum likes/retweets, verified-only — or search user profiles by keyword. Billed per tweet returned against your resultsLimit cap. Built for tracking what people say about a topic, brand, or ticker in real time.",
+    "mimeType": "application/json"
+  },
+  "accepts": [
+    {
+      "scheme": "upto",
+      "network": "eip155:8453",
+      "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "amount": "3600",
+      "payTo": "0xb5194A98DbDBb7028B585Db26B972e7F0F3f826A",
+      "maxTimeoutSeconds": 300,
+      "extra": {
+        "name": "USD Coin",
+        "version": "2",
+        "assetTransferMethod": "permit2",
+        "facilitatorAddress": "0x4c934c63C786157Fefd990945b25eA60a0FB0205"
+      },
+      "extensions": {
+        "eip2612GasSponsoring": {
+          "info": {
+            "description": "The facilitator accepts EIP-2612 gasless Permit to `Permit2` canonical contract.",
+            "version": "1"
+          },
+          "schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string",
+                "pattern": "^0x[a-fA-F0-9]{40}$",
+                "description": "The address of the sender."
+              },
+              "asset": {
+                "type": "string",
+                "pattern": "^0x[a-fA-F0-9]{40}$",
+                "description": "The address of the ERC-20 token contract."
+              },
+              "spender": {
+                "type": "string",
+                "pattern": "^0x[a-fA-F0-9]{40}$",
+                "description": "The address of the spender (Canonical Permit2)."
+              },
+              "amount": {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "description": "The amount to approve (uint256). Typically MaxUint."
+              },
+              "nonce": {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "description": "The current nonce of the sender."
+              },
+              "deadline": {
+                "type": "string",
+                "pattern": "^[0-9]+$",
+                "description": "The timestamp at which the signature expires."
+              },
+              "signature": {
+                "type": "string",
+                "pattern": "^0x[a-fA-F0-9]+$",
+                "description": "The 65-byte concatenated signature (r, s, v) as a hex string."
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[0-9]+(\\.[0-9]+)*$",
+                "description": "Schema version identifier."
+              }
+            },
+            "required": [
+              "from",
+              "asset",
+              "spender",
+              "amount",
+              "nonce",
+              "deadline",
+              "signature",
+              "version"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "extensions": {
+    "bazaar": {
+      "info": {
+        "input": {
+          "type": "http",
+          "bodyType": "json",
+          "body": {
+            "q": "artificial intelligence",
+            "type": "search-tweets",
+            "resultsLimit": 50,
+            "language": "en",
+            "minFaves": 100
+          },
+          "method": "POST"
+        },
+        "output": {
+          "type": "json",
+          "example": {
+            "items": [
+              {
+                "id": "1893710452812718080",
+                "text": "This is a great thread, thanks for sharing.",
+                "authorUsername": "elonmusk",
+                "likeCount": 1180,
+                "createdAt": "2026-02-24T10:05:00.000Z"
+              }
+            ],
+            "runId": "tw_example",
+            "duration": 2,
+            "payment": {
+              "protocol": "x402",
+              "amount": "0.060000",
+              "currency": "USD"
+            }
+          }
+        }
+      },
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "http"
+              },
+              "method": {
+                "type": "string",
+                "enum": [
+                  "POST",
+                  "PUT",
+                  "PATCH"
+                ]
+              },
+              "bodyType": {
+                "type": "string",
+                "enum": [
+                  "json",
+                  "form-data",
+                  "text"
+                ]
+              },
+              "body": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "search-tweets",
+                      "search-users"
+                    ],
+                    "description": "Search tweets (default) or users."
+                  },
+                  "q": {
+                    "type": "string",
+                    "description": "Search query (X operator syntax supported for tweets)."
+                  },
+                  "resultsLimit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000,
+                    "description": "search-tweets: MANDATORY max tweets returned, billed per tweet."
+                  },
+                  "cursor": {
+                    "type": "string",
+                    "description": "search-users: pagination cursor from a previous call's report.next_cursor."
+                  },
+                  "fromUser": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "sinceDate": {
+                    "type": "string",
+                    "description": "YYYY-MM-DD"
+                  },
+                  "untilDate": {
+                    "type": "string",
+                    "description": "YYYY-MM-DD"
+                  },
+                  "mediaType": {
+                    "type": "string",
+                    "enum": [
+                      "images",
+                      "videos",
+                      "gifs",
+                      "media"
+                    ]
+                  },
+                  "minFaves": {
+                    "type": "integer"
+                  },
+                  "minRetweets": {
+                    "type": "integer"
+                  },
+                  "minReplies": {
+                    "type": "integer"
+                  },
+                  "verifiedOnly": {
+                    "type": "boolean"
+                  },
+                  "exactPhrase": {
+                    "type": "string"
+                  },
+                  "excludeWords": {
+                    "type": "string"
+                  },
+                  "advancedQuery": {
+                    "type": "string",
+                    "description": "Raw X search operator string appended to q."
+                  }
+                },
+                "required": [
+                  "q"
+                ],
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "type": {
+                          "const": "search-users"
+                        }
+                      }
+                    },
+                    "then": {},
+                    "else": {
+                      "required": [
+                        "resultsLimit"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "method",
+              "bodyType",
+              "body"
+            ],
+            "additionalProperties": false
+          },
+          "output": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string"
+              },
+              "example": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "description": "Returned items. Shape varies per tool — see each tool's outputSample for a concrete example.",
+                    "items": {
+                      "type": "object"
+                    }
+                  },
+                  "runId": {
+                    "type": "string",
+                    "description": "Run ID for debugging/audit."
+                  },
+                  "duration": {
+                    "type": "integer",
+                    "description": "Run duration in seconds."
+                  },
+                  "payment": {
+                    "type": "object",
+                    "description": "Settlement summary (protocol, amount, currency)."
+                  }
+                },
+                "required": [
+                  "items"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          }
+        },
+        "required": [
+          "input"
+        ]
+      },
+      "discoverable": true,
+      "category": "api",
+      "tags": [
+        "twitter",
+        "x",
+        "search",
+        "tweets",
+        "keyword",
+        "hashtag",
+        "query",
+        "social-listening",
+        "brand-monitoring",
+        "sentiment",
+        "user-search",
+        "agent",
+        "x402"
+      ]
+    },
+    "eip2612GasSponsoring": {
+      "info": {
+        "description": "The facilitator accepts EIP-2612 gasless Permit to `Permit2` canonical contract.",
+        "version": "1"
+      },
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "The address of the sender."
+          },
+          "asset": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "The address of the ERC-20 token contract."
+          },
+          "spender": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]{40}$",
+            "description": "The address of the spender (Canonical Permit2)."
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^[0-9]+$",
+            "description": "The amount to approve (uint256). Typically MaxUint."
+          },
+          "nonce": {
+            "type": "string",
+            "pattern": "^[0-9]+$",
+            "description": "The current nonce of the sender."
+          },
+          "deadline": {
+            "type": "string",
+            "pattern": "^[0-9]+$",
+            "description": "The timestamp at which the signature expires."
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^0x[a-fA-F0-9]+$",
+            "description": "The 65-byte concatenated signature (r, s, v) as a hex string."
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[0-9]+(\\.[0-9]+)*$",
+            "description": "Schema version identifier."
+          }
+        },
+        "required": [
+          "from",
+          "asset",
+          "spender",
+          "amount",
+          "nonce",
+          "deadline",
+          "signature",
+          "version"
+        ]
+      }
+    }
+  }
+}
