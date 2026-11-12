@@ -303,6 +303,17 @@ impl Wallet {
         x402.prepare(request).await.map_err(x402_operation_failed)
     }
 
+    /// Sign an x402 `sign-in-with-x` challenge with the EVM secret. Only a
+    /// sign-in for the requested host is signed; anything else is refused
+    /// before the key is used.
+    #[tinybus(confidential)]
+    async fn x402_sign_in(
+        &self,
+        request: tinywallet_bus::wire::X402SignInRequest,
+    ) -> BusResult<tinywallet_bus::wire::X402SignInResponse> {
+        x402::sign_in(request).await.map_err(x402_operation_failed)
+    }
+
     /// Open or replace the active Web3 quote service after the host establishes
     /// the account context. Replacing it waits for in-flight executions and
     /// discards every quote tied to the previous credentials.
@@ -1571,6 +1582,7 @@ mod exports {
             "X402UpdateBudget",
             "X402Configure",
             "X402Close",
+            "X402SignIn",
         ],
         signals = [],
         requires = [],

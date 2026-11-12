@@ -415,6 +415,35 @@ pub struct X402PreparePaymentResponse {
     pub network: String,
 }
 
+/// Sign an x402 `sign-in-with-x` challenge with the wallet's EVM account.
+///
+/// The module signs only an EIP-4361 sign-in built from the challenge, and
+/// only when its `domain` is the host of `url`, its `uri` and `resources` are
+/// HTTPS on that origin, and its `expirationTime` is still ahead. It is not a
+/// way to sign other text.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct X402SignInRequest {
+    /// The URL whose 402 response carried the challenge.
+    pub url: String,
+    /// Raw `PAYMENT-REQUIRED` header value (base64 JSON) of that response.
+    pub payment_required: String,
+    /// The EVM wallet material, consumed only inside the confidential call.
+    pub secret: SecretMaterial,
+}
+
+/// The signed sign-in for the host's retry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct X402SignInResponse {
+    /// Value for the `SIGN-IN-WITH-X` request header.
+    pub header: String,
+    /// The account that signed in, EIP-55 checksummed.
+    pub address: String,
+    /// The CAIP-2 chain the sign-in names, such as `eip155:8453`.
+    pub chain_id: String,
+}
+
 /// Record the outcome after the host retries with the module-built proof.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

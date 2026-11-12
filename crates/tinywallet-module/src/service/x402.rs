@@ -9,12 +9,15 @@ use tinywallet_bus::wire::{
     AuthorizeX402PaymentRequest, SecretMaterial, X402ConfigResponse, X402DetailedSpendingSummary,
     X402ListPaymentsRequest, X402ListPaymentsResponse, X402PaymentRecord, X402PaymentStatus,
     X402PreparePaymentRequest, X402PreparePaymentResponse, X402RecordPaymentRequest,
-    X402ServiceHandle, X402SpendingSummary, X402SummaryRequest, X402UpdateBudgetRequest,
+    X402ServiceHandle, X402SignInRequest, X402SignInResponse, X402SpendingSummary,
+    X402SummaryRequest, X402UpdateBudgetRequest,
 };
-use tinywallet_x402::crypto::{CryptoPayments, PaymentAccount, PaymentSigner, SignScheme};
+use tinywallet_x402::crypto::{
+    CryptoPayments, PaymentAccount, PaymentSigner, SignScheme, sign_in_with_x,
+};
 use tinywallet_x402::ledger::{self, PaymentRecord, PaymentStatus, SpendingBudget};
 use tinywallet_x402::protocol::{
-    handle_402_and_pay_on_network, parse_settlement_response, settled_amount,
+    handle_402_and_pay_on_network, parse_402_headers, parse_settlement_response, settled_amount,
 };
 use tinywallet_x402::wire::PaymentChain;
 
@@ -578,6 +581,51 @@ impl PaymentSigner for ModulePaymentSigner {
             _ => Err("module returned an unsupported signature variant".to_string()),
         }
     }
+}
+
+/// Sign a `sign-in-with-x` challenge with the EVM secret in `request`. The
+/// rules on what is signed live in `tinywallet_x402::crypto::sign_in_with_x`.
+pub(crate) async fn sign_in(mut request: X402SignInRequest) -> Result<X402SignInResponse, String> {
+    let secret = std::mem::replace(
+        &mut request.secret,
+        SecretMaterial {
+            mnemonic: String::new(),
+            derivation_path: String::new(),
+            chain: tinywallet_bus::Chain::Evm,
+        },
+    );
+    let mut secrets = vec![secret];
+    if secrets[0].chain != tinywallet_bus::Chain::Evm {
+        wipe_secrets(&mut secrets);
+        return Err("x402 sign-in needs the EVM wallet secret".to_string());
+    }
+    let challenge = HeaderValue::from_str(&request.payment_required)
+        .map_err(|error| format!("invalid sign-in challenge header: {error}"))
+        .and_then(|value| {
+            let mut headers = HeaderMap::new();
+            headers.insert(HeaderName::from_static("payment-required"), value);
+            parse_402_headers(&headers)
+                .map_err(|error| format!("invalid sign-in challenge: {error}"))
+        });
+    let challenge = match challenge {
+        Ok(challenge) => challenge,
+        Err(error) => {
+            wipe_secrets(&mut secrets);
+            return Err(error);
+        }
+    };
+    let url = request.url;
+    let proof = with_x402_execution_context(None, secrets, async {
+        sign_in_with_x(&ModulePaymentSigner, &challenge, &url)
+            .await
+            .map_err(|error| error.to_string())
+    })
+    .await?;
+    Ok(X402SignInResponse {
+        header: proof.header_value,
+        address: proof.address,
+        chain_id: proof.chain_id,
+    })
 }
 
 fn wipe(secret: &mut SecretMaterial) {

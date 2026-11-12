@@ -51,8 +51,8 @@ pub use host::{
     Web3ServiceHandle, X402CloseRequest, X402ConfigResponse, X402ConfigureRequest,
     X402DetailedSpendingSummary, X402ListPaymentsRequest, X402ListPaymentsResponse,
     X402PaymentRecord, X402PaymentStatus, X402PreparePaymentRequest, X402PreparePaymentResponse,
-    X402RecordPaymentRequest, X402ServiceHandle, X402SpendingSummary, X402SummaryRequest,
-    X402UpdateBudgetRequest,
+    X402RecordPaymentRequest, X402ServiceHandle, X402SignInRequest, X402SignInResponse,
+    X402SpendingSummary, X402SummaryRequest, X402UpdateBudgetRequest,
 };
 pub use wallet::{
     BalanceInfo, ChainStatus, DeriveMnemonicSeedRequest, DeriveMnemonicSeedResponse,

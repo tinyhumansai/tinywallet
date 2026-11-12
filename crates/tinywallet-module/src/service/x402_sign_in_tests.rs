@@ -56,7 +56,10 @@ async fn the_evm_account_signs_a_challenge_for_the_requested_host() {
     ))
     .await
     .unwrap();
-    assert_eq!(response.address, "0x9858EfFD232B4033E47d90003D41EC34EcaEda94");
+    assert_eq!(
+        response.address,
+        "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
+    );
     assert_eq!(response.chain_id, "eip155:8453");
     let payload: serde_json::Value =
         serde_json::from_slice(&BASE64.decode(&response.header).unwrap()).unwrap();
@@ -69,9 +72,12 @@ async fn the_evm_account_signs_a_challenge_for_the_requested_host() {
 
 #[tokio::test]
 async fn a_challenge_for_another_host_is_refused() {
-    let error = sign_in(request(challenge("evil.example"), tinywallet_bus::Chain::Evm))
-        .await
-        .unwrap_err();
+    let error = sign_in(request(
+        challenge("evil.example"),
+        tinywallet_bus::Chain::Evm,
+    ))
+    .await
+    .unwrap_err();
     assert!(error.contains("sign-in-with-x refused"), "{error}");
 }
 

@@ -96,6 +96,7 @@ const EXPECTED_METHODS: &[&str] = &[
     "X402UpdateBudget",
     "X402Configure",
     "X402Close",
+    "X402SignIn",
 ];
 
 /// The BIP-39 test vector mnemonic. Never use it for real funds.
