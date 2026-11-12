@@ -14,7 +14,9 @@ use serde_json::{Value, json};
 use tinywallet_crypto::rpc::{NetworkId, TransportError};
 
 use super::*;
+use crate::crypto::CryptoPayments;
 use crate::eip712;
+use crate::protocol::PaymentBuilder;
 use crate::test_support::{EVM_ADDRESS, FakePaymentSigner, FakeTransport};
 use crate::wire::{PaymentProof, PaymentRequired};
 

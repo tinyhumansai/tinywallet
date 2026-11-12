@@ -23,6 +23,7 @@ mod evm_payment;
 mod payments;
 mod signer;
 mod solana_payment;
+mod upto_payment;
 
 pub use payments::CryptoPayments;
 pub use signer::{PaymentAccount, PaymentSigner, SignScheme};
