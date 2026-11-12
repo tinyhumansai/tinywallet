@@ -474,7 +474,13 @@ fn every_error_has_its_pinned_message() {
     let cases = [
         (
             X402Error::NoPaymentOption,
-            "no supported payment option (Solana exact or EVM exact) in 402 challenge",
+            "no supported payment option (Solana exact, EVM exact or EVM upto) in 402 challenge",
+        ),
+        (
+            X402Error::NoPaymentOptionOnNetwork {
+                network: "eip155:8453".into(),
+            },
+            "no supported payment option on eip155:8453 in 402 challenge",
         ),
         (
             X402Error::AmountExceedsCap {

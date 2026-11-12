@@ -14,7 +14,7 @@ pub enum X402Error {
     #[error("402 response missing PAYMENT-REQUIRED header")]
     NoPaymentHeader,
     /// The challenge offers nothing this crate can pay.
-    #[error("no supported payment option (Solana exact or EVM exact) in 402 challenge")]
+    #[error("no supported payment option (Solana exact, EVM exact or EVM upto) in 402 challenge")]
     NoPaymentOption,
     /// The caller pinned a network, and the challenge offers nothing on it.
     #[error("no supported payment option on {network} in 402 challenge")]
