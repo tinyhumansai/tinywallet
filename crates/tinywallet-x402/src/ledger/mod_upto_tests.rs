@@ -60,9 +60,8 @@ fn settling_below_the_ceiling_releases_the_rest_of_the_budget() {
             .try_record_payment(upto(PaymentStatus::Pending, 3600))
             .unwrap();
         assert_eq!(ledger.outstanding_atomic(), 3600);
-        assert_eq!(
+        assert!(
             ledger.check_budget(10_000 - 3600 + 1).refusal().is_some(),
-            true,
             "the pending ceiling is held"
         );
 

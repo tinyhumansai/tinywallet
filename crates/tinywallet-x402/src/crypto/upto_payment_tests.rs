@@ -34,8 +34,8 @@ fn twitr() -> PaymentRequired {
     serde_json::from_str(TWITR_UPTO).unwrap()
 }
 
-fn word(value: u64) -> TransportResult {
-    Ok(json!(format!("0x{:064x}", value)))
+fn word(value: u64) -> Value {
+    json!(format!("0x{value:064x}"))
 }
 
 type TransportResult = tinywallet_crypto::rpc::TransportResult<Value>;
@@ -99,7 +99,7 @@ fn the_terms_hash_to_the_reference_digest() {
 #[tokio::test]
 async fn the_twitr_challenge_yields_the_reference_payload() {
     // Allowance already covers the amount, so no permit is signed.
-    let transport = transport(vec![word(1_000_000)]);
+    let transport = transport(vec![Ok(word(1_000_000))]);
     let challenge = twitr();
     let payload = build(&challenge, &transport).await.unwrap();
 
@@ -134,7 +134,7 @@ async fn the_twitr_challenge_yields_the_reference_payload() {
 
 #[tokio::test]
 async fn sufficient_allowance_echoes_the_server_extensions_without_a_permit() {
-    let transport = transport(vec![word(3600)]);
+    let transport = transport(vec![Ok(word(3600))]);
     let challenge = twitr();
     let payload = build(&challenge, &transport).await.unwrap();
 
@@ -158,7 +158,7 @@ async fn sufficient_allowance_echoes_the_server_extensions_without_a_permit() {
 
 #[tokio::test]
 async fn insufficient_allowance_adds_a_signed_eip2612_permit_for_permit2() {
-    let transport = transport(vec![word(0), word(7)]);
+    let transport = transport(vec![Ok(word(0)), Ok(word(7))]);
     let challenge = twitr();
     let payload = build(&challenge, &transport).await.unwrap();
 
@@ -223,7 +223,7 @@ async fn an_unreadable_allowance_still_signs_the_permit() {
         network: NetworkId::evm(8453),
         message: "down".into(),
     });
-    let transport = transport(vec![unreachable, word(0)]);
+    let transport = transport(vec![unreachable, Ok(word(0))]);
     let payload = build(&twitr(), &transport).await.unwrap();
     assert_eq!(
         payload.extensions["eip2612GasSponsoring"]["info"]["nonce"],
@@ -233,7 +233,7 @@ async fn an_unreadable_allowance_still_signs_the_permit() {
 
 #[tokio::test]
 async fn an_unreadable_token_nonce_fails_the_payment() {
-    let transport = transport(vec![word(0), Ok(json!({"not": "a word"}))]);
+    let transport = transport(vec![Ok(word(0)), Ok(json!({"not": "a word"}))]);
     let error = build(&twitr(), &transport).await.unwrap_err();
     assert!(
         matches!(&error, X402Error::Wallet(message) if message.contains("EIP-2612 nonce")),
@@ -299,7 +299,7 @@ async fn a_bad_facilitator_or_recipient_is_a_protocol_error() {
 async fn the_deadline_is_capped_like_an_eip3009_authorization() {
     let mut challenge = twitr();
     challenge.accepts[0].max_timeout_seconds = 86_400;
-    let payload = build(&challenge, &transport(vec![word(u64::MAX)]))
+    let payload = build(&challenge, &transport(vec![Ok(word(u64::MAX))]))
         .await
         .unwrap();
     assert_eq!(
@@ -310,7 +310,7 @@ async fn the_deadline_is_capped_like_an_eip3009_authorization() {
 
 #[tokio::test]
 async fn crypto_payments_pays_an_upto_requirement_with_a_permit2_proof() {
-    let transport = std::sync::Arc::new(transport(vec![word(u64::MAX)]));
+    let transport = std::sync::Arc::new(transport(vec![Ok(word(u64::MAX))]));
     let payments =
         CryptoPayments::new(std::sync::Arc::new(FakePaymentSigner::default()), transport);
     let challenge = twitr();

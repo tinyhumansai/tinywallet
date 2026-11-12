@@ -381,20 +381,19 @@ impl X402RequestTool {
             &payment.scheme,
             payment.amount_atomic,
         );
-        let charged_atomic = receipt
-            .as_ref()
-            .map_or(payment.amount_atomic, |(_, charged)| *charged);
-        let amount_display = format_usdc(charged_atomic);
+        // An error response or elapsed authorization deadline does not prove
+        // that a proof returned to the server did not settle: no receipt keeps
+        // the payment pending at the amount signed for.
         let settled_status = if receipt.is_some() {
             PaymentStatus::Settled
         } else {
-            // An error response or elapsed authorization deadline does not
-            // prove that a proof returned to the server did not settle.
             PaymentStatus::Pending
         };
-        let tx_sig = receipt
-            .filter(|(receipt, _)| !receipt.transaction.is_empty())
-            .map(|(receipt, _)| receipt.transaction);
+        let (charged_atomic, tx_sig) = receipt
+            .map_or((payment.amount_atomic, None), |(r, charged)| {
+                (charged, Some(r.transaction).filter(|tx| !tx.is_empty()))
+            });
+        let amount_display = format_usdc(charged_atomic);
         if settled_status != PaymentStatus::Pending
             && ledger::with_ledger_mut(|ledger| {
                 ledger.try_record_payment(record(settled_status, tx_sig.clone(), charged_atomic))
