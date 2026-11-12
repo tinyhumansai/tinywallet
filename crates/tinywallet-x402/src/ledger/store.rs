@@ -530,6 +530,16 @@ impl PaymentLedger {
         self.records.iter().rev().take(limit).cloned().collect()
     }
 
+    /// Read the records other writers appended since this ledger last looked,
+    /// so a following [`payment`](Self::payment) sees the latest state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the payments stream cannot be read.
+    pub fn refresh(&mut self) -> Result<(), String> {
+        self.refresh_records()
+    }
+
     /// Return the latest recorded state for a payment id.
     #[must_use]
     pub fn payment(&self, id: &str) -> Option<&PaymentRecord> {

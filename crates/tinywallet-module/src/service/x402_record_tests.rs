@@ -142,3 +142,108 @@ async fn record_settles_an_upto_payment_at_the_amount_charged() {
     runtime.close(&handle).unwrap();
     broker_task.abort();
 }
+
+/// A runtime with one pending `upto` payment of 3600 under `id`.
+async fn upto_runtime(
+    id: &str,
+) -> (
+    X402Runtime,
+    tokio::task::JoinHandle<tinybus::Result<()>>,
+    tinybus::Connection,
+    tempfile::TempDir,
+) {
+    let bus = tinybus::transport::memory::MemoryBus::new();
+    let broker_task = tinybus::broker::Broker::new().spawn(bus.clone());
+    let connection = tinybus::Connection::connect(bus.connect().await.unwrap())
+        .await
+        .unwrap();
+    let workspace = tempfile::tempdir().unwrap();
+    let runtime = X402Runtime::new(
+        HostCallbacks::new(&connection).unwrap(),
+        X402ConfigResponse {
+            workspace_dir: workspace.path().display().to_string(),
+            session_id: "coverage-test".to_string(),
+            per_request_max_atomic: 10_000,
+            daily_max_atomic: 10_000,
+            monthly_max_atomic: 10_000,
+        },
+        memory_ledger_storage(),
+    )
+    .unwrap();
+    let mut pending = pending_record(id, None);
+    pending.amount_atomic = 3600;
+    pending.network = "eip155:8453".to_string();
+    pending.scheme = Some("upto".to_string());
+    ledger::with_ledger_mut(|ledger| ledger.try_record_payment(pending))
+        .unwrap()
+        .unwrap();
+    (runtime, broker_task, connection, workspace)
+}
+
+fn record_charge(runtime: &X402Runtime, id: &str, charged: Option<&str>) -> Result<(), String> {
+    runtime.record(X402RecordPaymentRequest {
+        service: runtime.handle(),
+        payment_id: id.to_string(),
+        response_status: 200,
+        settlement_response: charged.map(|amount| receipt("eip155:8453", Some(amount))),
+    })
+}
+
+fn charged(id: &str) -> (PaymentStatus, u64) {
+    ledger::with_ledger(|ledger| {
+        let latest = ledger.payment(id).unwrap();
+        (latest.status, latest.amount_atomic)
+    })
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_settled_payment_accepts_only_a_replay_of_the_same_charge() {
+    let _ledger_guard = LEDGER_TEST_LOCK.lock().await;
+    let (mut runtime, broker_task, _connection, _workspace) = upto_runtime("once").await;
+
+    record_charge(&runtime, "once", Some("1200")).unwrap();
+    assert_eq!(charged("once"), (PaymentStatus::Settled, 1200));
+
+    let error = record_charge(&runtime, "once", Some("1000")).unwrap_err();
+    assert!(error.contains("already settled"), "{error}");
+    assert_eq!(charged("once"), (PaymentStatus::Settled, 1200));
+
+    record_charge(&runtime, "once", Some("1200")).unwrap();
+    record_charge(&runtime, "once", None).unwrap();
+    let rows = ledger::with_ledger(|ledger| {
+        ledger
+            .recent_payments(50)
+            .into_iter()
+            .filter(|row| row.id == "once")
+            .count()
+    })
+    .unwrap();
+    assert_eq!(rows, 2, "one pending row and one settled row, no more");
+
+    let handle = runtime.handle();
+    runtime.close(&handle).unwrap();
+    broker_task.abort();
+}
+
+#[tokio::test]
+async fn concurrent_receipts_settle_a_payment_once() {
+    let _ledger_guard = LEDGER_TEST_LOCK.lock().await;
+    let (mut runtime, broker_task, _connection, _workspace) = upto_runtime("raced").await;
+
+    let outcomes = std::thread::scope(|scope| {
+        let first = scope.spawn(|| record_charge(&runtime, "raced", Some("1200")));
+        let second = scope.spawn(|| record_charge(&runtime, "raced", Some("900")));
+        [first.join().unwrap(), second.join().unwrap()]
+    });
+
+    assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
+    let (status, amount) = charged("raced");
+    assert_eq!(status, PaymentStatus::Settled);
+    let winner = if outcomes[0].is_ok() { 1200 } else { 900 };
+    assert_eq!(amount, winner, "the ledger keeps the receipt that won");
+
+    let handle = runtime.handle();
+    runtime.close(&handle).unwrap();
+    broker_task.abort();
+}

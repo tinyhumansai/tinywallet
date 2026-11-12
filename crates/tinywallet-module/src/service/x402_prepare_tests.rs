@@ -160,6 +160,14 @@ async fn a_network_pin_chooses_the_paying_chain_and_refuses_an_absent_one() {
             .unwrap();
         assert_eq!(pinned.network, "eip155:1", "{pin}");
     }
+    let last_approval = fixture
+        .payment_requests
+        .lock()
+        .unwrap()
+        .last()
+        .cloned()
+        .unwrap();
+    assert_eq!(last_approval.scheme.as_deref(), Some("exact"));
 
     let approvals_before = fixture.authorizations.load(Ordering::SeqCst);
     let error = wallet

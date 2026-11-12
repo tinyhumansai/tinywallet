@@ -229,6 +229,7 @@ impl X402Runtime {
                             recipient: requirement.pay_to,
                             amount_atomic,
                             owner: owner.clone(),
+                            scheme: Some(requirement.scheme),
                         })
                         .await?;
                     if authorization.approved {
@@ -294,74 +295,13 @@ impl X402Runtime {
     /// retries the paid request.
     pub(crate) fn record(&self, request: X402RecordPaymentRequest) -> Result<(), String> {
         self.require_handle(&request.service)?;
-        let pending = ledger::with_ledger(|ledger| ledger.payment(&request.payment_id).cloned())?
-            .ok_or_else(|| "x402 payment handle was missing".to_string())?;
-        if pending.status == PaymentStatus::Settled {
-            // A reply may be lost after the durable transition; replaying the
-            // same receipt is an idempotent acknowledgment.
-            return Ok(());
-        }
-        let legacy_expired =
-            pending.status == PaymentStatus::Failed && pending.authorization_valid_until.is_some();
-        if pending.status != PaymentStatus::Pending && !legacy_expired {
-            return Err("x402 payment handle was missing or expired".to_string());
-        }
-        // An `upto` payment is pending at its signed ceiling; its receipt
-        // reports what was charged, which is what the ledger keeps.
         let receipt = request
             .settlement_response
             .as_deref()
-            .and_then(|value| parse_settlement_response(value).ok())
-            .and_then(|receipt| {
-                settled_amount(
-                    &receipt,
-                    &pending.network,
-                    pending.scheme.as_deref(),
-                    pending.amount_atomic,
-                )
-                .map(|charged| (receipt, charged))
-            });
-        let amount_atomic = receipt
-            .as_ref()
-            .map_or(pending.amount_atomic, |(_, charged)| *charged);
-        let status = if receipt.is_some() {
-            PaymentStatus::Settled
-        } else {
-            // Neither a failed HTTP response nor an elapsed authorization
-            // deadline proves that a previously returned proof did not settle.
-            PaymentStatus::Pending
-        };
-        let tx_signature = receipt
-            .filter(|(receipt, _)| !receipt.transaction.is_empty())
-            .map(|(receipt, _)| receipt.transaction);
-        if status == pending.status {
-            return Ok(());
-        }
-        let record = PaymentRecord {
-            id: request.payment_id,
-            url: pending.url,
-            asset: pending.asset,
-            amount_display: if amount_atomic == pending.amount_atomic {
-                pending.amount_display
-            } else {
-                tinywallet_x402::ledger::format_usdc(amount_atomic)
-            },
-            amount_atomic,
-            recipient: pending.recipient,
-            network: pending.network,
-            tx_signature,
-            status,
-            timestamp: chrono::Utc::now(),
-            authorization_valid_until: pending.authorization_valid_until,
-            solana_last_valid_block_height: pending.solana_last_valid_block_height,
-            authorization_expired_at: pending.authorization_expired_at,
-            authorization_expiry_observed_height: pending.authorization_expiry_observed_height,
-            session_id: pending.session_id,
-            thread_id: pending.thread_id,
-            scheme: pending.scheme,
-        };
-        ledger::with_ledger_mut(|ledger| ledger.try_record_payment(record))??;
-        Ok(())
+            .and_then(|value| parse_settlement_response(value).ok());
+        // Read, decide and append under the one ledger lock, so two receipts
+        // for the same payment cannot both settle it.
+        ledger::with_ledger_mut(|ledger| settle(ledger, &request.payment_id, receipt))?
     }
 
     /// Read the module-owned budget totals and currently held reservations.

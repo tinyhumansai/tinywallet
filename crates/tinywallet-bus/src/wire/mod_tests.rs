@@ -397,3 +397,39 @@ fn x402_chain_secret_extension_preserves_legacy_serialization() {
     let request: super::X402PreparePaymentRequest = serde_json::from_value(legacy.clone()).unwrap();
     assert_eq!(serde_json::to_value(request).unwrap(), legacy);
 }
+
+#[test]
+fn an_x402_authorization_names_its_scheme_and_older_hosts_still_parse_it() {
+    let request = super::AuthorizeX402PaymentRequest {
+        url: "https://twitr.sh/api/tools/x_search".into(),
+        network: "eip155:8453".into(),
+        asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913".into(),
+        recipient: "0xb5194A98DbDBb7028B585Db26B972e7F0F3f826A".into(),
+        amount_atomic: 3600,
+        owner: None,
+        scheme: Some("upto".into()),
+    };
+    let encoded = serde_json::to_value(&request).unwrap();
+    assert_eq!(encoded["scheme"], "upto");
+    assert_eq!(
+        serde_json::from_value::<super::AuthorizeX402PaymentRequest>(encoded).unwrap(),
+        request
+    );
+
+    let legacy = json!({
+        "url": "https://x", "network": "eip155:8453", "asset": "a",
+        "recipient": "r", "amount_atomic": 1
+    });
+    let parsed: super::AuthorizeX402PaymentRequest = serde_json::from_value(legacy).unwrap();
+    assert_eq!(parsed.scheme, None);
+    let unnamed = super::AuthorizeX402PaymentRequest {
+        scheme: None,
+        ..parsed
+    };
+    assert!(
+        serde_json::to_value(&unnamed)
+            .unwrap()
+            .get("scheme")
+            .is_none()
+    );
+}

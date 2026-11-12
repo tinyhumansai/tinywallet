@@ -361,12 +361,20 @@ pub struct AuthorizeX402PaymentRequest {
     pub asset: String,
     /// Payment recipient.
     pub recipient: String,
-    /// Exact amount in token atomic units.
+    /// Amount in token atomic units that the signed authorization allows: the
+    /// exact price for `exact`, the most that can be charged for `upto`. A
+    /// host cap compares against this value.
     pub amount_atomic: u64,
     /// Conversation owner used to route approval to the initiating client.
     /// Older hosts omit this field and retain their existing approval flow.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<QuoteOwner>,
+    /// The x402 scheme the payment is signed under: `"exact"`, or `"upto"`,
+    /// where `amount_atomic` is a ceiling and the server charges what it
+    /// used, from zero up to it. Absent from older modules, which sign only
+    /// `exact`. Contract 1.16.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<String>,
 }
 
 /// Request module-owned parsing and signing for a 402 challenge.
