@@ -23,7 +23,9 @@ use super::LOG_PREFIX;
 use super::evm_payment::eip712_signature;
 use super::signer::{PaymentSigner, SignScheme};
 use crate::protocol::X402Error;
-use crate::wire::{PaymentChain, PaymentRequired, SIGN_IN_WITH_X, SiwxExtension, SiwxInfo, SiwxPayload};
+use crate::wire::{
+    PaymentChain, PaymentRequired, SIGN_IN_WITH_X, SiwxExtension, SiwxInfo, SiwxPayload,
+};
 
 /// The chain preferred when the server accepts several: Base mainnet.
 const PREFERRED_CHAIN_ID: u64 = 8453;
@@ -112,7 +114,10 @@ pub(super) async fn sign_in_with_x_at(
     };
     let json = serde_json::to_vec(&payload)
         .map_err(|e| X402Error::Protocol(format!("serialize sign-in-with-x: {e}")))?;
-    debug!("{LOG_PREFIX} signed sign-in-with-x for {} on {chain_id}", payload.domain);
+    debug!(
+        "{LOG_PREFIX} signed sign-in-with-x for {} on {chain_id}",
+        payload.domain
+    );
     Ok(SiwxProof {
         header_value: B64.encode(json),
         address,
@@ -170,8 +175,8 @@ fn refused(reason: &str) -> X402Error {
 /// The domain must be the requested host (and non-default port), and the URI
 /// and every resource must be HTTPS on the requested origin.
 fn check_origin(info: &SiwxInfo, request_url: &str) -> Result<(), X402Error> {
-    let request = reqwest::Url::parse(request_url)
-        .map_err(|_| refused("the requested URL is not a URL"))?;
+    let request =
+        reqwest::Url::parse(request_url).map_err(|_| refused("the requested URL is not a URL"))?;
     if request.scheme() != "https" {
         return Err(refused("sign-in is only answered for an https request"));
     }
@@ -214,7 +219,9 @@ fn check_fields(info: &SiwxInfo, now: DateTime<Utc>) -> Result<(), X402Error> {
         return Err(refused(&format!("unsupported version {}", info.version)));
     }
     if info.nonce.len() < 8 || !info.nonce.bytes().all(|b| b.is_ascii_alphanumeric()) {
-        return Err(refused("the nonce is not at least 8 alphanumeric characters"));
+        return Err(refused(
+            "the nonce is not at least 8 alphanumeric characters",
+        ));
     }
     let instant = |field: &str, value: &str| {
         DateTime::parse_from_rfc3339(value)

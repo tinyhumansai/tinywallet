@@ -15,6 +15,7 @@ use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
 use serde_json::{Value, json};
 
 use super::*;
+use crate::protocol::X402Error;
 use crate::test_support::{EVM_ADDRESS, FakePaymentSigner};
 use crate::wire::{PaymentRequired, SiwxInfo};
 
@@ -79,7 +80,9 @@ fn optional_fields_are_laid_out_as_the_reference_does() {
 #[tokio::test]
 async fn the_twitr_challenge_is_signed_exactly_as_the_reference_client_signs_it() {
     let signer = FakePaymentSigner::default();
-    let proof = sign_in_with_x_at(&signer, &twitr(), TWITR_URL, now()).await.unwrap();
+    let proof = sign_in_with_x_at(&signer, &twitr(), TWITR_URL, now())
+        .await
+        .unwrap();
 
     assert_eq!(proof.address, EVM_ADDRESS);
     assert_eq!(proof.chain_id, "eip155:8453");
@@ -120,7 +123,10 @@ async fn base_is_preferred_whatever_order_the_server_lists_chains_in() {
             {"chainId": "eip155:8453", "type": "eip191"}
         ]);
     });
-    assert_eq!(sign(&challenge, TWITR_URL).await.unwrap().chain_id, "eip155:8453");
+    assert_eq!(
+        sign(&challenge, TWITR_URL).await.unwrap().chain_id,
+        "eip155:8453"
+    );
 
     let challenge = twitr_with(|siwx| {
         siwx["supportedChains"] = json!([
@@ -129,47 +135,152 @@ async fn base_is_preferred_whatever_order_the_server_lists_chains_in() {
             {"chainId": "eip155:84532", "type": "eip191"}
         ]);
     });
-    assert_eq!(sign(&challenge, TWITR_URL).await.unwrap().chain_id, "eip155:84532");
+    assert_eq!(
+        sign(&challenge, TWITR_URL).await.unwrap().chain_id,
+        "eip155:84532"
+    );
 }
 
 /// Every way a challenge can ask for something this must not sign.
 #[tokio::test]
 async fn a_challenge_outside_the_rules_is_refused_before_signing() {
     let refusals: Vec<(&str, PaymentRequired, &str)> = vec![
-        ("no extension", {
-            let mut c = twitr();
-            c.extensions.clear();
-            c
-        }, TWITR_URL),
-        ("domain of another host", twitr(), "https://evil.example/api/x-accounts/start"),
-        ("plain http request", twitr(), "http://twitr.sh/api/x-accounts/start"),
-        ("domain mismatch", twitr_with(|s| s["info"]["domain"] = "evil.example".into()), TWITR_URL),
-        ("uri on another host", twitr_with(|s| s["info"]["uri"] = "https://evil.example/x".into()), TWITR_URL),
-        ("uri over http", twitr_with(|s| s["info"]["uri"] = "http://twitr.sh/x".into()), TWITR_URL),
-        ("resource on another host", twitr_with(|s| s["info"]["resources"] = json!(["https://evil.example/r"])), TWITR_URL),
-        ("resource not a URI", twitr_with(|s| s["info"]["resources"] = json!(["not a uri"])), TWITR_URL),
-        ("expired", twitr_with(|s| s["info"]["expirationTime"] = "2026-11-12T19:40:59Z".into()), TWITR_URL),
-        ("no expiry", twitr_with(|s| { s["info"].as_object_mut().unwrap().remove("expirationTime"); }), TWITR_URL),
-        ("issued in the future", twitr_with(|s| s["info"]["issuedAt"] = "2026-11-12T20:41:00Z".into()), TWITR_URL),
-        ("issuedAt not a date", twitr_with(|s| s["info"]["issuedAt"] = "yesterday".into()), TWITR_URL),
-        ("notBefore not a date", twitr_with(|s| s["info"]["notBefore"] = "soon\nURI: x".into()), TWITR_URL),
-        ("statement with a line break", twitr_with(|s| s["info"]["statement"] = "hi\nURI: https://evil.example".into()), TWITR_URL),
-        ("requestId with a line break", twitr_with(|s| s["info"]["requestId"] = "a\nb".into()), TWITR_URL),
-        ("short nonce", twitr_with(|s| s["info"]["nonce"] = "abc".into()), TWITR_URL),
-        ("nonce with punctuation", twitr_with(|s| s["info"]["nonce"] = "abcdefgh!".into()), TWITR_URL),
-        ("another version", twitr_with(|s| s["info"]["version"] = "2".into()), TWITR_URL),
-        ("no EVM chain", twitr_with(|s| s["supportedChains"] = json!([{"chainId": "solana:x", "type": "ed25519"}])), TWITR_URL),
-        ("no eip191 chain", twitr_with(|s| s["supportedChains"] = json!([{"chainId": "eip155:8453", "type": "eip1271"}])), TWITR_URL),
-        ("malformed chain id", twitr_with(|s| s["supportedChains"] = json!([{"chainId": "eip155:base", "type": "eip191"}])), TWITR_URL),
-        ("not an object", twitr_with(|s| *s = json!("sign me")), TWITR_URL),
+        (
+            "no extension",
+            {
+                let mut c = twitr();
+                c.extensions.clear();
+                c
+            },
+            TWITR_URL,
+        ),
+        (
+            "domain of another host",
+            twitr(),
+            "https://evil.example/api/x-accounts/start",
+        ),
+        (
+            "plain http request",
+            twitr(),
+            "http://twitr.sh/api/x-accounts/start",
+        ),
+        (
+            "domain mismatch",
+            twitr_with(|s| s["info"]["domain"] = "evil.example".into()),
+            TWITR_URL,
+        ),
+        (
+            "uri on another host",
+            twitr_with(|s| s["info"]["uri"] = "https://evil.example/x".into()),
+            TWITR_URL,
+        ),
+        (
+            "uri over http",
+            twitr_with(|s| s["info"]["uri"] = "http://twitr.sh/x".into()),
+            TWITR_URL,
+        ),
+        (
+            "resource on another host",
+            twitr_with(|s| s["info"]["resources"] = json!(["https://evil.example/r"])),
+            TWITR_URL,
+        ),
+        (
+            "resource not a URI",
+            twitr_with(|s| s["info"]["resources"] = json!(["not a uri"])),
+            TWITR_URL,
+        ),
+        (
+            "expired",
+            twitr_with(|s| s["info"]["expirationTime"] = "2026-11-12T19:40:59Z".into()),
+            TWITR_URL,
+        ),
+        (
+            "no expiry",
+            twitr_with(|s| {
+                s["info"].as_object_mut().unwrap().remove("expirationTime");
+            }),
+            TWITR_URL,
+        ),
+        (
+            "issued in the future",
+            twitr_with(|s| s["info"]["issuedAt"] = "2026-11-12T20:41:00Z".into()),
+            TWITR_URL,
+        ),
+        (
+            "issuedAt not a date",
+            twitr_with(|s| s["info"]["issuedAt"] = "yesterday".into()),
+            TWITR_URL,
+        ),
+        (
+            "notBefore not a date",
+            twitr_with(|s| s["info"]["notBefore"] = "soon\nURI: x".into()),
+            TWITR_URL,
+        ),
+        (
+            "statement with a line break",
+            twitr_with(|s| s["info"]["statement"] = "hi\nURI: https://evil.example".into()),
+            TWITR_URL,
+        ),
+        (
+            "requestId with a line break",
+            twitr_with(|s| s["info"]["requestId"] = "a\nb".into()),
+            TWITR_URL,
+        ),
+        (
+            "short nonce",
+            twitr_with(|s| s["info"]["nonce"] = "abc".into()),
+            TWITR_URL,
+        ),
+        (
+            "nonce with punctuation",
+            twitr_with(|s| s["info"]["nonce"] = "abcdefgh!".into()),
+            TWITR_URL,
+        ),
+        (
+            "another version",
+            twitr_with(|s| s["info"]["version"] = "2".into()),
+            TWITR_URL,
+        ),
+        (
+            "no EVM chain",
+            twitr_with(|s| {
+                s["supportedChains"] = json!([{"chainId": "solana:x", "type": "ed25519"}])
+            }),
+            TWITR_URL,
+        ),
+        (
+            "no eip191 chain",
+            twitr_with(|s| {
+                s["supportedChains"] = json!([{"chainId": "eip155:8453", "type": "eip1271"}])
+            }),
+            TWITR_URL,
+        ),
+        (
+            "malformed chain id",
+            twitr_with(|s| {
+                s["supportedChains"] = json!([{"chainId": "eip155:base", "type": "eip191"}])
+            }),
+            TWITR_URL,
+        ),
+        (
+            "not an object",
+            twitr_with(|s| *s = json!("sign me")),
+            TWITR_URL,
+        ),
     ];
     for (case, challenge, url) in refusals {
         let signer = FakePaymentSigner::default();
         let error = sign_in_with_x_at(&signer, &challenge, url, now())
             .await
             .unwrap_err();
-        assert!(matches!(error, X402Error::SignInRefused { .. }), "{case}: {error}");
-        assert!(signer.sign_calls.lock().unwrap().is_empty(), "{case}: signed");
+        assert!(
+            matches!(error, X402Error::SignInRefused { .. }),
+            "{case}: {error}"
+        );
+        assert!(
+            signer.sign_calls.lock().unwrap().is_empty(),
+            "{case}: signed"
+        );
     }
 }
 
@@ -182,7 +293,10 @@ async fn a_wallet_failure_is_a_wallet_error() {
     let error = sign_in_with_x_at(&signer, &twitr(), TWITR_URL, now())
         .await
         .unwrap_err();
-    assert_eq!(error.to_string(), "x402 wallet: sign sign-in-with-x: locked");
+    assert_eq!(
+        error.to_string(),
+        "x402 wallet: sign sign-in-with-x: locked"
+    );
 }
 
 #[test]

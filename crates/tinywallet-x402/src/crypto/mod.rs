@@ -28,6 +28,7 @@ mod upto_payment;
 
 pub use payments::CryptoPayments;
 pub use signer::{PaymentAccount, PaymentSigner, SignScheme};
+pub use siwx::{SiwxProof, sign_in_with_x};
 
 use sha2::{Digest, Sha256};
 use std::sync::atomic::{AtomicU64, Ordering};
