@@ -133,3 +133,18 @@ fn the_eip2612_digest_matches_the_reference_client() {
         "f4935bb06c8d01cdab90133ce4a8c1040124320fb214773633ebaa37b3883cbe"
     );
 }
+
+#[test]
+fn a_uint256_prints_as_the_decimal_it_was_parsed_from() {
+    for text in [
+        "0",
+        "3600",
+        "33247007178036348590600198031289925668252061821958005840077069883511451257277",
+        "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    ] {
+        assert_eq!(
+            super::super::u256_to_decimal(&u256_from_decimal(text).unwrap()),
+            text
+        );
+    }
+}

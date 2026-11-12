@@ -105,6 +105,34 @@ pub fn u256_from_decimal(value: &str) -> Result<U256Bytes> {
     Ok(out)
 }
 
+/// Print a 32-byte big-endian integer in base 10, the inverse of
+/// [`u256_from_decimal`].
+///
+/// x402 carries Permit2 and EIP-2612 nonces as decimal strings, and a random
+/// 256-bit nonce does not fit any primitive integer; this does the repeated
+/// division by ten over the bytes instead.
+#[must_use]
+pub fn u256_to_decimal(value: &U256Bytes) -> String {
+    let mut remaining = *value;
+    let mut digits = Vec::new();
+    while remaining.iter().any(|byte| *byte != 0) {
+        // remaining = remaining / 10, keeping the remainder, most significant
+        // byte first.
+        let mut carry = 0u32;
+        for byte in &mut remaining {
+            let current = (carry << 8) | u32::from(*byte);
+            *byte = u8::try_from(current / 10).unwrap_or(0);
+            carry = current % 10;
+        }
+        digits.push(b'0' + u8::try_from(carry).unwrap_or(0));
+    }
+    if digits.is_empty() {
+        return "0".to_string();
+    }
+    digits.reverse();
+    String::from_utf8(digits).unwrap_or_default()
+}
+
 /// Why an EIP-712 payload could not be built.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
