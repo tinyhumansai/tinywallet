@@ -1699,11 +1699,11 @@ fn each_bus_error_names_its_kind_and_keeps_its_message() {
 #[test]
 fn a_failure_reads_as_its_message() {
     assert_eq!(
-        super::failure_message(Failure::InvalidInput("bad".into())),
+        super::failure_message(super::Failure::InvalidInput("bad".into())),
         "bad"
     );
     assert_eq!(
-        super::failure_message(Failure::BuildFailed("broke".into())),
+        super::failure_message(super::Failure::BuildFailed("broke".into())),
         "broke"
     );
 }
