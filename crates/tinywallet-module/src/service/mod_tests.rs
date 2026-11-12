@@ -1661,3 +1661,49 @@ async fn user_scoped_operations_fail_closed_before_configuration() {
             .is_err()
     );
 }
+
+/// Every bus error the service raises names its own error, so a host can
+/// tell a refused approval from an unreachable host or a bad input, and
+/// carries the message it was given.
+#[test]
+fn each_bus_error_names_its_kind_and_keeps_its_message() {
+    let named = |error: super::BusError| match error {
+        super::BusError::MethodFailed { name, message } => (name, message),
+        other => panic!("not a method failure: {other:?}"),
+    };
+    let (name, _) = named(super::host_unavailable());
+    assert_eq!(name, "ai.tinyhumans.tinywallet.Error.HostUnavailable");
+    for (error, kind) in [
+        (super::host_call_failed("m".into()), "HostCallFailed"),
+        (super::invalid_input("m".into()), "InvalidInput"),
+        (
+            super::web3_operation_failed("m".into()),
+            "Web3OperationFailed",
+        ),
+        (
+            super::x402_operation_failed("m".into()),
+            "X402OperationFailed",
+        ),
+        (
+            super::native_wallet_operation_failed("m".into()),
+            "NativeWalletOperationFailed",
+        ),
+        (super::host_build_failed("m".into()), "BuildFailed"),
+    ] {
+        let (name, message) = named(error);
+        assert!(name.ends_with(kind), "{name} is not {kind}");
+        assert_eq!(message, "m");
+    }
+}
+
+#[test]
+fn a_failure_reads_as_its_message() {
+    assert_eq!(
+        super::failure_message(Failure::InvalidInput("bad".into())),
+        "bad"
+    );
+    assert_eq!(
+        super::failure_message(Failure::BuildFailed("broke".into())),
+        "broke"
+    );
+}
