@@ -22,6 +22,7 @@
 mod evm_payment;
 mod payments;
 mod signer;
+mod siwx;
 mod solana_payment;
 mod upto_payment;
 

@@ -39,12 +39,16 @@
 //! [CAIP-2]: https://chainagnostic.org/CAIPs/caip-2
 
 mod assets;
+mod siwx;
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod test;
 mod types;
 
 pub use assets::{AssetCheck, SUPPORTED_USDC, check_usdc};
+pub use siwx::{
+    HEADER_SIGN_IN_WITH_X, SIGN_IN_WITH_X, SiwxExtension, SiwxInfo, SiwxPayload, SiwxSupportedChain,
+};
 pub use types::{
     BASE_MAINNET_CAIP2, BASE_SEPOLIA_CAIP2, COMPUTE_BUDGET_PROGRAM, EIP2612_GAS_SPONSORING,
     ETHEREUM_MAINNET_CAIP2, EvmAuthorization, EvmPaymentProof, HEADER_PAYMENT_REQUIRED,

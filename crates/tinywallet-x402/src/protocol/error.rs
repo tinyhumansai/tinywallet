@@ -62,6 +62,13 @@ pub enum X402Error {
     /// The challenge or a header could not be understood.
     #[error("x402 protocol: {0}")]
     Protocol(String),
+    /// A `sign-in-with-x` challenge asked for something this crate will not
+    /// sign, such as a message for another host or one already expired.
+    #[error("x402 sign-in-with-x refused: {reason}")]
+    SignInRefused {
+        /// Why the challenge was refused.
+        reason: String,
+    },
     /// The wallet could not produce the payment.
     #[error("x402 wallet: {0}")]
     Wallet(String),
