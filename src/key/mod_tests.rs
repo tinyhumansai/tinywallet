@@ -12,7 +12,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use super::{Error, derive};
+use super::{Error, derivation_failed, derive};
 use crate::chain::Chain;
 use std::fmt::Write as _;
 
