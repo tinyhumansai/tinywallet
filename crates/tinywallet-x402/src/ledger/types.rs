@@ -66,6 +66,11 @@ pub struct PaymentRecord {
     /// reported one. Absent from older ledger files.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
+    /// The x402 scheme the authorization was signed under (`exact`, `upto`).
+    /// Absent from older records, which were all `exact`. An `upto` record
+    /// holds the signed ceiling until its receipt reports what was charged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<String>,
 }
 
 impl PaymentRecord {

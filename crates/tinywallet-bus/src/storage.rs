@@ -79,6 +79,9 @@ pub struct StoredPaymentRecord {
     /// The conversation thread, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
+    /// The x402 scheme the payment was signed under. Absent means `exact`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<String>,
     /// The budget hold this entry committed, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub committed_hold: Option<String>,
