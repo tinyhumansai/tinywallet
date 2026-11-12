@@ -142,5 +142,8 @@ async fn preparing_a_payment_before_x402_is_configured_is_refused() {
         })
         .await
         .unwrap_err();
-    assert!(!format!("{error:?}").is_empty());
+    assert!(
+        format!("{error:?}").contains("HostUnavailable"),
+        "{error:?}"
+    );
 }
