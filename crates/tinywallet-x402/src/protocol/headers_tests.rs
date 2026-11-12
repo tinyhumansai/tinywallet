@@ -74,3 +74,11 @@ fn a_failed_or_foreign_receipt_settles_nothing() {
         None
     );
 }
+
+#[test]
+fn settles_is_the_exact_rule() {
+    assert!(settles(&receipt(true, BASE, Some("2500")), BASE, 2500));
+    assert!(settles(&receipt(true, BASE, None), BASE, 2500));
+    assert!(!settles(&receipt(true, BASE, Some("2499")), BASE, 2500));
+    assert!(!settles(&receipt(false, BASE, Some("2500")), BASE, 2500));
+}

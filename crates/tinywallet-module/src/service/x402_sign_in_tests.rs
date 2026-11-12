@@ -124,3 +124,23 @@ async fn the_wallet_service_answers_x402_sign_in() {
         "{error:?}"
     );
 }
+
+#[tokio::test]
+async fn preparing_a_payment_before_x402_is_configured_is_refused() {
+    let wallet = crate::service::Wallet::default();
+    let error = wallet
+        .x402_prepare_payment(tinywallet_bus::wire::X402PreparePaymentRequest {
+            service: tinywallet_bus::wire::X402ServiceHandle {
+                handle: "none".into(),
+            },
+            url: URL.into(),
+            payment_required: challenge("wallet.fixture.test"),
+            owner: None,
+            secret: secret(tinywallet_bus::Chain::Evm),
+            additional_secrets: vec![secret(tinywallet_bus::Chain::Solana)],
+            network: None,
+        })
+        .await
+        .unwrap_err();
+    assert!(!format!("{error:?}").is_empty());
+}
