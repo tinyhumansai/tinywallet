@@ -16,6 +16,12 @@ pub enum X402Error {
     /// The challenge offers nothing this crate can pay.
     #[error("no supported payment option (Solana exact or EVM exact) in 402 challenge")]
     NoPaymentOption,
+    /// The caller pinned a network, and the challenge offers nothing on it.
+    #[error("no supported payment option on {network} in 402 challenge")]
+    NoPaymentOptionOnNetwork {
+        /// The CAIP-2 network or namespace the caller pinned.
+        network: String,
+    },
     /// One request would cost more than the per-request cap.
     #[error("x402 amount {requested} exceeds per-request cap {cap}")]
     AmountExceedsCap {

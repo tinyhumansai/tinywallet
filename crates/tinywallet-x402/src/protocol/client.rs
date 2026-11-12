@@ -88,7 +88,7 @@ impl X402Client {
             challenge.accepts.len()
         );
 
-        let (index, chain) = select_requirement(&challenge)?;
+        let (index, chain) = select_requirement(&challenge, None)?;
         let requirement = &challenge.accepts[index];
 
         let amount = parse_amount(requirement)?;
@@ -161,7 +161,7 @@ pub fn handle_402(
     headers: &HeaderMap,
 ) -> Result<(PaymentRequired, usize, PaymentChain), X402Error> {
     let challenge = parse_402_headers(headers)?;
-    let (idx, chain) = select_requirement(&challenge)?;
+    let (idx, chain) = select_requirement(&challenge, None)?;
     Ok((challenge, idx, chain))
 }
 

@@ -45,6 +45,7 @@ pub(crate) fn ensure_payable(requirement: &PaymentRequirements) -> Result<(), X4
 /// when none of them is payable.
 pub(crate) fn select_requirement(
     challenge: &PaymentRequired,
+    _network: Option<&str>,
 ) -> Result<(usize, PaymentChain), X402Error> {
     let mut first_refusal = None;
     let mut evm = None;
@@ -69,3 +70,7 @@ pub(crate) fn select_requirement(
         (None, None) => Err(X402Error::NoPaymentOption),
     }
 }
+
+#[cfg(test)]
+#[path = "select_tests.rs"]
+mod tests;
