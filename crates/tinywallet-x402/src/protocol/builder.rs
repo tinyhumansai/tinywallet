@@ -4,9 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
 use super::error::X402Error;
-use crate::wire::{
-    PaymentChain, PaymentPayload, PaymentProof, PaymentRequired, PaymentRequirements,
-};
+use crate::wire::{PaymentChain, PaymentPayload, PaymentRequired, PaymentRequirements};
 
 /// Rail-specific metadata that stays in the host ledger and is never added to
 /// the facilitator-facing payment payload.

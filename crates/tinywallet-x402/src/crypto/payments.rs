@@ -10,9 +10,7 @@ use super::evm_payment::build_evm_payment;
 use super::signer::PaymentSigner;
 use super::solana_payment::{b58_to_32, build_solana_payment};
 use crate::protocol::{PaymentBuild, PaymentBuilder, X402Error};
-use crate::wire::{
-    PaymentChain, PaymentPayload, PaymentProof, PaymentRequired, PaymentRequirements,
-};
+use crate::wire::{PaymentChain, PaymentPayload, PaymentRequired, PaymentRequirements};
 
 /// Builds EVM and Solana payments with an injected wallet and chain transport.
 #[derive(Clone)]

@@ -64,14 +64,14 @@ async fn build_solana(
 fn evm_proof(payload: PaymentPayload) -> crate::wire::EvmPaymentProof {
     match payload.payload {
         PaymentProof::Evm(proof) => proof,
-        PaymentProof::Solana(_) => panic!("expected an EVM proof"),
+        other => panic!("expected an EVM proof, got {other:?}"),
     }
 }
 
 fn solana_transaction(payload: &PaymentPayload) -> Vec<u8> {
     match &payload.payload {
         PaymentProof::Solana(proof) => B64.decode(&proof.transaction).unwrap(),
-        PaymentProof::Evm(_) => panic!("expected a Solana proof"),
+        other => panic!("expected a Solana proof, got {other:?}"),
     }
 }
 

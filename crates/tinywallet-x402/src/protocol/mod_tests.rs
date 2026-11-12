@@ -938,7 +938,7 @@ async fn a_402_is_paid_and_retried_with_the_same_request() {
         serde_json::from_slice(&B64.decode(retry.payment_signature().unwrap()).unwrap()).unwrap();
     match payload.payload {
         PaymentProof::Evm(evm) => assert_eq!(evm.authorization.value, "2500"),
-        PaymentProof::Solana(_) => panic!("expected an EVM proof"),
+        other => panic!("expected an EVM proof, got {other:?}"),
     }
 }
 
