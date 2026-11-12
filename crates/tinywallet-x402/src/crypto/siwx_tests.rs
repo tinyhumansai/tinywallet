@@ -54,7 +54,7 @@ fn recover(digest: [u8; 32], signature_hex: &str) -> VerifyingKey {
 }
 
 async fn sign(challenge: &PaymentRequired, url: &str) -> Result<SiwxProof, X402Error> {
-    sign_in_with_x_at(&FakePaymentSigner::default(), challenge, url, now()).await
+    sign_in_with_x_at(&FakePaymentSigner::default(), challenge, url, &now).await
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn optional_fields_are_laid_out_as_the_reference_does() {
 #[tokio::test]
 async fn the_twitr_challenge_is_signed_exactly_as_the_reference_client_signs_it() {
     let signer = FakePaymentSigner::default();
-    let proof = sign_in_with_x_at(&signer, &twitr(), TWITR_URL, now())
+    let proof = sign_in_with_x_at(&signer, &twitr(), TWITR_URL, &now)
         .await
         .unwrap();
 
@@ -279,7 +279,7 @@ fn field_refusals() -> Vec<(&'static str, PaymentRequired, &'static str)> {
 async fn a_challenge_outside_the_rules_is_refused_before_signing() {
     for (case, challenge, url) in origin_refusals().into_iter().chain(field_refusals()) {
         let signer = FakePaymentSigner::default();
-        let error = sign_in_with_x_at(&signer, &challenge, url, now())
+        let error = sign_in_with_x_at(&signer, &challenge, url, &now)
             .await
             .unwrap_err();
         assert!(
@@ -299,7 +299,7 @@ async fn a_wallet_failure_is_a_wallet_error() {
         sign_error: Some("locked".into()),
         ..FakePaymentSigner::default()
     };
-    let error = sign_in_with_x_at(&signer, &twitr(), TWITR_URL, now())
+    let error = sign_in_with_x_at(&signer, &twitr(), TWITR_URL, &now)
         .await
         .unwrap_err();
     assert_eq!(
@@ -317,4 +317,84 @@ fn the_refusal_message_is_pinned() {
         .to_string(),
         "x402 sign-in-with-x refused: expired"
     );
+}
+
+/// A value smuggling a line break (or another control character) into any
+/// field the message repeats.
+fn injection_refusals() -> Vec<(&'static str, PaymentRequired)> {
+    let field = |name: &'static str, value: &'static str| {
+        (
+            name,
+            twitr_with(move |s| {
+                s["info"][name] = value.into();
+            }),
+        )
+    };
+    vec![
+        (
+            "resource",
+            twitr_with(|s| {
+                s["info"]["resources"] = json!(["https://twitr.sh/r\n- https://evil.example/"]);
+            }),
+        ),
+        field(
+            "uri",
+            "https://twitr.sh/api/x-accounts/start\nURI: https://evil.example/",
+        ),
+        field("uri", "https://twitr.sh/api/x-accounts/start\r"),
+        field("domain", "twitr.sh\n"),
+        field("nonce", "c3dae5e13c973fa183\n71bf7fa769206"),
+        field("issuedAt", "2026-11-12T19:40:12.348Z\n"),
+        field("expirationTime", "2026-11-12T19:45:12.348Z\nNot Before: x"),
+        field("notBefore", "2026-11-12T19:40:00Z\n"),
+        field("statement", "hi\tthere"),
+        field("requestId", "a\u{0}b"),
+        field("version", "1\n"),
+        (
+            "chainId",
+            twitr_with(|s| {
+                s["supportedChains"] = json!([{"chainId": "eip155:8453\n", "type": "eip191"}]);
+            }),
+        ),
+    ]
+}
+
+#[tokio::test]
+async fn a_control_character_in_any_signed_field_is_refused() {
+    for (field, challenge) in injection_refusals() {
+        let signer = FakePaymentSigner::default();
+        let error = sign_in_with_x_at(&signer, &challenge, TWITR_URL, &now)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&error, X402Error::SignInRefused { reason } if reason.contains("control character") || reason.contains(field)),
+            "{field}: {error}"
+        );
+        assert!(
+            signer.sign_calls.lock().unwrap().is_empty(),
+            "{field}: signed"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_challenge_that_expires_while_the_wallet_signs_is_not_returned() {
+    let reads = std::sync::atomic::AtomicUsize::new(0);
+    // The first read is inside the window; every later one is past expiry.
+    let clock = || {
+        if reads.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+            now()
+        } else {
+            "2026-11-12T19:46:00Z".parse().unwrap()
+        }
+    };
+    let signer = FakePaymentSigner::default();
+    let error = sign_in_with_x_at(&signer, &twitr(), TWITR_URL, &clock)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "x402 sign-in-with-x refused: the challenge expired while it was being signed"
+    );
+    assert_eq!(signer.sign_calls.lock().unwrap().len(), 1);
 }

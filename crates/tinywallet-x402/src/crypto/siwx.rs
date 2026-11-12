@@ -57,15 +57,17 @@ pub async fn sign_in_with_x(
     challenge: &PaymentRequired,
     request_url: &str,
 ) -> Result<SiwxProof, X402Error> {
-    sign_in_with_x_at(signer, challenge, request_url, Utc::now()).await
+    sign_in_with_x_at(signer, challenge, request_url, &Utc::now).await
 }
 
-/// [`sign_in_with_x`] as of `now`.
+/// [`sign_in_with_x`] with the clock given. The clock is read before signing
+/// and again after the wallet answers, so a challenge that expires while the
+/// wallet is busy is not returned.
 pub(super) async fn sign_in_with_x_at(
     signer: &dyn PaymentSigner,
     challenge: &PaymentRequired,
     request_url: &str,
-    now: DateTime<Utc>,
+    clock: &(dyn Fn() -> DateTime<Utc> + Sync),
 ) -> Result<SiwxProof, X402Error> {
     let extension = challenge
         .extensions
@@ -74,8 +76,11 @@ pub(super) async fn sign_in_with_x_at(
     let extension: SiwxExtension = serde_json::from_value(extension.clone())
         .map_err(|e| refused(&format!("unreadable sign-in-with-x extension: {e}")))?;
     let info = extension.info;
+    // Before anything is parsed: URL parsing drops CR, LF and tab, so a value
+    // could pass the origin check yet forge an extra line of the message.
+    check_no_control_characters(&info, &extension.supported_chains)?;
     check_origin(&info, request_url)?;
-    check_fields(&info, now)?;
+    let expires_at = check_fields(&info, clock())?;
     let chain_id = choose_chain(&extension.supported_chains)?;
 
     let account = signer
@@ -93,6 +98,9 @@ pub(super) async fn sign_in_with_x_at(
         )
         .await
         .map_err(|e| X402Error::Wallet(format!("sign sign-in-with-x: {e}")))?;
+    if expires_at <= clock() {
+        return Err(refused("the challenge expired while it was being signed"));
+    }
     let signature = format!("0x{}", hex::encode(eip712_signature(&signature)?));
 
     let chain_id = format!("eip155:{chain_id}");
@@ -214,7 +222,7 @@ fn check_origin(info: &SiwxInfo, request_url: &str) -> Result<(), X402Error> {
 /// The fields that are copied into the message must be well formed: a known
 /// version, an EIP-4361 nonce, RFC 3339 times, an expiry in the future, an
 /// issue time not ahead of this clock, and no line breaks.
-fn check_fields(info: &SiwxInfo, now: DateTime<Utc>) -> Result<(), X402Error> {
+fn check_fields(info: &SiwxInfo, now: DateTime<Utc>) -> Result<DateTime<Utc>, X402Error> {
     if info.version != "1" {
         return Err(refused(&format!("unsupported version {}", info.version)));
     }
@@ -235,19 +243,46 @@ fn check_fields(info: &SiwxInfo, now: DateTime<Utc>) -> Result<(), X402Error> {
         .expiration_time
         .as_deref()
         .ok_or_else(|| refused("the challenge has no expirationTime"))?;
-    if instant("expirationTime", expiration)? <= now {
+    let expires_at = instant("expirationTime", expiration)?;
+    if expires_at <= now {
         return Err(refused("the challenge has expired"));
     }
     if let Some(not_before) = &info.not_before {
         instant("notBefore", not_before)?;
     }
-    let one_line = |value: &Option<String>| {
-        value
-            .as_deref()
-            .is_none_or(|text| !text.contains(['\n', '\r']))
-    };
-    if !one_line(&info.statement) || !one_line(&info.request_id) {
-        return Err(refused("statement and requestId must be a single line"));
+    Ok(expires_at)
+}
+
+/// Every value the message or the payload repeats must be free of control
+/// characters: a line break would add a line of the server's choosing to
+/// what the wallet signs.
+fn check_no_control_characters(
+    info: &SiwxInfo,
+    chains: &[crate::wire::SiwxSupportedChain],
+) -> Result<(), X402Error> {
+    let fields = [
+        ("domain", Some(&info.domain)),
+        ("uri", Some(&info.uri)),
+        ("statement", info.statement.as_ref()),
+        ("version", Some(&info.version)),
+        ("nonce", Some(&info.nonce)),
+        ("issuedAt", Some(&info.issued_at)),
+        ("expirationTime", info.expiration_time.as_ref()),
+        ("notBefore", info.not_before.as_ref()),
+        ("requestId", info.request_id.as_ref()),
+    ];
+    let resources = info
+        .resources
+        .iter()
+        .flatten()
+        .map(|r| ("resources", Some(r)));
+    let chain_ids = chains
+        .iter()
+        .map(|chain| ("chainId", Some(&chain.chain_id)));
+    for (field, value) in fields.into_iter().chain(resources).chain(chain_ids) {
+        if value.is_some_and(|text| text.chars().any(char::is_control)) {
+            return Err(refused(&format!("{field} contains a control character")));
+        }
     }
     Ok(())
 }
