@@ -295,13 +295,17 @@ impl X402Runtime {
     /// retries the paid request.
     pub(crate) fn record(&self, request: X402RecordPaymentRequest) -> Result<(), String> {
         self.require_handle(&request.service)?;
-        let receipt = request
-            .settlement_response
+        let X402RecordPaymentRequest {
+            payment_id,
+            settlement_response,
+            ..
+        } = request;
+        let receipt = settlement_response
             .as_deref()
             .and_then(|value| parse_settlement_response(value).ok());
         // Read, decide and append under the one ledger lock, so two receipts
         // for the same payment cannot both settle it.
-        ledger::with_ledger_mut(|ledger| settle(ledger, &request.payment_id, receipt))?
+        ledger::with_ledger_mut(|ledger| settle(ledger, &payment_id, receipt))?
     }
 
     /// Read the module-owned budget totals and currently held reservations.

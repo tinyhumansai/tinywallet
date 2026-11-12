@@ -365,7 +365,12 @@ fn a_seed_bip32_cannot_use_is_a_derivation_error() {
         panic!("an 8-byte seed derived a key");
     };
     assert!(
-        matches!(error, Error::Derivation { step: "BIP-32 master key" }),
+        matches!(
+            error,
+            Error::Derivation {
+                step: "BIP-32 master key"
+            }
+        ),
         "{error:?}"
     );
 }

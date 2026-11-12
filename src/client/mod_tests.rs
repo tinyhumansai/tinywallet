@@ -1161,9 +1161,10 @@ async fn btc_and_tron_status_report_a_reply_that_is_not_json() {
         (Network::Tron, "wallet/gettransactioninfobyid"),
     ] {
         let transport = RestScript::new(&[(path, "<html>busy</html>".to_string())]);
-        let error = super::status(&transport, network, "abc")
-            .await
-            .unwrap_err();
-        assert!(error.to_string().contains("not JSON"), "{network:?}: {error}");
+        let error = super::status(&transport, network, "abc").await.unwrap_err();
+        assert!(
+            error.to_string().contains("not JSON"),
+            "{network:?}: {error}"
+        );
     }
 }
