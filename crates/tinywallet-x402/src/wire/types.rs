@@ -145,6 +145,14 @@ pub struct PaymentExtra {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// See the x402 v2 specification.
     pub version: Option<String>,
+    /// How the payer authorizes the transfer (EVM). `"permit2"` for the
+    /// `upto` scheme, which allows no other method.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset_transfer_method: Option<String>,
+    /// The facilitator allowed to settle an `upto` authorization (EVM). The
+    /// payer signs it into the Permit2 witness, so no other party can settle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facilitator_address: Option<String>,
     /// Every other `extra` field the server sent, kept verbatim so the
     /// `accepted` echo still holds all of them. See
     /// [`PaymentRequirements::other`].

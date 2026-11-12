@@ -240,7 +240,9 @@ pub(crate) fn evm_requirement() -> PaymentRequirements {
             memo: None,
             name: Some("USD Coin".into()),
             version: Some("2".into()),
+            other: serde_json::Map::new(),
         }),
+        other: serde_json::Map::new(),
     }
 }
 
@@ -258,7 +260,9 @@ pub(crate) fn solana_requirement() -> PaymentRequirements {
             memo: Some("pi_3abc123".into()),
             name: None,
             version: None,
+            other: serde_json::Map::new(),
         }),
+        other: serde_json::Map::new(),
     }
 }
 

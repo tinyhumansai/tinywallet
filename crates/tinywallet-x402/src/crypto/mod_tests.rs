@@ -216,6 +216,7 @@ async fn the_token_domain_defaults_to_usd_coin_version_two() {
         memo: None,
         name: Some("Other Coin".into()),
         version: Some("9".into()),
+        other: serde_json::Map::new(),
     });
     let mut bare = evm_requirement();
     bare.extra = None;

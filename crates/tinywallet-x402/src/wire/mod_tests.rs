@@ -22,6 +22,7 @@ fn requirement(network: &str, asset: &str, extra: Option<PaymentExtra>) -> Payme
         pay_to: "Recipient".to_string(),
         max_timeout_seconds: 60,
         extra,
+        other: serde_json::Map::new(),
     }
 }
 
@@ -53,6 +54,7 @@ fn a_challenge_with_extras_round_trips() {
                 memo: Some("pi_3abc123".to_string()),
                 name: None,
                 version: None,
+                other: serde_json::Map::new(),
             }),
         )],
         extensions: serde_json::Map::new(),
@@ -87,6 +89,7 @@ fn extra_accessors_return_the_server_supplied_values() {
             memo: Some("order_456".to_string()),
             name: None,
             version: None,
+            other: serde_json::Map::new(),
         }),
     );
     assert_eq!(req.fee_payer_pubkey(), Some("FeePayer123"));
@@ -107,6 +110,7 @@ fn extra_accessors_are_none_when_the_server_sent_no_extras() {
             memo: None,
             name: Some("USD Coin".to_string()),
             version: Some("2".to_string()),
+            other: serde_json::Map::new(),
         }),
     );
     assert_eq!(partial.fee_payer_pubkey(), None);

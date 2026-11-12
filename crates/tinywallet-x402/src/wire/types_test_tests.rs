@@ -14,6 +14,7 @@ fn requirement(scheme: &str, network: &str) -> PaymentRequirements {
         pay_to: "11111111111111111111111111111111".to_string(),
         max_timeout_seconds: 60,
         extra: None,
+        other: serde_json::Map::new(),
     }
 }
 
