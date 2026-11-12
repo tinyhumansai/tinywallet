@@ -47,7 +47,7 @@ struct Fixture {
     authorizations: Arc<AtomicUsize>,
     rpc_requests: Arc<std::sync::Mutex<Vec<(String, serde_json::Value)>>>,
     payment_requests: Arc<std::sync::Mutex<Vec<tinywallet_bus::wire::AuthorizeX402PaymentRequest>>>,
-    broker_task: tokio::task::JoinHandle<()>,
+    broker_task: tokio::task::JoinHandle<tinybus::Result<()>>,
     _workspace: tempfile::TempDir,
 }
 
