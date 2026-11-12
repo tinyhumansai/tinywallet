@@ -288,6 +288,14 @@ pub fn mnemonic_seed(mnemonic: &str) -> Result<Zeroizing<Vec<u8>>> {
     Ok(Zeroizing::new(seed.to_vec()))
 }
 
+/// Maps a failure in a derivation step that cannot fail for a well-formed key
+/// (an address encoding over bytes this module just built) to
+/// [`Error::Derivation`], rather than unwrapping it: a panic in key derivation
+/// would take a wallet down over an unreachable branch.
+fn derivation_failed<E>(step: &'static str) -> impl FnOnce(E) -> Error {
+    move |_| Error::Derivation { step }
+}
+
 fn seed_from_mnemonic(mnemonic: &str) -> Result<Zeroizing<Vec<u8>>> {
     mnemonic_seed(mnemonic)
 }

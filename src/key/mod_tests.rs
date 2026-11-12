@@ -374,3 +374,14 @@ fn a_seed_bip32_cannot_use_is_a_derivation_error() {
         "{error:?}"
     );
 }
+
+#[test]
+fn an_unreachable_step_failure_is_a_derivation_error_naming_the_step() {
+    let error = derivation_failed::<()>("BTC P2WPKH address")(());
+    assert!(matches!(
+        error,
+        Error::Derivation {
+            step: "BTC P2WPKH address"
+        }
+    ));
+}
