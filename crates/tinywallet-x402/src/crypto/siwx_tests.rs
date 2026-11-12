@@ -140,10 +140,10 @@ async fn base_is_preferred_whatever_order_the_server_lists_chains_in() {
     );
 }
 
-/// Every way a challenge can ask for something this must not sign.
-#[tokio::test]
-async fn a_challenge_outside_the_rules_is_refused_before_signing() {
-    let refusals: Vec<(&str, PaymentRequired, &str)> = vec![
+/// Refusals for a challenge that is not for the requested origin, with the
+/// URL it answered.
+fn origin_refusals() -> Vec<(&'static str, PaymentRequired, &'static str)> {
+    vec![
         (
             "no extension",
             {
@@ -188,6 +188,12 @@ async fn a_challenge_outside_the_rules_is_refused_before_signing() {
             twitr_with(|s| s["info"]["resources"] = json!(["not a uri"])),
             TWITR_URL,
         ),
+    ]
+}
+
+/// Refusals for fields that are malformed, out of date, or could forge a line.
+fn field_refusals() -> Vec<(&'static str, PaymentRequired, &'static str)> {
+    vec![
         (
             "expired",
             twitr_with(|s| s["info"]["expirationTime"] = "2026-11-12T19:40:59Z".into()),
@@ -243,21 +249,21 @@ async fn a_challenge_outside_the_rules_is_refused_before_signing() {
         (
             "no EVM chain",
             twitr_with(|s| {
-                s["supportedChains"] = json!([{"chainId": "solana:x", "type": "ed25519"}])
+                s["supportedChains"] = json!([{"chainId": "solana:x", "type": "ed25519"}]);
             }),
             TWITR_URL,
         ),
         (
             "no eip191 chain",
             twitr_with(|s| {
-                s["supportedChains"] = json!([{"chainId": "eip155:8453", "type": "eip1271"}])
+                s["supportedChains"] = json!([{"chainId": "eip155:8453", "type": "eip1271"}]);
             }),
             TWITR_URL,
         ),
         (
             "malformed chain id",
             twitr_with(|s| {
-                s["supportedChains"] = json!([{"chainId": "eip155:base", "type": "eip191"}])
+                s["supportedChains"] = json!([{"chainId": "eip155:base", "type": "eip191"}]);
             }),
             TWITR_URL,
         ),
@@ -266,8 +272,12 @@ async fn a_challenge_outside_the_rules_is_refused_before_signing() {
             twitr_with(|s| *s = json!("sign me")),
             TWITR_URL,
         ),
-    ];
-    for (case, challenge, url) in refusals {
+    ]
+}
+
+#[tokio::test]
+async fn a_challenge_outside_the_rules_is_refused_before_signing() {
+    for (case, challenge, url) in origin_refusals().into_iter().chain(field_refusals()) {
         let signer = FakePaymentSigner::default();
         let error = sign_in_with_x_at(&signer, &challenge, url, now())
             .await
