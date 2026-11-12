@@ -67,9 +67,9 @@ impl CryptoPayments {
             ),
         };
         let authorization_valid_until = payload
-                .payload
-                .authorization_deadline_secs()
-                .and_then(|seconds| chrono::DateTime::from_timestamp(seconds, 0));
+            .payload
+            .authorization_deadline_secs()
+            .and_then(|seconds| chrono::DateTime::from_timestamp(seconds, 0));
         Ok(PaymentBuild {
             payload,
             authorization_valid_until,

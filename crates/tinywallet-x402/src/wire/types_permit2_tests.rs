@@ -29,7 +29,10 @@ fn the_spec_upto_payload_reads_as_a_permit2_proof_and_round_trips() {
     let PaymentProof::Permit2(permit2) = &proof else {
         panic!("expected a Permit2 proof, got {proof:?}");
     };
-    assert_eq!(permit2.permit2_authorization.witness.valid_after, "1740672089");
+    assert_eq!(
+        permit2.permit2_authorization.witness.valid_after,
+        "1740672089"
+    );
     assert_eq!(serde_json::to_value(&proof).unwrap(), raw);
 }
 

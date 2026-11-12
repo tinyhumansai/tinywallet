@@ -84,10 +84,7 @@ fn the_eip2612_permit_type_hash_is_the_published_constant() {
 
 #[test]
 fn the_upto_digest_matches_the_reference_client() {
-    let digest = signing_digest(
-        permit2_domain_separator(8453),
-        twitr_permit().struct_hash(),
-    );
+    let digest = signing_digest(permit2_domain_separator(8453), twitr_permit().struct_hash());
     assert_eq!(
         hex(&digest),
         "8e8c28bb23e744c0eb81bdfab664afc6c046d317a33873fdf0ffa275ecee94f9"

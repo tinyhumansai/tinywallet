@@ -11,7 +11,10 @@ const PERMIT2: &str = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 
 #[test]
 fn the_pinned_selectors_match_their_signatures() {
-    assert_eq!(keccak(b"allowance(address,address)")[..4], ALLOWANCE_SELECTOR);
+    assert_eq!(
+        keccak(b"allowance(address,address)")[..4],
+        ALLOWANCE_SELECTOR
+    );
     assert_eq!(keccak(b"nonces(address)")[..4], NONCES_SELECTOR);
 }
 
@@ -45,17 +48,20 @@ fn a_bad_address_is_refused() {
 
 #[test]
 fn a_uint256_reply_decodes_to_its_big_endian_word() {
-    let word = decode_uint256(
-        "0x0000000000000000000000000000000000000000000000000000000000000e10",
-    )
-    .unwrap();
+    let word = decode_uint256("0x0000000000000000000000000000000000000000000000000000000000000e10")
+        .unwrap();
     assert_eq!(word[30..], [0x0e, 0x10]);
     assert!(word[..30].iter().all(|b| *b == 0));
 }
 
 #[test]
 fn a_reply_that_is_not_one_word_is_refused() {
-    for reply in ["0x", "0x00", "", "0xzz00000000000000000000000000000000000000000000000000000000000000"] {
+    for reply in [
+        "0x",
+        "0x00",
+        "",
+        "0xzz00000000000000000000000000000000000000000000000000000000000000",
+    ] {
         assert!(
             matches!(decode_uint256(reply), Err(Error::InvalidReply { .. })),
             "{reply}"
