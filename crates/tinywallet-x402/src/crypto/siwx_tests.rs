@@ -8,7 +8,6 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
 use chrono::{DateTime, Utc};
 use k256::ecdsa::{RecoveryId, Signature, SigningKey, VerifyingKey};
