@@ -206,6 +206,11 @@ async fn an_upto_challenge_is_authorized_and_held_at_its_ceiling() {
     assert_eq!(prepared.network, "eip155:8453");
     let approval = fixture.payment_requests.lock().unwrap()[0].clone();
     assert_eq!(approval.amount_atomic, 3600);
+    assert_eq!(
+        approval.scheme.as_deref(),
+        Some("upto"),
+        "the host is told the amount is a ceiling"
+    );
     let record = ledger::with_ledger(|ledger| ledger.payment(&prepared.payment_id).cloned())
         .unwrap()
         .unwrap();
