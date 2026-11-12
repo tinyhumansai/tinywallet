@@ -24,6 +24,8 @@
 
 use sha3::{Digest, Keccak256};
 
+mod permit2;
+
 /// `keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")`.
 ///
 /// Pinned rather than computed at each call: it is a published constant, and a
