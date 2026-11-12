@@ -26,6 +26,10 @@ use sha3::{Digest, Keccak256};
 
 mod permit2;
 
+pub use permit2::{
+    Eip2612Permit, PERMIT2, UPTO_PERMIT2_PROXY, UptoPermit, permit2_domain_separator,
+};
+
 /// `keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")`.
 ///
 /// Pinned rather than computed at each call: it is a published constant, and a
