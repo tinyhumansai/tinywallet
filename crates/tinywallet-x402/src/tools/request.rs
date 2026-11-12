@@ -345,6 +345,7 @@ impl X402RequestTool {
             authorization_expiry_observed_height: None,
             session_id: session_id.clone(),
             thread_id: thread_id.clone(),
+            scheme: None,
         };
         if reservation
             .commit_durable(record(PaymentStatus::Pending, None))
