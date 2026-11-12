@@ -649,3 +649,7 @@ mod record_tests;
 #[cfg(test)]
 #[path = "x402_prepare_tests.rs"]
 mod prepare_tests;
+
+#[cfg(test)]
+#[path = "x402_sign_in_tests.rs"]
+mod sign_in_tests;
