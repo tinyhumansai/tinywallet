@@ -198,6 +198,7 @@ impl X402Runtime {
         let thread_id = request.owner.as_ref().map(|owner| owner.thread_id.clone());
         let owner = request.owner.clone();
         let url = request.url.clone();
+        let network = request.network.clone();
         let callbacks = self.callbacks.clone();
         let (proof, _admission) = with_x402_execution_context(request.owner, secrets, async {
             let signer: Arc<dyn PaymentSigner> = Arc::new(ModulePaymentSigner);
@@ -215,7 +216,7 @@ impl X402Runtime {
                 &builder,
                 &headers,
                 &url,
-                None,
+                network.as_deref(),
                 move |url, requirement, _chain, amount_atomic| async move {
                     let authorization = callbacks
                         .authorize_x402_payment(AuthorizeX402PaymentRequest {
@@ -633,3 +634,7 @@ mod storage_bus_tests;
 #[cfg(test)]
 #[path = "x402_record_tests.rs"]
 mod record_tests;
+
+#[cfg(test)]
+#[path = "x402_network_tests.rs"]
+mod network_tests;

@@ -151,6 +151,7 @@ async fn ledger_lifecycle_rejects_stale_handles_and_malformed_challenges() {
             payment_required: "unused".to_string(),
             owner: None,
             secret: secret(tinywallet_bus::Chain::Evm),
+            network: None,
             additional_secrets: vec![secret(tinywallet_bus::Chain::Evm)],
         })
         .await
@@ -168,6 +169,7 @@ async fn ledger_lifecycle_rejects_stale_handles_and_malformed_challenges() {
             owner: None,
             additional_secrets: Vec::new(),
             secret: secret(tinywallet_bus::Chain::Evm),
+            network: None,
         })
         .await
         .unwrap_err();
@@ -181,6 +183,7 @@ async fn ledger_lifecycle_rejects_stale_handles_and_malformed_challenges() {
             owner: None,
             additional_secrets: Vec::new(),
             secret: secret(tinywallet_bus::Chain::Evm),
+            network: None,
         })
         .await
         .unwrap_err();
@@ -646,6 +649,7 @@ async fn x402_pending_capacity_is_reserved_before_authorization_and_released_on_
         }),
         additional_secrets: Vec::new(),
         secret: secret(tinywallet_bus::Chain::Evm),
+        network: None,
     };
     for _ in 0..(MAX_PENDING - 1) {
         wallet.x402_prepare_payment(prepare()).await.unwrap();
@@ -724,6 +728,7 @@ async fn assert_admission_is_held_through_durable_commit(
         owner: None,
         additional_secrets: Vec::new(),
         secret: secret(tinywallet_bus::Chain::Evm),
+        network: None,
     };
     let commit_reached = Arc::new(tokio::sync::Notify::new());
     let release_commit = Arc::new(tokio::sync::Notify::new());

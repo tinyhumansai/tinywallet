@@ -388,6 +388,13 @@ pub struct X402PreparePaymentRequest {
     /// Older hosts omit this field and keep sending only `secret`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub additional_secrets: Vec<SecretMaterial>,
+    /// Pay only on this network. A CAIP-2 chain id (`eip155:8453`) must equal
+    /// the option's network; a CAIP-2 namespace without a colon (`eip155`,
+    /// `solana`) matches every chain in it. When no option matches, the
+    /// request is refused before anything is reserved or signed. `None`, and
+    /// older hosts that omit the field, keep the module's own preference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<String>,
 }
 
 /// Payment proof and pending-ledger handle returned to the host for retry.

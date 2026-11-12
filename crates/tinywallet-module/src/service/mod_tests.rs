@@ -1620,6 +1620,7 @@ async fn user_scoped_operations_fail_closed_before_configuration() {
                 owner: None,
                 additional_secrets: Vec::new(),
                 secret: secret(Chain::Evm, "m/44'/60'/0'/0/0"),
+                network: None,
             })
             .await
             .is_err()
