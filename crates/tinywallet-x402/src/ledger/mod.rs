@@ -95,3 +95,7 @@ mod holds_test;
 #[cfg(test)]
 #[path = "mod_paging_tests.rs"]
 mod paging_test;
+
+#[cfg(test)]
+#[path = "mod_upto_tests.rs"]
+mod upto_tests;
