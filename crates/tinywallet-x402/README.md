@@ -71,6 +71,35 @@ migration; it opens only after receiving that host-provisioned storage handle.
   (`Option`, omitted from the file when absent, so older ledgers still load) is
   the host's `ThreadScope::current_thread()`, for attribution.
 
+## Schemes
+
+- **`exact`** on Solana (partially-signed SPL transfer) and EVM (EIP-3009).
+- **`upto`** on EVM: a Permit2 `PermitWitnessTransferFrom` with the
+  `x402UptoPermit2Proxy` as spender and the `(to, facilitator, validAfter)`
+  witness. Selectable only with `extra.facilitatorAddress` and a Permit2 (or
+  absent) `extra.assetTransferMethod`; anything else is refused. Selection
+  prefers Solana `exact`, then EVM `exact`, then EVM `upto`. When the challenge
+  declares `eip2612GasSponsoring` and the payer's Permit2 allowance (read with
+  `eth_call` through the `Transport`) does not cover the amount, an EIP-2612
+  `Permit` for Permit2 is signed for exactly `permitted.amount` (the proxy
+  requires that) and merged into `extensions`, as the reference client does.
+- **Budget for `upto`.** The reservation, the host authorization and the
+  pending record use the signed ceiling. The receipt's `amount` (`settled_amount`)
+  is what a settled record keeps, from zero up to the ceiling; the rest of the
+  hold is released. `PaymentRecord.scheme` (and the stored row's `scheme`)
+  records which rule applies; absent means `exact`, whose receipt must name the
+  signed amount or none.
+- **Network pin.** `handle_402_and_pay_on_network` takes a CAIP-2 chain id
+  (`eip155:8453`) or namespace (`eip155`, `solana`) and considers only those
+  options (`NoPaymentOptionOnNetwork` otherwise).
+- **`sign-in-with-x`.** `crypto::sign_in_with_x` signs the EIP-4361 message
+  of a `sign-in-with-x` challenge with EIP-191, only for the requested host
+  (domain, HTTPS uri and resources on the requested origin, an expiry ahead,
+  single-line fields), and returns the `SIGN-IN-WITH-X` header value.
+- **Echoed requirements.** `PaymentRequirements::other` and
+  `PaymentExtra::other` keep fields this crate does not model, so `accepted`
+  matches what a v2 server advertised.
+
 ## Changes in 0.6.1 / 0.7.0 (API)
 
 - `X402PaymentResult` gains `reservation` and is no longer `Clone`, `PartialEq` or

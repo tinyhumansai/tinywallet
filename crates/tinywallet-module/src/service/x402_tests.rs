@@ -33,6 +33,7 @@ pub(crate) fn pending_record(
         authorization_expiry_observed_height: None,
         session_id: "coverage-test".to_string(),
         thread_id: None,
+        scheme: None,
     }
 }
 
@@ -150,6 +151,7 @@ async fn ledger_lifecycle_rejects_stale_handles_and_malformed_challenges() {
             payment_required: "unused".to_string(),
             owner: None,
             secret: secret(tinywallet_bus::Chain::Evm),
+            network: None,
             additional_secrets: vec![secret(tinywallet_bus::Chain::Evm)],
         })
         .await
@@ -167,6 +169,7 @@ async fn ledger_lifecycle_rejects_stale_handles_and_malformed_challenges() {
             owner: None,
             additional_secrets: Vec::new(),
             secret: secret(tinywallet_bus::Chain::Evm),
+            network: None,
         })
         .await
         .unwrap_err();
@@ -180,6 +183,7 @@ async fn ledger_lifecycle_rejects_stale_handles_and_malformed_challenges() {
             owner: None,
             additional_secrets: Vec::new(),
             secret: secret(tinywallet_bus::Chain::Evm),
+            network: None,
         })
         .await
         .unwrap_err();
@@ -502,6 +506,9 @@ impl PaymentApprovalHost {
                     "getBlockHeight" => {
                         serde_json::json!(self.finalized_height.load(Ordering::SeqCst))
                     }
+                    // Every view call (an ERC-20 allowance, an EIP-2612 nonce)
+                    // answers zero.
+                    "eth_call" => serde_json::json!(format!("0x{}", "0".repeat(64))),
                     _ => serde_json::Value::Null,
                 }
             }
@@ -645,6 +652,7 @@ async fn x402_pending_capacity_is_reserved_before_authorization_and_released_on_
         }),
         additional_secrets: Vec::new(),
         secret: secret(tinywallet_bus::Chain::Evm),
+        network: None,
     };
     for _ in 0..(MAX_PENDING - 1) {
         wallet.x402_prepare_payment(prepare()).await.unwrap();
@@ -723,6 +731,7 @@ async fn assert_admission_is_held_through_durable_commit(
         owner: None,
         additional_secrets: Vec::new(),
         secret: secret(tinywallet_bus::Chain::Evm),
+        network: None,
     };
     let commit_reached = Arc::new(tokio::sync::Notify::new());
     let release_commit = Arc::new(tokio::sync::Notify::new());

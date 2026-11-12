@@ -192,6 +192,7 @@ fn settled(amount: u64) -> PaymentRecord {
         authorization_expiry_observed_height: None,
         session_id: "test-session".into(),
         thread_id: None,
+        scheme: None,
     }
 }
 
@@ -474,7 +475,13 @@ fn every_error_has_its_pinned_message() {
     let cases = [
         (
             X402Error::NoPaymentOption,
-            "no supported payment option (Solana exact or EVM exact) in 402 challenge",
+            "no supported payment option (Solana exact, EVM exact or EVM upto) in 402 challenge",
+        ),
+        (
+            X402Error::NoPaymentOptionOnNetwork {
+                network: "eip155:8453".into(),
+            },
+            "no supported payment option on eip155:8453 in 402 challenge",
         ),
         (
             X402Error::AmountExceedsCap {
@@ -932,7 +939,7 @@ async fn a_402_is_paid_and_retried_with_the_same_request() {
         serde_json::from_slice(&B64.decode(retry.payment_signature().unwrap()).unwrap()).unwrap();
     match payload.payload {
         PaymentProof::Evm(evm) => assert_eq!(evm.authorization.value, "2500"),
-        PaymentProof::Solana(_) => panic!("expected an EVM proof"),
+        other => panic!("expected an EVM proof, got {other:?}"),
     }
 }
 

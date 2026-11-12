@@ -110,7 +110,7 @@ fn network_request_keeps_legacy_json_and_omits_unset_endpoint_url() {
 
 #[test]
 fn the_contract_accepts_its_own_version_and_newer_minors() {
-    assert_eq!(CONTRACT_VERSION, (1, 15));
+    assert_eq!(CONTRACT_VERSION, (1, 16));
     assert!(is_compatible(CONTRACT_VERSION));
     assert!(is_compatible((CONTRACT_VERSION.0, CONTRACT_VERSION.1 + 1)));
     assert!(!is_compatible((CONTRACT_VERSION.0 + 1, 0)));
@@ -146,7 +146,7 @@ fn the_method_list_is_sorted_complete_and_free_of_duplicates() {
         METHODS,
         "sorted dispatch order, no repeats"
     );
-    assert_eq!(METHODS.len(), 39);
+    assert_eq!(METHODS.len(), 40);
     for member in [
         names::methods::ATTACH_SIGNATURE,
         names::methods::BUILD_UNSIGNED,
@@ -188,6 +188,7 @@ fn the_method_list_is_sorted_complete_and_free_of_duplicates() {
         names::methods::X402_UPDATE_BUDGET,
         names::methods::X402_CLOSE,
         names::methods::X402_CONFIGURE,
+        names::methods::X402_SIGN_IN,
     ] {
         assert!(
             METHODS.contains(&member),
@@ -292,7 +293,7 @@ fn native_wallet_members_are_additive_and_use_one_typed_argument() {
         methods::NATIVE_WALLET_TX_RECEIPT,
         methods::NATIVE_WALLET_LOOKUP_TX,
     ];
-    assert_eq!(METHODS.len(), 39);
+    assert_eq!(METHODS.len(), 40);
     assert!(native_members.iter().all(|member| METHODS.contains(member)));
     assert_eq!(HOST_METHODS.len(), 6);
     assert!(HOST_METHODS.contains(&host_methods::AUTHORIZE_NATIVE_WALLET_EXECUTION));
@@ -442,4 +443,10 @@ fn token_balance_rows_serialize_in_camel_case_with_the_mint() {
         serde_json::from_value::<wire::TokenBalanceInfo>(value).unwrap(),
         row
     );
+}
+
+#[test]
+fn signing_in_with_x_is_confidential() {
+    // It carries the EVM recovery phrase into the module, like a payment.
+    assert!(CONFIDENTIAL_METHODS.contains(&names::methods::X402_SIGN_IN));
 }

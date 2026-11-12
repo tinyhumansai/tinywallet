@@ -88,7 +88,7 @@ impl X402Client {
             challenge.accepts.len()
         );
 
-        let (index, chain) = select_requirement(&challenge)?;
+        let (index, chain) = select_requirement(&challenge, None)?;
         let requirement = &challenge.accepts[index];
 
         let amount = parse_amount(requirement)?;
@@ -161,7 +161,7 @@ pub fn handle_402(
     headers: &HeaderMap,
 ) -> Result<(PaymentRequired, usize, PaymentChain), X402Error> {
     let challenge = parse_402_headers(headers)?;
-    let (idx, chain) = select_requirement(&challenge)?;
+    let (idx, chain) = select_requirement(&challenge, None)?;
     Ok((challenge, idx, chain))
 }
 
@@ -198,7 +198,8 @@ pub async fn pay_challenge_header(
 pub struct X402PaymentResult {
     /// The `PAYMENT-SIGNATURE` header value.
     pub header_value: String,
-    /// The amount, in atomic units of `asset`.
+    /// The amount signed for, in atomic units of `asset`: the exact price, or
+    /// the ceiling of an `upto` payment. The budget holds this amount.
     pub amount_atomic: u64,
     /// The asset paid in.
     pub asset: String,
@@ -206,6 +207,10 @@ pub struct X402PaymentResult {
     pub recipient: String,
     /// The CAIP-2 network the payment is on.
     pub network: String,
+    /// The x402 scheme signed under. For `upto`, [`amount_atomic`](Self::amount_atomic)
+    /// is the ceiling; the receipt reports what was charged (see
+    /// [`settled_amount`](super::settled_amount)).
+    pub scheme: String,
     /// The URL the payment is for.
     pub url: String,
     /// Expiry of the authorization when its rail has an explicit deadline.
@@ -277,7 +282,35 @@ where
     F: FnOnce(String, PaymentRequirements, PaymentChain, u64) -> Fut,
     Fut: Future<Output = Result<(), String>>,
 {
-    let (challenge, idx, chain) = handle_402(response_headers)?;
+    handle_402_and_pay_on_network(builder, response_headers, request_url, None, authorize).await
+}
+
+/// [`handle_402_and_pay_authorized`], restricted to the options on `network`.
+///
+/// `network` is a CAIP-2 chain id (`eip155:8453`) that an option's network
+/// must equal, or a CAIP-2 namespace (`eip155`, `solana`) it must belong to.
+/// `None` is exactly [`handle_402_and_pay_authorized`]. A caller pins the
+/// network when the server ties the request to the paying account, for
+/// example to an EVM identity it signed in with.
+///
+/// # Errors
+///
+/// As [`handle_402_and_pay_authorized`], plus
+/// [`X402Error::NoPaymentOptionOnNetwork`] when no option is on `network`.
+/// Nothing is held or signed in that case.
+pub async fn handle_402_and_pay_on_network<F, Fut>(
+    builder: &dyn PaymentBuilder,
+    response_headers: &HeaderMap,
+    request_url: &str,
+    network: Option<&str>,
+    authorize: F,
+) -> Result<X402PaymentResult, X402Error>
+where
+    F: FnOnce(String, PaymentRequirements, PaymentChain, u64) -> Fut,
+    Fut: Future<Output = Result<(), String>>,
+{
+    let challenge = parse_402_headers(response_headers)?;
+    let (idx, chain) = select_requirement(&challenge, network)?;
     let requirement = challenge.accepts[idx].clone();
     let amount = parse_amount(&requirement)?;
     ensure_same_origin(&challenge.resource.url, request_url)?;
@@ -328,6 +361,7 @@ where
         asset: requirement.asset.clone(),
         recipient: requirement.pay_to.clone(),
         network: requirement.network.clone(),
+        scheme: requirement.scheme.clone(),
         url: request_url.to_string(),
         authorization_valid_until: payment.authorization_valid_until,
         solana_last_valid_block_height: payment.solana_last_valid_block_height,

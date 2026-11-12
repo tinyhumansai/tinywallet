@@ -1,0 +1,103 @@
+{
+  "x402Version": 2,
+  "error": "SIWX authentication required",
+  "resource": {
+    "url": "https://twitr.sh/api/x-accounts/start",
+    "description": "Sign in to connect an account",
+    "mimeType": "application/json"
+  },
+  "accepts": [],
+  "extensions": {
+    "sign-in-with-x": {
+      "info": {
+        "domain": "twitr.sh",
+        "uri": "https://twitr.sh/api/x-accounts/start",
+        "version": "1",
+        "nonce": "c3dae5e13c973fa183371bf7fa769206",
+        "issuedAt": "2026-11-12T19:40:12.348Z",
+        "resources": [
+          "https://twitr.sh/api/x-accounts/start"
+        ],
+        "expirationTime": "2026-11-12T19:45:12.348Z",
+        "statement": "Sign in to connect an account"
+      },
+      "supportedChains": [
+        {
+          "chainId": "eip155:8453",
+          "type": "eip191"
+        },
+        {
+          "chainId": "eip155:84532",
+          "type": "eip191"
+        }
+      ],
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "statement": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string",
+            "format": "uri"
+          },
+          "version": {
+            "type": "string"
+          },
+          "chainId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "nonce": {
+            "type": "string"
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expirationTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "notBefore": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "resources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "address",
+          "uri",
+          "version",
+          "chainId",
+          "type",
+          "nonce",
+          "issuedAt",
+          "signature"
+        ]
+      }
+    }
+  }
+}

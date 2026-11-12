@@ -4,9 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
 use super::error::X402Error;
-use crate::wire::{
-    PaymentChain, PaymentPayload, PaymentProof, PaymentRequired, PaymentRequirements,
-};
+use crate::wire::{PaymentChain, PaymentPayload, PaymentRequired, PaymentRequirements};
 
 /// Rail-specific metadata that stays in the host ledger and is never added to
 /// the facilitator-facing payment payload.
@@ -51,15 +49,10 @@ pub trait PaymentBuilder: Send + Sync {
         chain: PaymentChain,
     ) -> Result<PaymentBuild, X402Error> {
         let payload = self.build(challenge, requirement, chain).await?;
-        let authorization_valid_until = match &payload.payload {
-            PaymentProof::Evm(proof) => proof
-                .authorization
-                .valid_before
-                .parse::<i64>()
-                .ok()
-                .and_then(|seconds| DateTime::from_timestamp(seconds, 0)),
-            PaymentProof::Solana(_) => None,
-        };
+        let authorization_valid_until = payload
+            .payload
+            .authorization_deadline_secs()
+            .and_then(|seconds| DateTime::from_timestamp(seconds, 0));
         Ok(PaymentBuild {
             payload,
             authorization_valid_until,

@@ -16,7 +16,7 @@
 use ripemd::Ripemd160;
 use sha2::{Digest, Sha256};
 
-use super::{DerivedKey, Error, Result, bip32, seed_from_mnemonic};
+use super::{DerivedKey, Result, bip32, derivation_failed, seed_from_mnemonic};
 use crate::address::btc::encode_p2wpkh;
 use crate::chain::Chain;
 
@@ -28,10 +28,8 @@ pub(super) fn derive(mnemonic: &str, path: &str) -> Result<DerivedKey> {
     // The *compressed* encoding: a P2WPKH witness program is defined over it,
     // and hashing the uncompressed form instead produces a valid-looking
     // address for an account holding no funds.
-    let address =
-        encode_p2wpkh(&hash160(&key.compressed_public())).map_err(|_| Error::Derivation {
-            step: "BTC P2WPKH address",
-        })?;
+    let address = encode_p2wpkh(&hash160(&key.compressed_public()))
+        .map_err(derivation_failed("BTC P2WPKH address"))?;
 
     Ok(DerivedKey::new(
         Chain::Btc,

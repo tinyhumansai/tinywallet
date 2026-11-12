@@ -112,6 +112,7 @@ async fn x402_service_lifecycle_records_approval_denial_and_cancellation() {
             }),
             additional_secrets: Vec::new(),
             secret: secret(tinywallet_bus::Chain::Evm),
+            network: None,
         })
         .await
         .unwrap();
@@ -204,6 +205,7 @@ async fn x402_service_lifecycle_records_approval_denial_and_cancellation() {
         owner: None,
         additional_secrets: Vec::new(),
         secret: secret(tinywallet_bus::Chain::Solana),
+        network: None,
     };
     let first_solana = wallet.x402_prepare_payment(prepare_solana()).await.unwrap();
     let first_record =
@@ -264,6 +266,7 @@ async fn x402_service_lifecycle_records_approval_denial_and_cancellation() {
             owner: None,
             additional_secrets: Vec::new(),
             secret: secret(tinywallet_bus::Chain::Evm),
+            network: None,
         })
         .await
         .unwrap_err();
@@ -293,6 +296,7 @@ async fn x402_service_lifecycle_records_approval_denial_and_cancellation() {
                 owner: None,
                 additional_secrets: Vec::new(),
                 secret: secret(tinywallet_bus::Chain::Evm),
+                network: None,
             })
             .await
     });
@@ -353,6 +357,7 @@ async fn x402_service_lifecycle_records_approval_denial_and_cancellation() {
             owner: None,
             additional_secrets: Vec::new(),
             secret: secret(tinywallet_bus::Chain::Evm),
+            network: None,
         })
         .await;
     assert!(

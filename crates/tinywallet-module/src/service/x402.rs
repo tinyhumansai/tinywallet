@@ -9,14 +9,17 @@ use tinywallet_bus::wire::{
     AuthorizeX402PaymentRequest, SecretMaterial, X402ConfigResponse, X402DetailedSpendingSummary,
     X402ListPaymentsRequest, X402ListPaymentsResponse, X402PaymentRecord, X402PaymentStatus,
     X402PreparePaymentRequest, X402PreparePaymentResponse, X402RecordPaymentRequest,
-    X402ServiceHandle, X402SpendingSummary, X402SummaryRequest, X402UpdateBudgetRequest,
+    X402ServiceHandle, X402SignInRequest, X402SignInResponse, X402SpendingSummary,
+    X402SummaryRequest, X402UpdateBudgetRequest,
 };
-use tinywallet_x402::crypto::{CryptoPayments, PaymentAccount, PaymentSigner, SignScheme};
+use tinywallet_x402::crypto::{
+    CryptoPayments, PaymentAccount, PaymentSigner, SignScheme, sign_in_with_x,
+};
 use tinywallet_x402::ledger::{self, PaymentRecord, PaymentStatus, SpendingBudget};
 use tinywallet_x402::protocol::{
-    handle_402_and_pay_authorized, parse_settlement_response, settles,
+    handle_402_and_pay_on_network, parse_402_headers, parse_settlement_response, settled_amount,
 };
-use tinywallet_x402::wire::PaymentChain;
+use tinywallet_x402::wire::{PaymentChain, SettlementResponse};
 
 use super::host::HostCallbacks;
 use super::web3::{HostTransport, with_x402_execution_context};
@@ -198,6 +201,7 @@ impl X402Runtime {
         let thread_id = request.owner.as_ref().map(|owner| owner.thread_id.clone());
         let owner = request.owner.clone();
         let url = request.url.clone();
+        let network = request.network.clone();
         let callbacks = self.callbacks.clone();
         let (proof, _admission) = with_x402_execution_context(request.owner, secrets, async {
             let signer: Arc<dyn PaymentSigner> = Arc::new(ModulePaymentSigner);
@@ -211,10 +215,11 @@ impl X402Runtime {
                 .await
                 .map_err(|error| error.to_string())?;
             admission.ensure_capacity()?;
-            let proof = handle_402_and_pay_authorized(
+            let proof = handle_402_and_pay_on_network(
                 &builder,
                 &headers,
                 &url,
+                network.as_deref(),
                 move |url, requirement, _chain, amount_atomic| async move {
                     let authorization = callbacks
                         .authorize_x402_payment(AuthorizeX402PaymentRequest {
@@ -224,6 +229,7 @@ impl X402Runtime {
                             recipient: requirement.pay_to,
                             amount_atomic,
                             owner: owner.clone(),
+                            scheme: Some(requirement.scheme),
                         })
                         .await?;
                     if authorization.approved {
@@ -256,24 +262,7 @@ impl X402Runtime {
             recipient: proof.recipient.clone(),
             network: proof.network.clone(),
         };
-        let record = PaymentRecord {
-            id: payment_id,
-            url: proof.url.clone(),
-            asset: proof.asset.clone(),
-            amount_atomic: proof.amount_atomic,
-            amount_display: tinywallet_x402::ledger::format_usdc(proof.amount_atomic),
-            recipient: proof.recipient.clone(),
-            network: proof.network.clone(),
-            tx_signature: None,
-            status: PaymentStatus::Pending,
-            timestamp: Utc::now(),
-            authorization_valid_until: proof.authorization_valid_until,
-            solana_last_valid_block_height: proof.solana_last_valid_block_height,
-            authorization_expired_at: None,
-            authorization_expiry_observed_height: None,
-            session_id: self.config.session_id.clone(),
-            thread_id,
-        };
+        let record = pending_payment_record(&proof, payment_id, &self.config.session_id, thread_id);
         proof
             .reservation
             .commit_durable(record)
@@ -306,56 +295,17 @@ impl X402Runtime {
     /// retries the paid request.
     pub(crate) fn record(&self, request: X402RecordPaymentRequest) -> Result<(), String> {
         self.require_handle(&request.service)?;
-        let pending = ledger::with_ledger(|ledger| ledger.payment(&request.payment_id).cloned())?
-            .ok_or_else(|| "x402 payment handle was missing".to_string())?;
-        if pending.status == PaymentStatus::Settled {
-            // A reply may be lost after the durable transition; replaying the
-            // same receipt is an idempotent acknowledgment.
-            return Ok(());
-        }
-        let legacy_expired =
-            pending.status == PaymentStatus::Failed && pending.authorization_valid_until.is_some();
-        if pending.status != PaymentStatus::Pending && !legacy_expired {
-            return Err("x402 payment handle was missing or expired".to_string());
-        }
-        let receipt = request
-            .settlement_response
+        let X402RecordPaymentRequest {
+            payment_id,
+            settlement_response,
+            ..
+        } = request;
+        let receipt = settlement_response
             .as_deref()
-            .and_then(|value| parse_settlement_response(value).ok())
-            .filter(|receipt| settles(receipt, &pending.network, pending.amount_atomic));
-        let status = if receipt.is_some() {
-            PaymentStatus::Settled
-        } else {
-            // Neither a failed HTTP response nor an elapsed authorization
-            // deadline proves that a previously returned proof did not settle.
-            PaymentStatus::Pending
-        };
-        let tx_signature = receipt
-            .filter(|receipt| !receipt.transaction.is_empty())
-            .map(|receipt| receipt.transaction);
-        if status == pending.status {
-            return Ok(());
-        }
-        let record = PaymentRecord {
-            id: request.payment_id,
-            url: pending.url,
-            asset: pending.asset,
-            amount_atomic: pending.amount_atomic,
-            amount_display: pending.amount_display,
-            recipient: pending.recipient,
-            network: pending.network,
-            tx_signature,
-            status,
-            timestamp: chrono::Utc::now(),
-            authorization_valid_until: pending.authorization_valid_until,
-            solana_last_valid_block_height: pending.solana_last_valid_block_height,
-            authorization_expired_at: pending.authorization_expired_at,
-            authorization_expiry_observed_height: pending.authorization_expiry_observed_height,
-            session_id: pending.session_id,
-            thread_id: pending.thread_id,
-        };
-        ledger::with_ledger_mut(|ledger| ledger.try_record_payment(record))??;
-        Ok(())
+            .and_then(|value| parse_settlement_response(value).ok());
+        // Read, decide and append under the one ledger lock, so two receipts
+        // for the same payment cannot both settle it.
+        ledger::with_ledger_mut(|ledger| settle(ledger, &payment_id, receipt))?
     }
 
     /// Read the module-owned budget totals and currently held reservations.
@@ -440,6 +390,128 @@ impl X402Runtime {
                 monthly_max_atomic: budget.monthly_max_atomic,
             }
         })
+    }
+}
+
+/// Move payment `payment_id` to what `receipt` proves, on a ledger the caller
+/// holds locked: the latest state is re-read (another writer may have settled
+/// it), compared, and the transition appended in the same critical section.
+fn settle(
+    ledger: &mut ledger::PaymentLedger,
+    payment_id: &str,
+    receipt: Option<SettlementResponse>,
+) -> Result<(), String> {
+    ledger.refresh()?;
+    let pending = ledger
+        .payment(payment_id)
+        .cloned()
+        .ok_or_else(|| "x402 payment handle was missing".to_string())?;
+    if pending.status == PaymentStatus::Settled {
+        return same_charge(&pending, receipt.as_ref());
+    }
+    let legacy_expired =
+        pending.status == PaymentStatus::Failed && pending.authorization_valid_until.is_some();
+    if pending.status != PaymentStatus::Pending && !legacy_expired {
+        return Err("x402 payment handle was missing or expired".to_string());
+    }
+    // An `upto` payment is pending at its signed ceiling; its receipt
+    // reports what was charged, which is what the ledger keeps.
+    let receipt = receipt.and_then(|receipt| {
+        settled_amount(
+            &receipt,
+            &pending.network,
+            pending.scheme.as_deref(),
+            pending.amount_atomic,
+        )
+        .map(|charged| (receipt, charged))
+    });
+    let amount_atomic = receipt
+        .as_ref()
+        .map_or(pending.amount_atomic, |(_, charged)| *charged);
+    let status = if receipt.is_some() {
+        PaymentStatus::Settled
+    } else {
+        // Neither a failed HTTP response nor an elapsed authorization
+        // deadline proves that a previously returned proof did not settle.
+        PaymentStatus::Pending
+    };
+    let tx_signature = receipt
+        .filter(|(receipt, _)| !receipt.transaction.is_empty())
+        .map(|(receipt, _)| receipt.transaction);
+    if status == pending.status {
+        return Ok(());
+    }
+    let record = PaymentRecord {
+        id: payment_id.to_string(),
+        url: pending.url,
+        asset: pending.asset,
+        amount_display: if amount_atomic == pending.amount_atomic {
+            pending.amount_display
+        } else {
+            tinywallet_x402::ledger::format_usdc(amount_atomic)
+        },
+        amount_atomic,
+        recipient: pending.recipient,
+        network: pending.network,
+        tx_signature,
+        status,
+        timestamp: chrono::Utc::now(),
+        authorization_valid_until: pending.authorization_valid_until,
+        solana_last_valid_block_height: pending.solana_last_valid_block_height,
+        authorization_expired_at: pending.authorization_expired_at,
+        authorization_expiry_observed_height: pending.authorization_expiry_observed_height,
+        session_id: pending.session_id,
+        thread_id: pending.thread_id,
+        scheme: pending.scheme,
+    };
+    ledger.try_record_payment(record)
+}
+
+/// A reply may be lost after a payment settled, so the same receipt can come
+/// back: that is acknowledged. A receipt that settles it for another amount
+/// is refused, and the ledger keeps the first.
+fn same_charge(
+    settled: &PaymentRecord,
+    receipt: Option<&SettlementResponse>,
+) -> Result<(), String> {
+    let reported = receipt
+        .filter(|receipt| receipt.success && receipt.network == settled.network)
+        .and_then(|receipt| receipt.amount.as_deref());
+    match reported {
+        Some(amount) if amount.parse::<u64>().ok() != Some(settled.amount_atomic) => Err(format!(
+            "x402 payment was already settled for {} atomic units; a receipt for {amount} was refused",
+            settled.amount_atomic
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// The ledger's pending record for a just-built payment: the amount signed
+/// for (an `upto` ceiling until its receipt says otherwise) and the scheme.
+fn pending_payment_record(
+    proof: &tinywallet_x402::protocol::X402PaymentResult,
+    payment_id: String,
+    session_id: &str,
+    thread_id: Option<String>,
+) -> PaymentRecord {
+    PaymentRecord {
+        id: payment_id,
+        url: proof.url.clone(),
+        asset: proof.asset.clone(),
+        amount_atomic: proof.amount_atomic,
+        amount_display: tinywallet_x402::ledger::format_usdc(proof.amount_atomic),
+        recipient: proof.recipient.clone(),
+        network: proof.network.clone(),
+        tx_signature: None,
+        status: PaymentStatus::Pending,
+        timestamp: Utc::now(),
+        authorization_valid_until: proof.authorization_valid_until,
+        solana_last_valid_block_height: proof.solana_last_valid_block_height,
+        authorization_expired_at: None,
+        authorization_expiry_observed_height: None,
+        session_id: session_id.to_string(),
+        thread_id,
+        scheme: Some(proof.scheme.clone()),
     }
 }
 
@@ -548,6 +620,51 @@ impl PaymentSigner for ModulePaymentSigner {
     }
 }
 
+/// Sign a `sign-in-with-x` challenge with the EVM secret in `request`. The
+/// rules on what is signed live in `tinywallet_x402::crypto::sign_in_with_x`.
+pub(crate) async fn sign_in(mut request: X402SignInRequest) -> Result<X402SignInResponse, String> {
+    let secret = std::mem::replace(
+        &mut request.secret,
+        SecretMaterial {
+            mnemonic: String::new(),
+            derivation_path: String::new(),
+            chain: tinywallet_bus::Chain::Evm,
+        },
+    );
+    let mut secrets = vec![secret];
+    if secrets[0].chain != tinywallet_bus::Chain::Evm {
+        wipe_secrets(&mut secrets);
+        return Err("x402 sign-in needs the EVM wallet secret".to_string());
+    }
+    let challenge = HeaderValue::from_str(&request.payment_required)
+        .map_err(|error| format!("invalid sign-in challenge header: {error}"))
+        .and_then(|value| {
+            let mut headers = HeaderMap::new();
+            headers.insert(HeaderName::from_static("payment-required"), value);
+            parse_402_headers(&headers)
+                .map_err(|error| format!("invalid sign-in challenge: {error}"))
+        });
+    let challenge = match challenge {
+        Ok(challenge) => challenge,
+        Err(error) => {
+            wipe_secrets(&mut secrets);
+            return Err(error);
+        }
+    };
+    let url = request.url;
+    let proof = with_x402_execution_context(None, secrets, async {
+        sign_in_with_x(&ModulePaymentSigner, &challenge, &url)
+            .await
+            .map_err(|error| error.to_string())
+    })
+    .await?;
+    Ok(X402SignInResponse {
+        header: proof.header_value,
+        address: proof.address,
+        chain_id: proof.chain_id,
+    })
+}
+
 fn wipe(secret: &mut SecretMaterial) {
     zeroize::Zeroize::zeroize(&mut secret.mnemonic);
     zeroize::Zeroize::zeroize(&mut secret.derivation_path);
@@ -613,3 +730,11 @@ mod storage_bus_tests;
 #[cfg(test)]
 #[path = "x402_record_tests.rs"]
 mod record_tests;
+
+#[cfg(test)]
+#[path = "x402_prepare_tests.rs"]
+mod prepare_tests;
+
+#[cfg(test)]
+#[path = "x402_sign_in_tests.rs"]
+mod sign_in_tests;

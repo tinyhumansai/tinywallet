@@ -111,6 +111,9 @@ pub mod methods {
     pub const ENCODE_ERC20_TRANSFER: &str = "EncodeErc20Transfer";
     /// Records a retry result and commits or releases its module reservation.
     pub const X402_RECORD_PAYMENT: &str = "X402RecordPayment";
+    /// Signs an x402 `sign-in-with-x` challenge for the requested host with
+    /// the EVM account. Contract 1.16.
+    pub const X402_SIGN_IN: &str = "X402SignIn";
     /// Reports ledger totals and spending limits.
     pub const X402_SPENDING_SUMMARY: &str = "X402SpendingSummary";
     /// Reports ledger totals, counts and spending limits for host projection.
@@ -163,6 +166,7 @@ pub const METHODS: &[&str] = &[
     methods::X402_LIST_PAYMENTS,
     methods::X402_PREPARE_PAYMENT,
     methods::X402_RECORD_PAYMENT,
+    methods::X402_SIGN_IN,
     methods::X402_SPENDING_SUMMARY,
     methods::X402_SPENDING_SUMMARY_DETAILED,
     methods::X402_UPDATE_BUDGET,
@@ -184,4 +188,5 @@ pub const CONFIDENTIAL_METHODS: &[&str] = &[
     methods::SIGN_TRANSACTION,
     methods::WEB3_EXECUTE,
     methods::X402_PREPARE_PAYMENT,
+    methods::X402_SIGN_IN,
 ];

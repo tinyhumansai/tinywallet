@@ -110,6 +110,7 @@ pub(super) fn stored_payment(
         authorization_expiry_observed_height: record.authorization_expiry_observed_height,
         session_id: record.session_id.clone(),
         thread_id: record.thread_id.clone(),
+        scheme: record.scheme.clone(),
         committed_hold: committed_hold.map(str::to_owned),
     }
 }
@@ -141,6 +142,7 @@ pub(super) fn into_record(
         authorization_expiry_observed_height: stored.authorization_expiry_observed_height,
         session_id: stored.session_id,
         thread_id: stored.thread_id,
+        scheme: stored.scheme,
     };
     Ok((record, stored.committed_hold))
 }

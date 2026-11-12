@@ -361,12 +361,20 @@ pub struct AuthorizeX402PaymentRequest {
     pub asset: String,
     /// Payment recipient.
     pub recipient: String,
-    /// Exact amount in token atomic units.
+    /// Amount in token atomic units that the signed authorization allows: the
+    /// exact price for `exact`, the most that can be charged for `upto`. A
+    /// host cap compares against this value.
     pub amount_atomic: u64,
     /// Conversation owner used to route approval to the initiating client.
     /// Older hosts omit this field and retain their existing approval flow.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner: Option<QuoteOwner>,
+    /// The x402 scheme the payment is signed under: `"exact"`, or `"upto"`,
+    /// where `amount_atomic` is a ceiling and the server charges what it
+    /// used, from zero up to it. Absent from older modules, which sign only
+    /// `exact`. Contract 1.16.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scheme: Option<String>,
 }
 
 /// Request module-owned parsing and signing for a 402 challenge.
@@ -388,6 +396,13 @@ pub struct X402PreparePaymentRequest {
     /// Older hosts omit this field and keep sending only `secret`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub additional_secrets: Vec<SecretMaterial>,
+    /// Pay only on this network. A CAIP-2 chain id (`eip155:8453`) must equal
+    /// the option's network; a CAIP-2 namespace without a colon (`eip155`,
+    /// `solana`) matches every chain in it. When no option matches, the
+    /// request is refused before anything is reserved or signed. `None`, and
+    /// older hosts that omit the field, keep the module's own preference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<String>,
 }
 
 /// Payment proof and pending-ledger handle returned to the host for retry.
@@ -406,6 +421,35 @@ pub struct X402PreparePaymentResponse {
     pub recipient: String,
     /// CAIP-2 network identifier.
     pub network: String,
+}
+
+/// Sign an x402 `sign-in-with-x` challenge with the wallet's EVM account.
+///
+/// The module signs only an EIP-4361 sign-in built from the challenge, and
+/// only when its `domain` is the host of `url`, its `uri` and `resources` are
+/// HTTPS on that origin, and its `expirationTime` is still ahead. It is not a
+/// way to sign other text.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct X402SignInRequest {
+    /// The URL whose 402 response carried the challenge.
+    pub url: String,
+    /// Raw `PAYMENT-REQUIRED` header value (base64 JSON) of that response.
+    pub payment_required: String,
+    /// The EVM wallet material, consumed only inside the confidential call.
+    pub secret: SecretMaterial,
+}
+
+/// The signed sign-in for the host's retry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct X402SignInResponse {
+    /// Value for the `SIGN-IN-WITH-X` request header.
+    pub header: String,
+    /// The account that signed in, EIP-55 checksummed.
+    pub address: String,
+    /// The CAIP-2 chain the sign-in names, such as `eip155:8453`.
+    pub chain_id: String,
 }
 
 /// Record the outcome after the host retries with the module-built proof.

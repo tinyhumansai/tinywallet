@@ -12,7 +12,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use super::{Error, derive};
+use super::{Error, derivation_failed, derive};
 use crate::chain::Chain;
 use std::fmt::Write as _;
 
@@ -356,4 +356,32 @@ fn public_evm_address_matches_key_derivation_and_rejects_invalid_points() {
         Error::InvalidPublicKey.to_string(),
         "invalid SEC1 public key"
     );
+}
+
+#[test]
+fn a_seed_bip32_cannot_use_is_a_derivation_error() {
+    // BIP-32 master keys need a 16- to 64-byte seed.
+    let Err(error) = super::bip32::derive(&[7u8; 8], "m/44'/60'/0'/0/0") else {
+        panic!("an 8-byte seed derived a key");
+    };
+    assert!(
+        matches!(
+            error,
+            Error::Derivation {
+                step: "BIP-32 master key"
+            }
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn an_unreachable_step_failure_is_a_derivation_error_naming_the_step() {
+    let error = derivation_failed::<()>("BTC P2WPKH address")(());
+    assert!(matches!(
+        error,
+        Error::Derivation {
+            step: "BTC P2WPKH address"
+        }
+    ));
 }

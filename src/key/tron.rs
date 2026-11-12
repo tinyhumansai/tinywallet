@@ -8,7 +8,7 @@
 
 use sha3::{Digest, Keccak256};
 
-use super::{DerivedKey, Error, Result, bip32, seed_from_mnemonic};
+use super::{DerivedKey, Result, bip32, derivation_failed, seed_from_mnemonic};
 use crate::address::tron::{ADDRESS_BYTES, MAINNET_PREFIX};
 use crate::chain::Chain;
 
@@ -28,15 +28,12 @@ pub(super) fn derive(mnemonic: &str, path: &str) -> Result<DerivedKey> {
 /// last 20 bytes, prepend the Tron mainnet version byte, and base58check it.
 ///
 /// `encode` verifies the version byte and so returns a `Result`. It cannot
-/// fail here — the prefix is written two lines above — but the error is mapped
-/// rather than unwrapped, because a panic in key derivation would take a
-/// wallet down over an unreachable branch.
+/// fail here (the prefix is written two lines above), so the error is mapped
+/// by [`derivation_failed`] rather than unwrapped.
 fn address_from_public(uncompressed: &[u8; 65]) -> Result<String> {
     let hash = Keccak256::digest(&uncompressed[1..]);
     let mut bytes = [0u8; ADDRESS_BYTES];
     bytes[0] = MAINNET_PREFIX;
     bytes[1..].copy_from_slice(&hash[12..]);
-    crate::address::tron::encode(&bytes).map_err(|_| Error::Derivation {
-        step: "Tron address encoding",
-    })
+    crate::address::tron::encode(&bytes).map_err(derivation_failed("Tron address encoding"))
 }

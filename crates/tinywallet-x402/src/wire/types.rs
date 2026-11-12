@@ -48,6 +48,13 @@ pub const BASE_SEPOLIA_CAIP2: &str = "eip155:84532";
 /// CAIP-2 identifier for Ethereum mainnet.
 pub const ETHEREUM_MAINNET_CAIP2: &str = "eip155:1";
 
+/// The canonical Permit2 contract, the same on every EVM chain.
+pub const PERMIT2_ADDRESS: &str = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+/// The `x402UptoPermit2Proxy`, spender of every `upto` permit.
+pub const UPTO_PERMIT2_PROXY_ADDRESS: &str = "0x4020A4f3b7b90ccA423B9fabCc0CE57C6C240002";
+/// The extension key a server uses to accept an EIP-2612 permit for Permit2.
+pub const EIP2612_GAS_SPONSORING: &str = "eip2612GasSponsoring";
+
 /// USDC contract on Base mainnet.
 pub const USDC_BASE_MAINNET: &str = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 /// USDC contract on Base Sepolia.
@@ -115,9 +122,17 @@ pub struct PaymentRequirements {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// See the x402 v2 specification.
     pub extra: Option<PaymentExtra>,
+    /// Every other field the server sent, such as a per-requirement
+    /// `extensions` object, kept verbatim.
+    ///
+    /// A v2 server compares the `accepted` requirement it gets back with the
+    /// one it advertised and refuses a payment whose terms differ, so a field
+    /// this crate does not model must still be echoed back unchanged.
+    #[serde(flatten)]
+    pub other: serde_json::Map<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Scheme-specific extras a server attaches to a requirement.
 pub struct PaymentExtra {
@@ -137,6 +152,19 @@ pub struct PaymentExtra {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// See the x402 v2 specification.
     pub version: Option<String>,
+    /// How the payer authorizes the transfer (EVM). `"permit2"` for the
+    /// `upto` scheme, which allows no other method.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset_transfer_method: Option<String>,
+    /// The facilitator allowed to settle an `upto` authorization (EVM). The
+    /// payer signs it into the Permit2 witness, so no other party can settle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facilitator_address: Option<String>,
+    /// Every other `extra` field the server sent, kept verbatim so the
+    /// `accepted` echo still holds all of them. See
+    /// [`PaymentRequirements::other`].
+    #[serde(flatten)]
+    pub other: serde_json::Map<String, serde_json::Value>,
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +202,8 @@ pub enum PaymentProof {
     Solana(SolanaPaymentProof),
     /// An EVM EIP-3009 authorisation.
     Evm(EvmPaymentProof),
+    /// An EVM Permit2 authorisation, used by the `upto` scheme.
+    Permit2(Permit2PaymentProof),
 }
 
 /// Solana `exact` scheme payload — a partially-signed `VersionedTransaction`
@@ -222,6 +252,59 @@ pub struct EvmAuthorization {
     pub valid_before: String,
     /// See the x402 v2 specification.
     pub nonce: String,
+}
+
+/// EVM `upto` scheme payload: a Permit2 `PermitWitnessTransferFrom` signed by
+/// the token holder, which lets the `x402UptoPermit2Proxy` move up to
+/// `permitted.amount` to `witness.to` when `witness.facilitator` settles.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Permit2PaymentProof {
+    /// The EIP-712 signature, `0x` + `r ‖ s ‖ v`.
+    pub signature: String,
+    /// The signed permit, in the shape the facilitator rebuilds it from.
+    pub permit2_authorization: Permit2Authorization,
+}
+
+/// The Permit2 permit an `upto` payment signs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Permit2Authorization {
+    /// The token holder.
+    pub from: String,
+    /// The token and the maximum amount.
+    pub permitted: TokenPermissions,
+    /// The contract allowed to use the permit: the `x402UptoPermit2Proxy`.
+    pub spender: String,
+    /// Permit2's unordered nonce, as a decimal string.
+    pub nonce: String,
+    /// Unix time after which the permit is void, as a decimal string.
+    pub deadline: String,
+    /// What the proxy is bound to.
+    pub witness: UptoWitness,
+}
+
+/// Permit2's `TokenPermissions`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenPermissions {
+    /// The token contract.
+    pub token: String,
+    /// The most that may be moved, in atomic units, as a decimal string.
+    pub amount: String,
+}
+
+/// The x402 `upto` witness.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UptoWitness {
+    /// The only recipient.
+    pub to: String,
+    /// The only facilitator that may settle.
+    pub facilitator: String,
+    /// Unix time before which the permit is not yet valid, as a decimal
+    /// string.
+    pub valid_after: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -306,6 +389,20 @@ pub enum PaymentChain {
     Evm,
 }
 
+impl PaymentProof {
+    /// The Unix second after which the signed authorization can no longer be
+    /// used: EIP-3009's `validBefore` or the Permit2 `deadline`. `None` for
+    /// Solana, whose expiry is a block height, and for an unreadable value.
+    #[must_use]
+    pub fn authorization_deadline_secs(&self) -> Option<i64> {
+        match self {
+            Self::Evm(proof) => proof.authorization.valid_before.parse().ok(),
+            Self::Permit2(proof) => proof.permit2_authorization.deadline.parse().ok(),
+            Self::Solana(_) => None,
+        }
+    }
+}
+
 impl PaymentRequirements {
     /// Whether this requirement targets Solana mainnet-beta.
     #[must_use]
@@ -344,3 +441,11 @@ impl PaymentRequirements {
 #[cfg(test)]
 #[path = "types_test_tests.rs"]
 mod test;
+
+#[cfg(test)]
+#[path = "types_passthrough_tests.rs"]
+mod passthrough_test;
+
+#[cfg(test)]
+#[path = "types_permit2_tests.rs"]
+mod permit2_test;

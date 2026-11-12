@@ -99,6 +99,8 @@ impl From<LegacyPayment> for StoredPaymentRecord {
             authorization_expiry_observed_height: legacy.authorization_expiry_observed_height,
             session_id: legacy.session_id,
             thread_id: legacy.thread_id,
+            // Legacy rows predate `upto`; every one of them was `exact`.
+            scheme: None,
             committed_hold: legacy.committed_hold,
         }
     }

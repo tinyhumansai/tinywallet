@@ -9,10 +9,9 @@ use tinywallet_crypto::rpc::{self, NetworkId, Transport};
 use super::evm_payment::build_evm_payment;
 use super::signer::PaymentSigner;
 use super::solana_payment::{b58_to_32, build_solana_payment};
+use super::upto_payment::build_upto_payment;
 use crate::protocol::{PaymentBuild, PaymentBuilder, X402Error};
-use crate::wire::{
-    PaymentChain, PaymentPayload, PaymentProof, PaymentRequired, PaymentRequirements,
-};
+use crate::wire::{PaymentChain, PaymentPayload, PaymentRequired, PaymentRequirements};
 
 /// Builds EVM and Solana payments with an injected wallet and chain transport.
 #[derive(Clone)]
@@ -61,20 +60,25 @@ impl CryptoPayments {
                 .await?;
                 (payload, Some(last_valid_height))
             }
+            PaymentChain::Evm if requirement.scheme == "upto" => (
+                build_upto_payment(
+                    self.signer.as_ref(),
+                    self.transport.as_ref(),
+                    challenge,
+                    requirement,
+                )
+                .await?,
+                None,
+            ),
             PaymentChain::Evm => (
                 build_evm_payment(self.signer.as_ref(), challenge, requirement).await?,
                 None,
             ),
         };
-        let authorization_valid_until = match &payload.payload {
-            PaymentProof::Evm(proof) => proof
-                .authorization
-                .valid_before
-                .parse::<i64>()
-                .ok()
-                .and_then(|seconds| chrono::DateTime::from_timestamp(seconds, 0)),
-            PaymentProof::Solana(_) => None,
-        };
+        let authorization_valid_until = payload
+            .payload
+            .authorization_deadline_secs()
+            .and_then(|seconds| chrono::DateTime::from_timestamp(seconds, 0));
         Ok(PaymentBuild {
             payload,
             authorization_valid_until,

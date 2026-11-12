@@ -64,14 +64,14 @@ async fn build_solana(
 fn evm_proof(payload: PaymentPayload) -> crate::wire::EvmPaymentProof {
     match payload.payload {
         PaymentProof::Evm(proof) => proof,
-        PaymentProof::Solana(_) => panic!("expected an EVM proof"),
+        other => panic!("expected an EVM proof, got {other:?}"),
     }
 }
 
 fn solana_transaction(payload: &PaymentPayload) -> Vec<u8> {
     match &payload.payload {
         PaymentProof::Solana(proof) => B64.decode(&proof.transaction).unwrap(),
-        PaymentProof::Evm(_) => panic!("expected a Solana proof"),
+        other => panic!("expected a Solana proof, got {other:?}"),
     }
 }
 
@@ -216,6 +216,9 @@ async fn the_token_domain_defaults_to_usd_coin_version_two() {
         memo: None,
         name: Some("Other Coin".into()),
         version: Some("9".into()),
+        asset_transfer_method: None,
+        facilitator_address: None,
+        other: serde_json::Map::new(),
     });
     let mut bare = evm_requirement();
     bare.extra = None;

@@ -45,3 +45,82 @@ async fn a_receipt_for_another_network_or_amount_does_not_settle_the_payment() {
         ledger::reset_global();
     }
 }
+
+fn upto_receipt(amount: &str, transaction: &str) -> String {
+    B64.encode(
+        serde_json::to_vec(&SettlementResponse {
+            success: true,
+            transaction: transaction.into(),
+            network: "eip155:8453".into(),
+            payer: None,
+            error_reason: None,
+            amount: Some(amount.into()),
+            extensions: serde_json::Map::new(),
+        })
+        .unwrap(),
+    )
+}
+
+#[tokio::test]
+async fn an_upto_payment_is_recorded_at_the_amount_actually_charged() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let twitr: crate::wire::PaymentRequired =
+        serde_json::from_str(include_str!("../wire/fixtures/twitr-upto-challenge.json")).unwrap();
+    for (charged, transaction, display) in [
+        ("1200", "0xsettled", "0.001200 USDC"),
+        ("0", "", "0.000000 USDC"),
+    ] {
+        let _dir = init_ledger();
+        let server = TestServer::start(ServerConfig {
+            receipt: Some(upto_receipt(charged, transaction)),
+            ..paid_config(twitr.accepts[0].clone())
+        })
+        .await;
+        let result = run(&tool(), json!({"url": server.url})).await;
+        assert!(!result.is_error, "{}", text(&result));
+        assert!(text(&result).contains(display), "{}", text(&result));
+
+        let records = records();
+        let pending = records.first().unwrap();
+        assert_eq!(pending.status, PaymentStatus::Pending);
+        assert_eq!(
+            pending.amount_atomic, 3600,
+            "the ceiling is held until settled"
+        );
+        assert_eq!(pending.scheme.as_deref(), Some("upto"));
+        let settled = records.last().unwrap();
+        assert_eq!(settled.status, PaymentStatus::Settled);
+        assert_eq!(settled.amount_atomic, charged.parse::<u64>().unwrap());
+        assert_eq!(settled.amount_display, display);
+        assert_eq!(settled.scheme.as_deref(), Some("upto"));
+        assert_eq!(
+            settled.tx_signature.as_deref(),
+            Some(transaction).filter(|t| !t.is_empty())
+        );
+        assert_eq!(
+            ledger::with_ledger(ledger::PaymentLedger::outstanding_atomic).unwrap(),
+            0,
+            "nothing of the ceiling stays held"
+        );
+        ledger::reset_global();
+    }
+}
+
+#[tokio::test]
+async fn an_upto_receipt_above_the_ceiling_keeps_the_ceiling_pending() {
+    let _guard = ledger::TEST_LOCK.lock().await;
+    let twitr: crate::wire::PaymentRequired =
+        serde_json::from_str(include_str!("../wire/fixtures/twitr-upto-challenge.json")).unwrap();
+    let _dir = init_ledger();
+    let server = TestServer::start(ServerConfig {
+        receipt: Some(upto_receipt("3601", "0xover")),
+        ..paid_config(twitr.accepts[0].clone())
+    })
+    .await;
+    let result = run(&tool(), json!({"url": server.url})).await;
+    assert!(!result.is_error, "{}", text(&result));
+    let last = records().pop().unwrap();
+    assert_eq!(last.status, PaymentStatus::Pending);
+    assert_eq!(last.amount_atomic, 3600);
+    ledger::reset_global();
+}

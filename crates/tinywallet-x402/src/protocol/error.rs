@@ -14,8 +14,14 @@ pub enum X402Error {
     #[error("402 response missing PAYMENT-REQUIRED header")]
     NoPaymentHeader,
     /// The challenge offers nothing this crate can pay.
-    #[error("no supported payment option (Solana exact or EVM exact) in 402 challenge")]
+    #[error("no supported payment option (Solana exact, EVM exact or EVM upto) in 402 challenge")]
     NoPaymentOption,
+    /// The caller pinned a network, and the challenge offers nothing on it.
+    #[error("no supported payment option on {network} in 402 challenge")]
+    NoPaymentOptionOnNetwork {
+        /// The CAIP-2 network or namespace the caller pinned.
+        network: String,
+    },
     /// One request would cost more than the per-request cap.
     #[error("x402 amount {requested} exceeds per-request cap {cap}")]
     AmountExceedsCap {
@@ -56,6 +62,13 @@ pub enum X402Error {
     /// The challenge or a header could not be understood.
     #[error("x402 protocol: {0}")]
     Protocol(String),
+    /// A `sign-in-with-x` challenge asked for something this crate will not
+    /// sign, such as a message for another host or one already expired.
+    #[error("x402 sign-in-with-x refused: {reason}")]
+    SignInRefused {
+        /// Why the challenge was refused.
+        reason: String,
+    },
     /// The wallet could not produce the payment.
     #[error("x402 wallet: {0}")]
     Wallet(String),
