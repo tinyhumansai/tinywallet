@@ -375,21 +375,12 @@ impl X402RequestTool {
         };
 
         // Step 5: read the settlement response and update the ledger.
-        let receipt = paid_response
-            .headers()
-            .get(HEADER_PAYMENT_RESPONSE)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|b64| B64.decode(b64).ok())
-            .and_then(|bytes| serde_json::from_slice::<SettlementResponse>(&bytes).ok())
-            .and_then(|receipt| {
-                settled_amount(
-                    &receipt,
-                    &payment.network,
-                    Some(&payment.scheme),
-                    payment.amount_atomic,
-                )
-                .map(|charged| (receipt, charged))
-            });
+        let receipt = settlement_receipt(
+            &paid_response,
+            &payment.network,
+            &payment.scheme,
+            payment.amount_atomic,
+        );
         let charged_atomic = receipt
             .as_ref()
             .map_or(payment.amount_atomic, |(_, charged)| *charged);
@@ -433,6 +424,25 @@ impl X402RequestTool {
         )
         .await
     }
+}
+
+/// The receipt on `response` and the amount it says the payment signed for
+/// `signed_atomic` under `scheme` was charged, when it settles that payment
+/// (see [`settled_amount`]).
+fn settlement_receipt(
+    response: &reqwest::Response,
+    network: &str,
+    scheme: &str,
+    signed_atomic: u64,
+) -> Option<(SettlementResponse, u64)> {
+    let receipt = response
+        .headers()
+        .get(HEADER_PAYMENT_RESPONSE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|b64| B64.decode(b64).ok())
+        .and_then(|bytes| serde_json::from_slice::<SettlementResponse>(&bytes).ok())?;
+    let charged = settled_amount(&receipt, network, Some(scheme), signed_atomic)?;
+    Some((receipt, charged))
 }
 
 /// Format an amount for the tool's human-readable response.

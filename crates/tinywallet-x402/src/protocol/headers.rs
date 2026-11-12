@@ -89,10 +89,9 @@ pub fn settled_amount(
     }
     let reported = receipt.amount.as_deref().map(str::parse::<u64>);
     match (scheme, reported) {
-        (Some("upto"), None) => Some(signed_atomic),
+        (_, None) => Some(signed_atomic),
         (Some("upto"), Some(Ok(actual))) => (actual <= signed_atomic).then_some(actual),
         (Some("upto"), Some(Err(_))) => None,
-        (_, None) => Some(signed_atomic),
         (_, Some(reported)) => (reported == Ok(signed_atomic)).then_some(signed_atomic),
     }
 }
