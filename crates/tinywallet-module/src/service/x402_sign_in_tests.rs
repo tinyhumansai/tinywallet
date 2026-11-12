@@ -99,3 +99,28 @@ async fn an_unreadable_challenge_is_refused() {
         .unwrap_err();
     assert!(error.contains("challenge"), "{error}");
 }
+
+#[tokio::test]
+async fn the_wallet_service_answers_x402_sign_in() {
+    let wallet = crate::service::Wallet::default();
+    let response = wallet
+        .x402_sign_in(request(
+            challenge("wallet.fixture.test"),
+            tinywallet_bus::Chain::Evm,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.chain_id, "eip155:8453");
+
+    let error = wallet
+        .x402_sign_in(request(
+            challenge("evil.example"),
+            tinywallet_bus::Chain::Evm,
+        ))
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:?}").contains("sign-in-with-x refused"),
+        "{error:?}"
+    );
+}

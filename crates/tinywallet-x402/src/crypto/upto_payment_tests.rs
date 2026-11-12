@@ -365,3 +365,97 @@ async fn the_builder_refuses_a_transfer_method_other_than_permit2() {
             .is_ok()
     );
 }
+
+#[tokio::test]
+async fn wallet_and_requirement_failures_are_reported_before_anything_is_returned() {
+    let challenge = twitr();
+    let failing = |signer: FakePaymentSigner| async move {
+        build_upto_payment_at(
+            &signer,
+            &FakeTransport::default(),
+            &twitr(),
+            &twitr().accepts[0],
+            eip712::u256_from_decimal(NONCE).unwrap(),
+            NOW,
+        )
+        .await
+        .unwrap_err()
+    };
+    let no_account = failing(FakePaymentSigner {
+        account_error: Some("locked".into()),
+        ..FakePaymentSigner::default()
+    })
+    .await;
+    assert_eq!(no_account.to_string(), "x402 wallet: locked");
+    let no_signature = failing(FakePaymentSigner {
+        sign_error: Some("refused".into()),
+        ..FakePaymentSigner::default()
+    })
+    .await;
+    assert_eq!(
+        no_signature.to_string(),
+        "x402 wallet: sign Permit2: refused"
+    );
+    let short_signature = failing(FakePaymentSigner {
+        signature_len: Some(10),
+        ..FakePaymentSigner::default()
+    })
+    .await;
+    assert!(matches!(short_signature, X402Error::Wallet(_)));
+
+    for edit in [
+        |r: &mut crate::wire::PaymentRequirements| r.network = "solana:x".into(),
+        |r: &mut crate::wire::PaymentRequirements| r.amount = "lots".into(),
+        |r: &mut crate::wire::PaymentRequirements| r.asset = "0x12".into(),
+    ] {
+        let mut requirement = challenge.accepts[0].clone();
+        edit(&mut requirement);
+        let error = upto_terms(
+            EVM_ADDRESS,
+            &requirement,
+            eip712::u256_from_decimal(NONCE).unwrap(),
+            NOW,
+        )
+        .unwrap_err();
+        assert!(matches!(error, X402Error::Protocol(_)), "{error}");
+    }
+}
+
+#[tokio::test]
+async fn a_permit_the_wallet_cannot_sign_fails_the_payment() {
+    // The Permit2 signature succeeds; the EIP-2612 one is the second call.
+    struct SecondSignFails(FakePaymentSigner, std::sync::atomic::AtomicUsize);
+    #[async_trait::async_trait]
+    impl PaymentSigner for SecondSignFails {
+        async fn account(
+            &self,
+            chain: PaymentChain,
+        ) -> Result<crate::crypto::PaymentAccount, String> {
+            self.0.account(chain).await
+        }
+        async fn sign(
+            &self,
+            chain: PaymentChain,
+            message: &[u8],
+            scheme: SignScheme,
+        ) -> Result<Vec<u8>, String> {
+            if self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 1 {
+                return Err("busy".into());
+            }
+            self.0.sign(chain, message, scheme).await
+        }
+    }
+    let signer = SecondSignFails(FakePaymentSigner::default(), 0.into());
+    let challenge = twitr();
+    let error = build_upto_payment_at(
+        &signer,
+        &transport(vec![Ok(word(0)), Ok(word(0))]),
+        &challenge,
+        &challenge.accepts[0],
+        eip712::u256_from_decimal(NONCE).unwrap(),
+        NOW,
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.to_string(), "x402 wallet: sign EIP-2612: busy");
+}
