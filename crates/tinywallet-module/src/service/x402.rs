@@ -636,5 +636,5 @@ mod storage_bus_tests;
 mod record_tests;
 
 #[cfg(test)]
-#[path = "x402_network_tests.rs"]
-mod network_tests;
+#[path = "x402_prepare_tests.rs"]
+mod prepare_tests;

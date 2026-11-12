@@ -506,6 +506,9 @@ impl PaymentApprovalHost {
                     "getBlockHeight" => {
                         serde_json::json!(self.finalized_height.load(Ordering::SeqCst))
                     }
+                    // Every view call (an ERC-20 allowance, an EIP-2612 nonce)
+                    // answers zero.
+                    "eth_call" => serde_json::json!(format!("0x{}", "0".repeat(64))),
                     _ => serde_json::Value::Null,
                 }
             }
