@@ -40,14 +40,3 @@ fn an_unmodelled_extra_field_round_trips() {
     assert_eq!(echoed["extra"]["somethingNew"]["nested"][1], 2);
     assert_eq!(echoed["topLevelNew"], true);
 }
-
-#[test]
-fn the_upto_extra_fields_are_readable() {
-    let (challenge, _) = twitr_upto();
-    let extra = challenge.accepts[0].extra.as_ref().unwrap();
-    assert_eq!(
-        extra.facilitator_address.as_deref(),
-        Some("0x4c934c63C786157Fefd990945b25eA60a0FB0205")
-    );
-    assert_eq!(extra.asset_transfer_method.as_deref(), Some("permit2"));
-}

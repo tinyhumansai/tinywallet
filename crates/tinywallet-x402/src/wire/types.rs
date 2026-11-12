@@ -115,9 +115,17 @@ pub struct PaymentRequirements {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// See the x402 v2 specification.
     pub extra: Option<PaymentExtra>,
+    /// Every other field the server sent, such as a per-requirement
+    /// `extensions` object, kept verbatim.
+    ///
+    /// A v2 server compares the `accepted` requirement it gets back with the
+    /// one it advertised and refuses a payment whose terms differ, so a field
+    /// this crate does not model must still be echoed back unchanged.
+    #[serde(flatten)]
+    pub other: serde_json::Map<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Scheme-specific extras a server attaches to a requirement.
 pub struct PaymentExtra {
@@ -137,6 +145,11 @@ pub struct PaymentExtra {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     /// See the x402 v2 specification.
     pub version: Option<String>,
+    /// Every other `extra` field the server sent, kept verbatim so the
+    /// `accepted` echo still holds all of them. See
+    /// [`PaymentRequirements::other`].
+    #[serde(flatten)]
+    pub other: serde_json::Map<String, serde_json::Value>,
 }
 
 // ---------------------------------------------------------------------------
@@ -344,3 +357,7 @@ impl PaymentRequirements {
 #[cfg(test)]
 #[path = "types_test_tests.rs"]
 mod test;
+
+#[cfg(test)]
+#[path = "types_passthrough_tests.rs"]
+mod passthrough_test;
