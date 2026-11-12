@@ -14,7 +14,7 @@ use tinywallet_bus::wire::{
 use tinywallet_x402::crypto::{CryptoPayments, PaymentAccount, PaymentSigner, SignScheme};
 use tinywallet_x402::ledger::{self, PaymentRecord, PaymentStatus, SpendingBudget};
 use tinywallet_x402::protocol::{
-    handle_402_and_pay_authorized, parse_settlement_response, settles,
+    handle_402_and_pay_on_network, parse_settlement_response, settled_amount,
 };
 use tinywallet_x402::wire::PaymentChain;
 
@@ -211,10 +211,11 @@ impl X402Runtime {
                 .await
                 .map_err(|error| error.to_string())?;
             admission.ensure_capacity()?;
-            let proof = handle_402_and_pay_authorized(
+            let proof = handle_402_and_pay_on_network(
                 &builder,
                 &headers,
                 &url,
+                None,
                 move |url, requirement, _chain, amount_atomic| async move {
                     let authorization = callbacks
                         .authorize_x402_payment(AuthorizeX402PaymentRequest {
@@ -273,6 +274,7 @@ impl X402Runtime {
             authorization_expiry_observed_height: None,
             session_id: self.config.session_id.clone(),
             thread_id,
+            scheme: Some(proof.scheme.clone()),
         };
         proof
             .reservation
@@ -318,11 +320,24 @@ impl X402Runtime {
         if pending.status != PaymentStatus::Pending && !legacy_expired {
             return Err("x402 payment handle was missing or expired".to_string());
         }
+        // An `upto` payment is pending at its signed ceiling; its receipt
+        // reports what was charged, which is what the ledger keeps.
         let receipt = request
             .settlement_response
             .as_deref()
             .and_then(|value| parse_settlement_response(value).ok())
-            .filter(|receipt| settles(receipt, &pending.network, pending.amount_atomic));
+            .and_then(|receipt| {
+                settled_amount(
+                    &receipt,
+                    &pending.network,
+                    pending.scheme.as_deref(),
+                    pending.amount_atomic,
+                )
+                .map(|charged| (receipt, charged))
+            });
+        let amount_atomic = receipt
+            .as_ref()
+            .map_or(pending.amount_atomic, |(_, charged)| *charged);
         let status = if receipt.is_some() {
             PaymentStatus::Settled
         } else {
@@ -331,8 +346,8 @@ impl X402Runtime {
             PaymentStatus::Pending
         };
         let tx_signature = receipt
-            .filter(|receipt| !receipt.transaction.is_empty())
-            .map(|receipt| receipt.transaction);
+            .filter(|(receipt, _)| !receipt.transaction.is_empty())
+            .map(|(receipt, _)| receipt.transaction);
         if status == pending.status {
             return Ok(());
         }
@@ -340,8 +355,12 @@ impl X402Runtime {
             id: request.payment_id,
             url: pending.url,
             asset: pending.asset,
-            amount_atomic: pending.amount_atomic,
-            amount_display: pending.amount_display,
+            amount_display: if amount_atomic == pending.amount_atomic {
+                pending.amount_display
+            } else {
+                tinywallet_x402::ledger::format_usdc(amount_atomic)
+            },
+            amount_atomic,
             recipient: pending.recipient,
             network: pending.network,
             tx_signature,
@@ -353,6 +372,7 @@ impl X402Runtime {
             authorization_expiry_observed_height: pending.authorization_expiry_observed_height,
             session_id: pending.session_id,
             thread_id: pending.thread_id,
+            scheme: pending.scheme,
         };
         ledger::with_ledger_mut(|ledger| ledger.try_record_payment(record))??;
         Ok(())
