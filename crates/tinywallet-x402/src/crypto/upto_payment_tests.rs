@@ -334,3 +334,20 @@ async fn crypto_payments_pays_an_upto_requirement_with_a_permit2_proof() {
     .unwrap();
     assert_eq!(recover(terms.digest(), &proof.signature), payer_key());
 }
+
+#[tokio::test]
+async fn the_builder_refuses_a_transfer_method_other_than_permit2() {
+    // Selection already skips these; the builder is reachable directly through
+    // `pay_challenge_header`, so it checks again.
+    let mut challenge = twitr();
+    challenge.accepts[0].extra.as_mut().unwrap().asset_transfer_method = Some("eip3009".into());
+    let error = build(&challenge, &FakeTransport::default()).await.unwrap_err();
+    assert!(
+        matches!(&error, X402Error::Protocol(m) if m.contains("assetTransferMethod")),
+        "{error}"
+    );
+
+    let mut absent = twitr();
+    absent.accepts[0].extra.as_mut().unwrap().asset_transfer_method = None;
+    assert!(build(&absent, &transport(vec![Ok(word(u64::MAX))])).await.is_ok());
+}
