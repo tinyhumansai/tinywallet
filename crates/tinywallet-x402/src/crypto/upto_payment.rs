@@ -149,6 +149,17 @@ pub(super) fn upto_terms(
     let chain_id = requirement.evm_chain_id().ok_or_else(|| {
         X402Error::Protocol(format!("not an EVM network: {}", requirement.network))
     })?;
+    // `upto` allows Permit2 only; an absent method means Permit2.
+    if let Some(method) = requirement
+        .extra
+        .as_ref()
+        .and_then(|extra| extra.asset_transfer_method.as_deref())
+        .filter(|method| *method != "permit2")
+    {
+        return Err(X402Error::Protocol(format!(
+            "upto requirement asks for assetTransferMethod {method}; only permit2 is supported"
+        )));
+    }
     let facilitator = requirement
         .extra
         .as_ref()
