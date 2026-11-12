@@ -1153,3 +1153,17 @@ async fn tron_status_treats_a_missing_receipt_result_as_success() {
         super::TxState::Failed
     );
 }
+
+#[tokio::test]
+async fn btc_and_tron_status_report_a_reply_that_is_not_json() {
+    for (network, path) in [
+        (Network::Btc, "tx/abc/status"),
+        (Network::Tron, "wallet/gettransactioninfobyid"),
+    ] {
+        let transport = RestScript::new(&[(path, "<html>busy</html>".to_string())]);
+        let error = super::status(&transport, network, "abc")
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("not JSON"), "{network:?}: {error}");
+    }
+}
