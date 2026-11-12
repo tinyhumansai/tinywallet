@@ -19,7 +19,7 @@ use tinywallet_x402::ledger::{self, PaymentRecord, PaymentStatus, SpendingBudget
 use tinywallet_x402::protocol::{
     handle_402_and_pay_on_network, parse_402_headers, parse_settlement_response, settled_amount,
 };
-use tinywallet_x402::wire::PaymentChain;
+use tinywallet_x402::wire::{PaymentChain, SettlementResponse};
 
 use super::host::HostCallbacks;
 use super::web3::{HostTransport, with_x402_execution_context};
@@ -386,6 +386,99 @@ impl X402Runtime {
                 monthly_max_atomic: budget.monthly_max_atomic,
             }
         })
+    }
+}
+
+/// Move payment `payment_id` to what `receipt` proves, on a ledger the caller
+/// holds locked: the latest state is re-read (another writer may have settled
+/// it), compared, and the transition appended in the same critical section.
+fn settle(
+    ledger: &mut ledger::PaymentLedger,
+    payment_id: &str,
+    receipt: Option<SettlementResponse>,
+) -> Result<(), String> {
+    ledger.refresh()?;
+    let pending = ledger
+        .payment(payment_id)
+        .cloned()
+        .ok_or_else(|| "x402 payment handle was missing".to_string())?;
+    if pending.status == PaymentStatus::Settled {
+        return same_charge(&pending, receipt.as_ref());
+    }
+    let legacy_expired =
+        pending.status == PaymentStatus::Failed && pending.authorization_valid_until.is_some();
+    if pending.status != PaymentStatus::Pending && !legacy_expired {
+        return Err("x402 payment handle was missing or expired".to_string());
+    }
+    // An `upto` payment is pending at its signed ceiling; its receipt
+    // reports what was charged, which is what the ledger keeps.
+    let receipt = receipt.and_then(|receipt| {
+        settled_amount(
+            &receipt,
+            &pending.network,
+            pending.scheme.as_deref(),
+            pending.amount_atomic,
+        )
+        .map(|charged| (receipt, charged))
+    });
+    let amount_atomic = receipt
+        .as_ref()
+        .map_or(pending.amount_atomic, |(_, charged)| *charged);
+    let status = if receipt.is_some() {
+        PaymentStatus::Settled
+    } else {
+        // Neither a failed HTTP response nor an elapsed authorization
+        // deadline proves that a previously returned proof did not settle.
+        PaymentStatus::Pending
+    };
+    let tx_signature = receipt
+        .filter(|(receipt, _)| !receipt.transaction.is_empty())
+        .map(|(receipt, _)| receipt.transaction);
+    if status == pending.status {
+        return Ok(());
+    }
+    let record = PaymentRecord {
+        id: payment_id.to_string(),
+        url: pending.url,
+        asset: pending.asset,
+        amount_display: if amount_atomic == pending.amount_atomic {
+            pending.amount_display
+        } else {
+            tinywallet_x402::ledger::format_usdc(amount_atomic)
+        },
+        amount_atomic,
+        recipient: pending.recipient,
+        network: pending.network,
+        tx_signature,
+        status,
+        timestamp: chrono::Utc::now(),
+        authorization_valid_until: pending.authorization_valid_until,
+        solana_last_valid_block_height: pending.solana_last_valid_block_height,
+        authorization_expired_at: pending.authorization_expired_at,
+        authorization_expiry_observed_height: pending.authorization_expiry_observed_height,
+        session_id: pending.session_id,
+        thread_id: pending.thread_id,
+        scheme: pending.scheme,
+    };
+    ledger.try_record_payment(record)
+}
+
+/// A reply may be lost after a payment settled, so the same receipt can come
+/// back: that is acknowledged. A receipt that settles it for another amount
+/// is refused, and the ledger keeps the first.
+fn same_charge(
+    settled: &PaymentRecord,
+    receipt: Option<&SettlementResponse>,
+) -> Result<(), String> {
+    let reported = receipt
+        .filter(|receipt| receipt.success && receipt.network == settled.network)
+        .and_then(|receipt| receipt.amount.as_deref());
+    match reported {
+        Some(amount) if amount.parse::<u64>().ok() != Some(settled.amount_atomic) => Err(format!(
+            "x402 payment was already settled for {} atomic units; a receipt for {amount} was refused",
+            settled.amount_atomic
+        )),
+        _ => Ok(()),
     }
 }
 
