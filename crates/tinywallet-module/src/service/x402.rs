@@ -258,25 +258,7 @@ impl X402Runtime {
             recipient: proof.recipient.clone(),
             network: proof.network.clone(),
         };
-        let record = PaymentRecord {
-            id: payment_id,
-            url: proof.url.clone(),
-            asset: proof.asset.clone(),
-            amount_atomic: proof.amount_atomic,
-            amount_display: tinywallet_x402::ledger::format_usdc(proof.amount_atomic),
-            recipient: proof.recipient.clone(),
-            network: proof.network.clone(),
-            tx_signature: None,
-            status: PaymentStatus::Pending,
-            timestamp: Utc::now(),
-            authorization_valid_until: proof.authorization_valid_until,
-            solana_last_valid_block_height: proof.solana_last_valid_block_height,
-            authorization_expired_at: None,
-            authorization_expiry_observed_height: None,
-            session_id: self.config.session_id.clone(),
-            thread_id,
-            scheme: Some(proof.scheme.clone()),
-        };
+        let record = pending_payment_record(&proof, payment_id, &self.config.session_id, thread_id);
         proof
             .reservation
             .commit_durable(record)
@@ -461,6 +443,35 @@ impl X402Runtime {
                 monthly_max_atomic: budget.monthly_max_atomic,
             }
         })
+    }
+}
+
+/// The ledger's pending record for a just-built payment: the amount signed
+/// for (an `upto` ceiling until its receipt says otherwise) and the scheme.
+fn pending_payment_record(
+    proof: &tinywallet_x402::protocol::X402PaymentResult,
+    payment_id: String,
+    session_id: &str,
+    thread_id: Option<String>,
+) -> PaymentRecord {
+    PaymentRecord {
+        id: payment_id,
+        url: proof.url.clone(),
+        asset: proof.asset.clone(),
+        amount_atomic: proof.amount_atomic,
+        amount_display: tinywallet_x402::ledger::format_usdc(proof.amount_atomic),
+        recipient: proof.recipient.clone(),
+        network: proof.network.clone(),
+        tx_signature: None,
+        status: PaymentStatus::Pending,
+        timestamp: Utc::now(),
+        authorization_valid_until: proof.authorization_valid_until,
+        solana_last_valid_block_height: proof.solana_last_valid_block_height,
+        authorization_expired_at: None,
+        authorization_expiry_observed_height: None,
+        session_id: session_id.to_string(),
+        thread_id,
+        scheme: Some(proof.scheme.clone()),
     }
 }
 
