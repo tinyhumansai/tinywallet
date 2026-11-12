@@ -48,6 +48,8 @@ struct Fixture {
     rpc_requests: Arc<std::sync::Mutex<Vec<(String, serde_json::Value)>>>,
     payment_requests: Arc<std::sync::Mutex<Vec<tinywallet_bus::wire::AuthorizeX402PaymentRequest>>>,
     broker_task: tokio::task::JoinHandle<tinybus::Result<()>>,
+    /// The host's and the module's bus connections, kept open for the test.
+    _connections: (tinybus::Connection, tinybus::Connection),
     _workspace: tempfile::TempDir,
 }
 
@@ -111,6 +113,7 @@ impl Fixture {
             rpc_requests,
             payment_requests,
             broker_task,
+            _connections: (host, client),
             _workspace: workspace,
         }
     }
