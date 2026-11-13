@@ -572,6 +572,11 @@ async fn malformed_versioned_blobs_are_rejected_with_specific_messages() {
             hex::encode(&good[..65 + 3 + 1 + 10]),
             "Solana account keys region truncated",
         ),
+        // Keys present, recent blockhash cut short.
+        (
+            hex::encode(&good[..65 + 3 + 1 + 32 + 10]),
+            "Solana recent blockhash truncated",
+        ),
     ];
     for (blob, expected) in cases {
         let err = sign_and_broadcast_versioned(&rig.engine, &blob)
