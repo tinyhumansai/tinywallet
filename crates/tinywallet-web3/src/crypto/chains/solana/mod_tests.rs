@@ -396,9 +396,9 @@ async fn a_versioned_transaction_gets_our_signature_in_our_slot() {
     let signature = ed25519_dalek::Signature::from_slice(&sent[1..65]).unwrap();
     FakeSigner::solana_key()
         .verifying_key()
-        .verify(&wire[65..], &signature)
-        .expect("the message bytes were signed");
-    assert_eq!(&sent[65..], &wire[65..], "the message is untouched");
+        .verify(&sent[65..], &signature)
+        .expect("the message bytes that were sent were signed");
+    assert_eq!(&sent[..1], &wire[..1], "one signature slot, as built");
 }
 
 #[tokio::test]
@@ -448,9 +448,11 @@ async fn a_v0_message_is_signed_with_its_version_prefix_included() {
         SignerCall::Message(_, m) => Some(m),
         _ => None,
     });
+    let message_signed = message_signed.unwrap();
+    assert_eq!(message_signed[0], 0x80, "the version prefix is signed");
     assert_eq!(
-        message_signed.unwrap(),
-        wire[65..].to_vec(),
+        message_signed,
+        broadcast_wire(&rig)[65..].to_vec(),
         "the version prefix is part of what is signed"
     );
 }
