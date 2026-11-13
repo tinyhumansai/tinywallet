@@ -455,6 +455,88 @@ async fn a_v0_message_is_signed_with_its_version_prefix_included() {
     );
 }
 
+/// A v0 transaction shaped like deBridge's `tx.data`: one empty signature
+/// slot, the `0x80` version prefix, `signer` as the fee payer, and the
+/// all-zero placeholder blockhash deBridge leaves for the signer to fill.
+fn unsigned_v0_placeholder(signer: &[u8; 32]) -> Vec<u8> {
+    let mut wire = unsigned_legacy(signer);
+    wire.insert(1 + 64, 0x80);
+    wire.extend(encode_shortvec(0)); // address table lookups
+    wire
+}
+
+/// Where the recent blockhash sits in [`unsigned_v0_placeholder`]: the
+/// signature slot, the version prefix, the header, one key.
+const V0_BLOCKHASH: std::ops::Range<usize> = 1 + 64 + 1 + 3 + 1 + 32..1 + 64 + 1 + 3 + 1 + 64;
+
+#[tokio::test]
+async fn a_debridge_placeholder_blockhash_is_replaced_with_a_fresh_one_before_signing() {
+    let rig = Rig::new();
+    script_node(&rig);
+    let signer = b58_to_pubkey(sample_address(WalletChain::Solana)).unwrap();
+    let wire = unsigned_v0_placeholder(&signer);
+    assert_eq!(&wire[V0_BLOCKHASH], &[0u8; 32], "deBridge's placeholder");
+
+    sign_and_broadcast_versioned(&rig.engine, &format!("0x{}", hex::encode(&wire)))
+        .await
+        .unwrap();
+
+    let methods: Vec<String> = rig
+        .transport
+        .rpc_calls()
+        .into_iter()
+        .map(|(m, _)| m)
+        .collect();
+    assert_eq!(methods, ["getLatestBlockhash", "sendTransaction"]);
+
+    let sent = broadcast_wire(&rig);
+    assert_eq!(
+        &sent[V0_BLOCKHASH],
+        &b58_to_pubkey(BLOCKHASH).unwrap(),
+        "the node's blockhash replaced the placeholder"
+    );
+    let mut expected = wire.clone();
+    expected[V0_BLOCKHASH].copy_from_slice(&b58_to_pubkey(BLOCKHASH).unwrap());
+    assert_eq!(&sent[65..], &expected[65..], "only the blockhash changed");
+    let signature = ed25519_dalek::Signature::from_slice(&sent[1..65]).unwrap();
+    FakeSigner::solana_key()
+        .verifying_key()
+        .verify(&sent[65..], &signature)
+        .expect("the signature covers the refreshed message");
+}
+
+#[tokio::test]
+async fn a_transaction_another_party_already_signed_keeps_its_blockhash() {
+    let rig = Rig::new();
+    script_node(&rig);
+    let signer = b58_to_pubkey(sample_address(WalletChain::Solana)).unwrap();
+    // Two signers: a co-signer that has already signed, then us.
+    let mut message = Vec::new();
+    message.extend([2u8, 0u8, 0u8]);
+    message.extend(encode_shortvec(2));
+    message.extend([9u8; 32]);
+    message.extend(signer);
+    message.extend([5u8; 32]);
+    message.extend(encode_shortvec(0));
+    let mut wire = Vec::new();
+    wire.extend(encode_shortvec(2));
+    wire.extend([3u8; 64]);
+    wire.extend([0u8; 64]);
+    wire.extend(&message);
+
+    sign_and_broadcast_versioned(&rig.engine, &hex::encode(&wire))
+        .await
+        .unwrap();
+
+    assert!(
+        rig.transport.first_rpc("getLatestBlockhash").is_none(),
+        "a refreshed blockhash would void the co-signer's signature"
+    );
+    let sent = broadcast_wire(&rig);
+    assert_eq!(&sent[..65], &wire[..65], "the co-signature is kept");
+    assert_eq!(&sent[129..], &wire[129..], "the message is untouched");
+}
+
 #[tokio::test]
 async fn malformed_versioned_blobs_are_rejected_with_specific_messages() {
     let rig = Rig::new();
