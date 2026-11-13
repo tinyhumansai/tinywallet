@@ -6,6 +6,14 @@
 //! signature slot whose account key equals the wallet's pubkey is filled by
 //! signing the full message bytes (legacy or v0: the slice includes the v0
 //! version prefix, which is what Solana signs).
+//!
+//! deBridge builds its Solana transactions with a placeholder recent blockhash
+//! (all zeros) and expects the signer to put a fresh one in before signing
+//! ("Update blockhash!" in its order-submission guide); sent as built, every
+//! one fails preflight with `BlockhashNotFound`. So when no one has signed yet,
+//! the blockhash is replaced with the node's latest before our signature is
+//! made. A transaction another party has already signed keeps its blockhash:
+//! changing it would void their signature.
 
 use log::debug;
 
@@ -13,7 +21,7 @@ use crate::crypto::execution::RawBroadcastResult;
 use crate::crypto::wallet::{WalletChain, WalletEngine};
 
 use super::wire::{decode_shortvec, pubkey_to_b58};
-use super::{LOG_PREFIX, broadcast_solana, signer_pubkey, solana_sign};
+use super::{LOG_PREFIX, broadcast_solana, fetch_recent_blockhash, signer_pubkey, solana_sign};
 
 /// Where the signer keys and message sit inside a transaction blob.
 struct Layout {
@@ -27,6 +35,8 @@ struct Layout {
     keys_start: usize,
     /// How many leading account keys are signers and present in the blob.
     signer_keys: usize,
+    /// Offset of the recent blockhash within the message.
+    blockhash_start: usize,
 }
 
 /// Parse just enough of `wire` to find the signer keys.
@@ -61,12 +71,17 @@ fn parse_layout(wire: &[u8]) -> Result<Layout, String> {
     if keys_start + signer_keys * 32 > message.len() {
         return Err("Solana account keys region truncated".to_string());
     }
+    let blockhash_start = keys_start + usize::from(account_count) * 32;
+    if blockhash_start + 32 > message.len() {
+        return Err("Solana recent blockhash truncated".to_string());
+    }
     Ok(Layout {
         sigs_start,
         num_signatures,
         message_start,
         keys_start,
         signer_keys,
+        blockhash_start,
     })
 }
 
@@ -99,7 +114,17 @@ pub(crate) async fn sign_and_broadcast_versioned(
         return Err("Solana signer index exceeds signature slot count".to_string());
     }
 
+    // Nobody has signed yet: the blockhash is ours to set, and must be fresh.
+    let signatures = &wire[layout.sigs_start..layout.message_start];
+    if signatures.iter().all(|byte| *byte == 0) {
+        let blockhash = fetch_recent_blockhash(engine).await?;
+        let off = layout.message_start + layout.blockhash_start;
+        wire[off..off + 32].copy_from_slice(&blockhash);
+        debug!("{LOG_PREFIX} sign_and_broadcast_versioned refreshed the recent blockhash");
+    }
+
     // Sign the message bytes and write into our signature slot.
+    let message = &wire[layout.message_start..];
     let sig_bytes = solana_sign(engine, message).await?;
     let slot_off = layout.sigs_start + our_index * 64;
     wire[slot_off..slot_off + 64].copy_from_slice(&sig_bytes);
